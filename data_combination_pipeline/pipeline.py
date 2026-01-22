@@ -4,13 +4,16 @@ from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
-from git import Repo
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 try:
     from tqdm.auto import tqdm  # type: ignore
 except Exception:  # pragma: no cover
+
     def tqdm(x, **kwargs):
         return x
+
 
 from .config import PipelineConfig
 from .logging_utils import get_logger
@@ -23,7 +26,12 @@ from .plotting import (
     plot_covmat_heatmaps,
     plot_residuals,
 )
-from .reports import write_change_reports, write_model_comparison_summary, write_outlier_tables
+from .reports import (
+    write_change_reports,
+    write_model_comparison_summary,
+    write_new_param_significance,
+    write_outlier_tables,
+)
 
 # Add-ons from FixDataset.ipynb / AnalysePulsars.ipynb
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
@@ -33,6 +41,13 @@ logger = get_logger("data_combination_pipeline")
 
 
 def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
+    """Run the full diagnostics pipeline.
+
+    Concurrency model:
+      * Git branch checkouts are always single-threaded.
+      * Within each branch, pulsars can be processed concurrently using cfg.jobs.
+      * Each pulsar uses its own work directory to avoid tempo2 output collisions.
+    """
     cfg = config.resolved()
 
     if not cfg.home_dir.exists():
@@ -42,21 +57,27 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     which_or_raise("singularity", hint="Install Singularity/Apptainer or load it in your environment.")
 
+    try:
+        from git import Repo  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError("GitPython is required to run the pipeline (branch checkouts). Install GitPython.") from e
+
     repo = Repo(str(cfg.home_dir))
     require_clean_repo(repo)
     current_branch = repo.active_branch.name
     logger.info("Current git branch: %s", current_branch)
 
+    # Pulsar selection
     if cfg.pulsars == "ALL":
         pulsars = discover_pulsars(cfg.home_dir)
     else:
         pulsars = list(cfg.pulsars)  # type: ignore[arg-type]
-
     if not pulsars:
         raise RuntimeError("No pulsars selected/found.")
 
+    # Branch selection
     compare_branches: List[str] = list(dict.fromkeys(list(cfg.branches)))  # preserve order
-    reference_branch = cfg.reference_branch
+    reference_branch = str(cfg.reference_branch) if cfg.reference_branch else ""
 
     branches_to_run = compare_branches.copy()
     if reference_branch and reference_branch not in branches_to_run and cfg.make_change_reports:
@@ -73,6 +94,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             logger.info("=== Branch: %s ===", branch)
             checkout(repo, branch)
 
+            # Optional dataset-fix reporting (report-only inside the multi-branch pipeline)
             if cfg.run_fix_dataset:
                 if cfg.fix_apply:
                     raise RuntimeError(
@@ -102,28 +124,55 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     rep["branch"] = branch
                     reports.append(rep)
 
-                # Write a per-branch report directory
                 write_fix_report(reports, out_paths["fix_dataset"] / branch)
 
+            # tempo2 runs (parallelizable across pulsars)
             if cfg.run_tempo2:
-                for pulsar in tqdm(pulsars, desc=f"tempo2 ({branch})"):
-                    run_tempo2_for_pulsar(
-                        home_dir=cfg.home_dir,
-                        singularity_image=cfg.singularity_image,
-                        out_paths=out_paths,
-                        pulsar=pulsar,
-                        branch=branch,
-                        epoch=str(cfg.epoch),
-                        force_rerun=bool(cfg.force_rerun),
-                    )
+                n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+                if n_jobs == 1:
+                    for pulsar in tqdm(pulsars, desc=f"tempo2 ({branch})"):
+                        run_tempo2_for_pulsar(
+                            home_dir=cfg.home_dir,
+                            singularity_image=cfg.singularity_image,
+                            out_paths=out_paths,
+                            pulsar=pulsar,
+                            branch=branch,
+                            epoch=str(cfg.epoch),
+                            force_rerun=bool(cfg.force_rerun),
+                        )
+                else:
+                    futures = []
+                    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+                        for pulsar in pulsars:
+                            futures.append(
+                                ex.submit(
+                                    run_tempo2_for_pulsar,
+                                    home_dir=cfg.home_dir,
+                                    singularity_image=cfg.singularity_image,
+                                    out_paths=out_paths,
+                                    pulsar=pulsar,
+                                    branch=branch,
+                                    epoch=str(cfg.epoch),
+                                    force_rerun=bool(cfg.force_rerun),
+                                )
+                            )
+                        for fut in tqdm(
+                            as_completed(futures),
+                            total=len(futures),
+                            desc=f"tempo2 ({branch})",
+                        ):
+                            fut.result()  # propagate exceptions
 
-            if branch in compare_branches and cfg.make_toa_coverage_plots:
-                plot_systems_per_pulsar(cfg.home_dir, out_paths, pulsars, branch, dpi=int(cfg.dpi))
-                plot_pulsars_per_system(cfg.home_dir, out_paths, pulsars, branch, dpi=int(cfg.dpi))
+            # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
+            if branch in compare_branches:
+                if cfg.make_toa_coverage_plots:
+                    plot_systems_per_pulsar(cfg.home_dir, out_paths, pulsars, branch, dpi=int(cfg.dpi))
+                    plot_pulsars_per_system(cfg.home_dir, out_paths, pulsars, branch, dpi=int(cfg.dpi))
 
-            if branch in compare_branches and cfg.make_outlier_reports:
-                write_outlier_tables(cfg.home_dir, out_paths, pulsars, [branch])
+                if cfg.make_outlier_reports:
+                    write_outlier_tables(cfg.home_dir, out_paths, pulsars, [branch])
 
+            # Binary analysis per branch
             if cfg.make_binary_analysis:
                 bcfg = BinaryAnalysisConfig(only_models=cfg.binary_only_models)
                 for pulsar in pulsars:
@@ -135,14 +184,23 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     row["branch"] = branch
                     binary_rows.append(row)
 
+        # Cross-branch reports
         if cfg.make_change_reports and reference_branch:
-            branches_for_reports = compare_branches + ([reference_branch] if reference_branch else [])
+            branches_for_reports = list(compare_branches)
+            if reference_branch not in branches_for_reports:
+                branches_for_reports.append(reference_branch)
             write_change_reports(out_paths, pulsars, branches_for_reports, reference_branch)
-            # high-level fit-quality comparison (chisq/AIC/BIC/WRMS) vs reference
             write_model_comparison_summary(out_paths, pulsars, branches_for_reports, reference_branch)
+            write_new_param_significance(out_paths, pulsars, branches_for_reports, reference_branch)
 
         if cfg.make_covariance_heatmaps:
-            plot_covmat_heatmaps(out_paths, pulsars, compare_branches, dpi=int(cfg.dpi), max_params=cfg.max_covmat_params)
+            plot_covmat_heatmaps(
+                out_paths,
+                pulsars,
+                compare_branches,
+                dpi=int(cfg.dpi),
+                max_params=cfg.max_covmat_params,
+            )
 
         if cfg.make_residual_plots:
             plot_residuals(out_paths, pulsars, compare_branches, dpi=int(cfg.dpi))

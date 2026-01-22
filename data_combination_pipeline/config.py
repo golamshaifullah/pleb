@@ -45,6 +45,9 @@ class PipelineConfig:
     # If True, re-run tempo2 even if outputs already exist
     force_rerun: bool = False
 
+    # Number of parallel workers to run pulsars concurrently (per branch). 1 = sequential.
+    jobs: int = 1
+
     # Pipeline toggles
     run_tempo2: bool = True
     make_toa_coverage_plots: bool = True
@@ -133,6 +136,7 @@ class PipelineConfig:
             outdir_name=(None if d.get("outdir_name") in (None, "") else d.get("outdir_name")),
             epoch=str(d.get("epoch", "55000")),
             force_rerun=bool(d.get("force_rerun", False)),
+            jobs=int(d.get("jobs", 1)),
             run_tempo2=bool(d.get("run_tempo2", True)),
             make_toa_coverage_plots=bool(d.get("make_toa_coverage_plots", True)),
             make_change_reports=bool(d.get("make_change_reports", True)),

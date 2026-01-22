@@ -87,6 +87,35 @@ Optional config filter:
 binary_only_models = ["ELL1", "BT", "BTX"]
 ```
 
+### Param scan (rapid nested-model tests)
+
+If you want to quickly test whether adding/enabling one or more parameters is statistically supported,
+use `--param-scan`. This runs *fit-only* tempo2 jobs (no matrix/general2/plots), computing:
+
+* **Δχ² nested-model test** (likelihood-ratio test), with p-value vs Δk
+* **Wald z = |value|/σ** for the scanned parameters (when tempo2 reports uncertainties)
+
+Examples:
+
+```bash
+# Scan a single parameter
+data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan F2
+
+# Scan a group (adds both together)
+data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan "F2+F3"
+
+# Supply complex params via a raw par line
+data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan "raw:JUMP -sys P200 0 1"
+
+# Limit to a pulsar and run in parallel across pulsars
+data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan F2 --scan-pulsar J1234+5678 --jobs 8
+```
+
+Outputs are written under a `PARAM_SCAN_*` directory in `results_dir` and include:
+
+* `param_scan/param_scan_<branch>.tsv` (combined)
+* `param_scan/<PSR>/param_scan_<PSR>.tsv` (per pulsar)
+
 ## Optional dependencies
 
 Some coordinate conversion and orbital utilities need extra packages:

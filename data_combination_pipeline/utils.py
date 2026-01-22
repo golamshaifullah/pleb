@@ -41,9 +41,11 @@ def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Option
         "outliers": base / tag / "OutlierSummary",
         "png": base / tag / "png",
         "logs": base / tag / "logs",
+        "work": base / tag / "work",
         # new outputs from FixDataset.ipynb / AnalysePulsars.ipynb integrations
         "fix_dataset": base / tag / "fix_dataset",
         "binary_analysis": base / tag / "binary_analysis",
+        "param_scan": base / tag / "param_scan",
     }
     for p in paths.values():
         safe_mkdir(p)

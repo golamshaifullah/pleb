@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from git import Repo
+try:
+    from git import Repo  # type: ignore
+except Exception:  # pragma: no cover
+    Repo = object  # type: ignore
 from .logging_utils import get_logger
 
 logger = get_logger("data_combination_pipeline.git")

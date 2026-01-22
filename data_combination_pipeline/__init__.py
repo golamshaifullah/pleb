@@ -20,9 +20,17 @@ def run_pipeline(cfg: PipelineConfig):
     return _run(cfg)
 
 
+def run_param_scan(cfg: PipelineConfig, **kwargs):
+    """Lazy import wrapper for :func:`data_combination_pipeline.param_scan.run_param_scan`."""
+    from .param_scan import run_param_scan as _run
+
+    return _run(cfg, **kwargs)
+
+
 __all__ = [
     "PipelineConfig",
     "run_pipeline",
+    "run_param_scan",
     "FixDatasetConfig",
     "fix_pulsar_dataset",
     "write_fix_report",

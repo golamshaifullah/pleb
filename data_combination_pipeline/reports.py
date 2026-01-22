@@ -12,6 +12,26 @@ from .logging_utils import get_logger
 
 logger = get_logger("data_combination_pipeline.reports")
 
+def _chi2_sf(x: float, df: float) -> float:
+    """Survival function for chi-square distribution.
+
+    Uses SciPy if available, otherwise falls back to mpmath.
+    """
+    if x is None or df is None:
+        return float("nan")
+    try:
+        from scipy.stats import chi2  # type: ignore
+        return float(chi2.sf(x, df))
+    except Exception:
+        try:
+            import mpmath as mp  # type: ignore
+            # sf = Q(k/2, x/2)
+            return float(mp.gammainc(df / 2.0, x / 2.0, mp.inf) / mp.gamma(df / 2.0))
+        except Exception:
+            return float("nan")
+
+
+
 
 @lru_cache(maxsize=512)
 def _read_plk_cached(path_str: str) -> pd.DataFrame:
@@ -269,10 +289,30 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
                 **{f"ref_{k}": v for k, v in ref_stats.items()},
                 **{f"br_{k}": v for k, v in st.items()},
             }
+
             # deltas
             for k in ["chisq", "redchisq", "wrms_post", "aic", "bic"]:
                 rv, bv = ref_stats.get(k), st.get(k)
                 row[f"delta_{k}"] = (bv - rv) if (rv is not None and bv is not None) else None
+
+            # Rapid nested-model test heuristic:
+            # If the branch model is an extension of the reference, then
+            # Δχ² = χ²_ref - χ²_branch ~ χ²(df=Δk) under standard assumptions.
+            rk = ref_stats.get("k_fit")
+            bk = st.get("k_fit")
+            rc = ref_stats.get("chisq")
+            bc = st.get("chisq")
+
+            delta_k = (bk - rk) if (rk is not None and bk is not None) else None
+            delta_chisq_improve = (rc - bc) if (rc is not None and bc is not None) else None
+
+            row["delta_k_fit"] = delta_k
+            row["lrt_delta_chisq"] = delta_chisq_improve
+            if (delta_k is not None) and (delta_chisq_improve is not None) and (delta_k > 0) and (delta_chisq_improve > 0):
+                row["lrt_p_value"] = _chi2_sf(float(delta_chisq_improve), float(delta_k))
+            else:
+                row["lrt_p_value"] = None
+
             rows.append(row)
 
     if not rows:
@@ -280,7 +320,67 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
 
     df = pd.DataFrame(rows)
     out_file = out_paths["change_report"] / f"MODEL_COMPARISON_{reference_branch}.tsv"
-    df.to_csv(out_file, sep="\t", index=False)
+    df.to_csv(out_file, sep="	", index=False)
+
+def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str, z_threshold: float = 3.0) -> None:
+    """Summarize 'new' parameters in each branch vs reference and their Wald z = |x|/σ.
+
+    This is a rapid way to screen whether newly-added fitted parameters look significant,
+    without running extra tempo2 fits.
+    """
+    rows = []
+    for pulsar in pulsars:
+        ref_path = out_paths["plk"] / f"{pulsar}_{reference_branch}_plk.log"
+        if not ref_path.exists():
+            continue
+        for branch in branches:
+            if branch == reference_branch:
+                continue
+            br_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
+            if not br_path.exists():
+                continue
+
+            df = compare_plk(branch, reference_branch, pulsar, out_paths)
+            if df.empty:
+                continue
+
+            # Consider only parameters that are new in the branch and appear to be fitted
+            # (Fit column can be missing or non-numeric depending on tempo2 build).
+            new_df = df[df.get("status") == "new"].copy()
+
+            # Pull branch postfit/unc
+            post = pd.to_numeric(new_df.get("Postfit_branch"), errors="coerce")
+            unc = pd.to_numeric(new_df.get("Uncertainty_branch"), errors="coerce")
+            z = (post.abs() / unc).where((unc > 0) & post.notna(), np.nan)
+
+            n_new = int(new_df.shape[0])
+            n_z = int(np.isfinite(z).sum())
+            n_sig = int((z >= float(z_threshold)).sum()) if n_z else 0
+
+            max_z = float(np.nanmax(z.to_numpy())) if n_z else None
+            if max_z is not None and np.isfinite(max_z):
+                max_param = str(new_df.loc[z.idxmax(), "Param"]) if z.idxmax() in new_df.index else None
+            else:
+                max_param = None
+
+            rows.append({
+                "pulsar": pulsar,
+                "branch": branch,
+                "reference": reference_branch,
+                "n_new_params": n_new,
+                "n_new_with_numeric_sigma": n_z,
+                f"n_new_sig_z>={float(z_threshold):g}": n_sig,
+                "max_new_param_z": max_z,
+                "max_new_param": max_param,
+            })
+
+    if not rows:
+        return
+
+    out = pd.DataFrame(rows)
+    out_file = out_paths["change_report"] / f"NEW_PARAM_SIGNIFICANCE_{reference_branch}.tsv"
+    out.to_csv(out_file, sep="\t", index=False)
+
 
 def write_outlier_tables(home_dir: Path, out_paths: Dict[str, Path], pulsars: List[str], branches: List[str]) -> None:
     for pulsar in pulsars:

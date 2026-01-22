@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "data-combination-pipeline"
-version = "0.2.1"
+version = "0.2.2"
 description = "Refactored tempo2 data combination diagnostics pipeline."
 requires-python = ">=3.10"
 dependencies = [
