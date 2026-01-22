@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-combination-pipeline"
+version = "0.2.0"
+description = "Refactored tempo2 data combination diagnostics pipeline."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "GitPython",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+viz = ["seaborn"]
+astro = ["astropy", "scipy"]
+
+[project.scripts]
+data-combination-pipeline = "data_combination_pipeline.cli:main"
+
+[tool.setuptools]
+packages = ["data_combination_pipeline"]
