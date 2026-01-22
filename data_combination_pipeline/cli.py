@@ -32,6 +32,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--scan-file", type=Path, default=None, help="Text file with one candidate spec per line.")
     p.add_argument(
+        "--scan-typical",
+        action="store_true",
+        help=(
+            "Use the built-in 'typical' scan profile: Parallax (PX); then binary derivatives based on BINARY model; "
+            "if no BINARY and reduced chi-square is high, scan DM derivatives."
+        ),
+    )
+    p.add_argument(
+        "--scan-dm-threshold",
+        type=float,
+        default=None,
+        help="Reduced chi-square threshold to trigger DM-derivative scan when no BINARY is present (default from config).",
+    )
+    p.add_argument(
+        "--scan-dm-max-order",
+        type=int,
+        default=None,
+        help="Max DM derivative order to test in the typical profile (DM1..DMN). Default from config.",
+    )
+    p.add_argument(
+        "--scan-btx-max-fb",
+        type=int,
+        default=None,
+        help="Max FB derivative order to test for BTX in the typical profile (FB1..FBN). Default from config.",
+    )
+    p.add_argument(
         "--scan-pulsar",
         dest="scan_pulsars",
         action="append",
@@ -89,14 +115,18 @@ def main(argv=None) -> int:
                     continue
                 specs.append(line)
 
-        if not specs:
-            raise SystemExit("--param-scan requires at least one --scan spec (or --scan-file).")
+        if not specs and not args.scan_typical:
+            raise SystemExit("--param-scan requires at least one --scan spec (or --scan-file), unless --scan-typical is used.")
 
         out_paths = run_param_scan(
             cfg,
             branch=args.scan_branch,
             pulsars=args.scan_pulsars,
             candidate_specs=specs,
+            scan_typical=bool(args.scan_typical),
+            dm_redchisq_threshold=args.scan_dm_threshold,
+            dm_max_order=args.scan_dm_max_order,
+            btx_max_fb=args.scan_btx_max_fb,
             outdir_name=args.scan_outdir,
         )
         print(str(out_paths["tag"]))

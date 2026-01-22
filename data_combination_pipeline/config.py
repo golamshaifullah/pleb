@@ -60,6 +60,12 @@ class PipelineConfig:
     run_fix_dataset: bool = False
     make_binary_analysis: bool = False
 
+    # ---- Param scan defaults (used by --param-scan --scan-typical) ----
+    param_scan_typical: bool = False
+    param_scan_dm_redchisq_threshold: float = 2.0
+    param_scan_dm_max_order: int = 4
+    param_scan_btx_max_fb: int = 3
+
     # ---- FixDataset settings (flattened) ----
     fix_apply: bool = False
     fix_backup: bool = True
@@ -146,6 +152,11 @@ class PipelineConfig:
 
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),
+
+            param_scan_typical=bool(d.get("param_scan_typical", False)),
+            param_scan_dm_redchisq_threshold=float(d.get("param_scan_dm_redchisq_threshold", 2.0)),
+            param_scan_dm_max_order=int(d.get("param_scan_dm_max_order", 4)),
+            param_scan_btx_max_fb=int(d.get("param_scan_btx_max_fb", 3)),
 
             fix_apply=bool(d.get("fix_apply", False)),
             fix_backup=bool(d.get("fix_backup", True)),

@@ -79,6 +79,104 @@ def parse_candidate_specs(specs: Sequence[str]) -> List[Candidate]:
     return out
 
 
+def _parse_par_params(par_text: str) -> Dict[str, List[str]]:
+    """Parse a .par text into a dict of PARAM -> tokens.
+
+    Notes:
+      * Only the first occurrence of a given PARAM is retained.
+      * Comment lines starting with '#', 'C ' or 'c ' are ignored.
+      * Inline '#' comments are stripped.
+    """
+    out: Dict[str, List[str]] = {}
+    for raw in par_text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith(("#", "C ", "c ")):
+            continue
+        main, _ = _split_inline_comment(raw)
+        parts = main.split()
+        if not parts:
+            continue
+        key = parts[0].upper()
+        if key not in out:
+            out[key] = parts
+    return out
+
+
+def _is_fit_flag_one(tokens: Sequence[str]) -> bool:
+    if not tokens:
+        return False
+    last = str(tokens[-1]).strip()
+    return last == "1"
+
+
+def build_typical_candidates(
+    par_text: str,
+    base_stats: Dict[str, Optional[float]],
+    *,
+    dm_redchisq_threshold: float = 2.0,
+    dm_max_order: int = 4,
+    btx_max_fb: int = 3,
+) -> List[Candidate]:
+    """Build a per-pulsar candidate list for the common workflow.
+
+    User-intent profile implemented:
+      1) Always test Parallax (PX) if missing or not fitted.
+      2) If a binary model is present, test model-appropriate binary derivatives.
+      3) If no binary model AND reduced chi-square is high, test additional DM derivatives.
+
+    This intentionally does *not* do noise modelling terms.
+    """
+    params = _parse_par_params(par_text)
+
+    # 1) Parallax
+    cands: List[Candidate] = []
+    px_tokens = params.get("PX")
+    if px_tokens is None or not _is_fit_flag_one(px_tokens):
+        cands.append(Candidate(label="PX", params=(("PX", None),)))
+
+    # Determine binary model (if present)
+    bin_model = None
+    bline = params.get("BINARY")
+    if bline and len(bline) >= 2:
+        bin_model = str(bline[1]).upper()
+
+    # 2) Binary derivatives (model-dependent)
+    if bin_model:
+        if bin_model == "BTX":
+            # BTX commonly uses FB0, FB1, FB2... as orbital frequency derivatives.
+            # We scan FB1..FBn in a nested/stepwise way.
+            max_fb = max(1, int(btx_max_fb))
+            for n in range(1, max_fb + 1):
+                ps = tuple((f"FB{i}", None) for i in range(1, n + 1))
+                label = "+".join([p for p, _ in ps])
+                cands.append(Candidate(label=label, params=ps))
+
+        elif bin_model.startswith("ELL1"):
+            # ELL1 family: scan PBDOT, XDOT, and pair EPS1DOT+EPS2DOT.
+            cands.append(Candidate(label="PBDOT", params=(("PBDOT", None),)))
+            cands.append(Candidate(label="XDOT", params=(("XDOT", None),)))
+            cands.append(Candidate(label="EPS1DOT+EPS2DOT", params=(("EPS1DOT", None), ("EPS2DOT", None))))
+
+        else:
+            # Generic (BT/DD/DDK/T2/etc.): common derivatives.
+            for nm in ("PBDOT", "XDOT", "OMDOT", "EDOT"):
+                cands.append(Candidate(label=nm, params=((nm, None),)))
+
+    # 3) DM derivatives if no binary model and fit quality is poor
+    else:
+        red = base_stats.get("redchisq")
+        if red is not None and float(red) >= float(dm_redchisq_threshold):
+            m = max(1, int(dm_max_order))
+            for n in range(1, m + 1):
+                ps = tuple((f"DM{i}", None) for i in range(1, n + 1))
+                label = "+".join([p for p, _ in ps])
+                cands.append(Candidate(label=label, params=ps))
+
+    return cands
+
+
 def _split_inline_comment(line: str) -> Tuple[str, str]:
     # Keep '#' style inline comments intact.
     if "#" in line:
@@ -286,7 +384,11 @@ def run_param_scan(
     *,
     branch: Optional[str] = None,
     pulsars: Optional[Sequence[str]] = None,
-    candidate_specs: Sequence[str],
+    candidate_specs: Sequence[str] = (),
+    scan_typical: bool = False,
+    dm_redchisq_threshold: Optional[float] = None,
+    dm_max_order: Optional[int] = None,
+    btx_max_fb: Optional[int] = None,
     outdir_name: Optional[str] = None,
 ) -> Dict[str, Path]:
     """Run a per-pulsar parameter scan.
@@ -306,6 +408,9 @@ def run_param_scan(
         raise FileNotFoundError(f"singularity_image does not exist: {cfg.singularity_image}")
     which_or_raise("singularity", hint="Install Singularity/Apptainer or load it in your environment.")
 
+    # Allow config to set a default "typical" scan profile.
+    scan_typical = bool(scan_typical or getattr(cfg, "param_scan_typical", False))
+
     scan_branch = branch or cfg.reference_branch
     if not scan_branch:
         raise ValueError("No branch provided for param scan (and config.reference_branch is empty).")
@@ -321,9 +426,17 @@ def run_param_scan(
     if not pulsar_list:
         raise RuntimeError("No pulsars selected/found.")
 
-    candidates = parse_candidate_specs(candidate_specs)
-    if not candidates:
-        raise ValueError("No candidate specs provided.")
+    manual_candidates = parse_candidate_specs(candidate_specs) if candidate_specs else []
+    if not scan_typical and not manual_candidates:
+        raise ValueError("No candidates specified (provide --scan, --scan-file, or use --scan-typical).")
+
+    # Defaults for the typical profile (can be overridden by CLI args, then config)
+    if dm_redchisq_threshold is None:
+        dm_redchisq_threshold = float(getattr(cfg, "param_scan_dm_redchisq_threshold", 2.0) or 2.0)
+    if dm_max_order is None:
+        dm_max_order = int(getattr(cfg, "param_scan_dm_max_order", 4) or 4)
+    if btx_max_fb is None:
+        btx_max_fb = int(getattr(cfg, "param_scan_btx_max_fb", 3) or 3)
 
     # Output tree (standalone, to avoid tag collisions with the main pipeline)
     if outdir_name is None:
@@ -395,8 +508,36 @@ def run_param_scan(
             }
         )
 
+        # Candidate selection (per pulsar)
+        cands_all: List[Candidate] = []
+        if scan_typical:
+            cands_all.extend(
+                build_typical_candidates(
+                    base_text,
+                    base_stats,
+                    dm_redchisq_threshold=float(dm_redchisq_threshold),
+                    dm_max_order=int(dm_max_order),
+                    btx_max_fb=int(btx_max_fb),
+                )
+            )
+        cands_all.extend(manual_candidates)
+
+        # De-dup + skip no-op edits
+        uniq: Dict[Tuple[str, Tuple[Tuple[str, Optional[str]], ...], Tuple[str, ...]], Candidate] = {}
+        for c in cands_all:
+            key = (c.label, c.params, c.raw_lines)
+            if key not in uniq:
+                # filter out no-ops
+                try:
+                    if apply_candidate_to_par_text(base_text, c) == base_text:
+                        continue
+                except Exception:
+                    pass
+                uniq[key] = c
+        cands_final = list(uniq.values())
+
         # Candidate runs
-        for cand in candidates:
+        for cand in cands_final:
             mod_text = apply_candidate_to_par_text(base_text, cand)
             mod_par = p_work / f"{pulsar}_{cand.label}.par"
             mod_par.write_text(mod_text, encoding="utf-8")

@@ -109,6 +109,12 @@ data-combination-pipeline --config config.toml --param-scan --scan-branch master
 
 # Limit to a pulsar and run in parallel across pulsars
 data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan F2 --scan-pulsar J1234+5678 --jobs 8
+
+# Use the built-in profile you described (Parallax; binary derivatives by model; or DM derivatives if no BINARY and redχ² is high)
+data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan-typical --jobs 8
+
+# Tune the DM trigger / depth (only used when no BINARY is present)
+data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan-typical --scan-dm-threshold 2.5 --scan-dm-max-order 3
 ```
 
 Outputs are written under a `PARAM_SCAN_*` directory in `results_dir` and include:
