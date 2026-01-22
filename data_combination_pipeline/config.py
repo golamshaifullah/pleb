@@ -24,11 +24,14 @@ class PipelineConfig:
     # Singularity/Apptainer image containing tempo2
     singularity_image: Path
 
+    # Name of the dataset (EPTA likes to use different combinations)
+    dataset_name: Optional[str] = None
+
     # Where to write the report output
     results_dir: Path = Path(".")
 
     # Branches you want to compare/diagnose
-    branches: List[str] = field(default_factory=lambda: ["master", "EPTA+InPTA"])
+    branches: List[str] = field(default_factory=lambda: ["master", "EPTA"])
 
     # Reference branch for change reports
     reference_branch: str = "master"
@@ -113,11 +116,13 @@ class PipelineConfig:
             **{
                 **asdict(self),
                 "home_dir": Path(self.home_dir),
+                "dataset_name": Path(self.dataset_name),
                 "singularity_image": Path(self.singularity_image),
                 "results_dir": Path(self.results_dir),
             }
         )
         c.home_dir = c.home_dir.expanduser().resolve()
+        c.dataset_name = c.dataset_name.expanduser().resolve()
         c.singularity_image = c.singularity_image.expanduser().resolve()
         c.results_dir = c.results_dir.expanduser().resolve()
         return c
@@ -125,7 +130,7 @@ class PipelineConfig:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         # serialize Paths
-        for k in ("home_dir", "singularity_image", "results_dir"):
+        for k in ("home_dir", "dataset_name", "singularity_image", "results_dir"):
             d[k] = str(d[k])
         return d
 
@@ -148,6 +153,7 @@ class PipelineConfig:
 
         return PipelineConfig(
             home_dir=p(d["home_dir"]),
+            dataset_name=p(d["dataset_name"]),
             singularity_image=p(d["singularity_image"]),
             results_dir=p(d.get("results_dir", ".")),
             branches=list(d.get("branches", ["master", "EPTA+InPTA"])),

@@ -53,6 +53,8 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     if not cfg.home_dir.exists():
         raise FileNotFoundError(f"home_dir does not exist: {cfg.home_dir}")
+    if not cfg.dataset_name.exists():
+        raise Warning(f"Dataset {cfg.dataset_name} does not exist. Assuming the pulsar folders live in the {cfg.home_dir}.")
     if not cfg.singularity_image.exists():
         raise FileNotFoundError(f"singularity_image does not exist: {cfg.singularity_image}")
 
