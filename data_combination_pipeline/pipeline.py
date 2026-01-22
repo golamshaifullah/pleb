@@ -36,6 +36,7 @@ from .reports import (
 # Add-ons from FixDataset.ipynb / AnalysePulsars.ipynb
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
+from .outlier_qc import PTAQCConfig, run_pta_qc_for_parfile, summarize_pta_qc
 
 logger = get_logger("data_combination_pipeline")
 
@@ -88,6 +89,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     # Collect binary analysis rows as we iterate branches
     binary_rows: List[Dict[str, object]] = []
+    qc_rows: List[Dict[str, object]] = []
 
     try:
         for branch in branches_to_run:
@@ -208,6 +210,10 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         if cfg.make_binary_analysis and binary_rows:
             df = pd.DataFrame(binary_rows)
             df.to_csv(out_paths["binary_analysis"] / "binary_analysis.tsv", sep="\t", index=False)
+
+        if getattr(cfg, "run_pta_qc", False) and qc_rows:
+            dfq = pd.DataFrame(qc_rows)
+            dfq.to_csv(out_paths["qc"] / "qc_summary.tsv", sep="\t", index=False)
 
         logger.info("Pipeline complete.")
         return out_paths

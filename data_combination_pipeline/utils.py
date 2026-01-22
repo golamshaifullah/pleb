@@ -46,6 +46,7 @@ def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Option
         "fix_dataset": base / tag / "fix_dataset",
         "binary_analysis": base / tag / "binary_analysis",
         "param_scan": base / tag / "param_scan",
+        "qc": base / tag / "qc",
     }
     for p in paths.values():
         safe_mkdir(p)

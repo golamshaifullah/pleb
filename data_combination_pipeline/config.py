@@ -56,6 +56,20 @@ class PipelineConfig:
     make_residual_plots: bool = True
     make_outlier_reports: bool = True
 
+    # Optional outlier/QC stage using the external `pta_qc` package (libstempo-based).
+    # This is separate from the existing general2-based outlier summaries.
+    run_pta_qc: bool = False
+    pta_qc_backend_col: str = "group"
+    pta_qc_drop_unmatched: bool = False
+    pta_qc_merge_tol_seconds: float = 2.0
+    pta_qc_tau_corr_minutes: float = 30.0
+    pta_qc_fdr_q: float = 0.01
+    pta_qc_mark_only_worst_per_day: bool = True
+    pta_qc_tau_rec_days: float = 7.0
+    pta_qc_window_mult: float = 5.0
+    pta_qc_min_points: int = 6
+    pta_qc_delta_chi2_thresh: float = 25.0
+
     # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
     run_fix_dataset: bool = False
     make_binary_analysis: bool = False

@@ -140,3 +140,22 @@ pytest
 Notes:
 - The tests are written to run without requiring a tempo2 installation.
 - Git-related tests are skipped automatically if GitPython isn't installed.
+
+
+## Optional outlier detection via pta_qc
+
+If you have the external `pta_qc` package installed (and its dependency `libstempo`), you can run QC/outlier detection from inside the pipeline.
+
+Enable it via config:
+
+```toml
+[pipeline]
+run_pta_qc = true
+pta_qc_backend_col = "group"
+```
+
+Or via CLI:
+
+```bash
+data-combination-pipeline --config config.toml --qc
+```
