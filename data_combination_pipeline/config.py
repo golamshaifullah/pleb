@@ -53,13 +53,47 @@ class PipelineConfig:
     make_residual_plots: bool = True
     make_outlier_reports: bool = True
 
+    # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
+    run_fix_dataset: bool = False
+    make_binary_analysis: bool = False
+
+    # ---- FixDataset settings (flattened) ----
+    fix_apply: bool = False
+    fix_backup: bool = True
+    fix_dry_run: bool = False
+
+    fix_update_alltim_includes: bool = True
+    fix_min_toas_per_backend_tim: int = 10
+
+    # Example: {"-pta": "EPTA", "-be": "P200"}
+    fix_required_tim_flags: Dict[str, str] = field(default_factory=dict)
+
+    fix_insert_missing_jumps: bool = True
+    fix_jump_flag: str = "-sys"
+    fix_ensure_ephem: Optional[str] = None
+    fix_ensure_clk: Optional[str] = None
+    fix_ensure_ne_sw: Optional[str] = None
+    fix_remove_patterns: List[str] = field(default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."])
+    # "equatorial_to_ecliptic" or "ecliptic_to_equatorial"
+    fix_coord_convert: Optional[str] = None
+
+    # ---- Binary analysis settings ----
+    binary_only_models: Optional[List[str]] = None
+
     # Plotting controls
     dpi: int = 120
     max_covmat_params: Optional[int] = None
 
     def resolved(self) -> "PipelineConfig":
         """Return a copy with paths expanded/resolved."""
-        c = PipelineConfig(**{**asdict(self), "home_dir": Path(self.home_dir), "singularity_image": Path(self.singularity_image), "results_dir": Path(self.results_dir)})
+        c = PipelineConfig(
+            **{
+                **asdict(self),
+                "home_dir": Path(self.home_dir),
+                "singularity_image": Path(self.singularity_image),
+                "results_dir": Path(self.results_dir),
+            }
+        )
         c.home_dir = c.home_dir.expanduser().resolve()
         c.singularity_image = c.singularity_image.expanduser().resolve()
         c.results_dir = c.results_dir.expanduser().resolve()
@@ -76,6 +110,19 @@ class PipelineConfig:
     def from_dict(d: Dict[str, Any]) -> "PipelineConfig":
         def p(x: Any) -> Path:
             return Path(x) if x is not None else Path(".")
+
+        def opt_str(key: str) -> Optional[str]:
+            v = d.get(key)
+            if v in (None, ""):
+                return None
+            return str(v)
+
+        def opt_list_str(key: str) -> Optional[List[str]]:
+            v = d.get(key)
+            if v in (None, ""):
+                return None
+            return list(v)
+
         return PipelineConfig(
             home_dir=p(d["home_dir"]),
             singularity_image=p(d["singularity_image"]),
@@ -92,6 +139,26 @@ class PipelineConfig:
             make_covariance_heatmaps=bool(d.get("make_covariance_heatmaps", True)),
             make_residual_plots=bool(d.get("make_residual_plots", True)),
             make_outlier_reports=bool(d.get("make_outlier_reports", True)),
+
+            run_fix_dataset=bool(d.get("run_fix_dataset", False)),
+            make_binary_analysis=bool(d.get("make_binary_analysis", False)),
+
+            fix_apply=bool(d.get("fix_apply", False)),
+            fix_backup=bool(d.get("fix_backup", True)),
+            fix_dry_run=bool(d.get("fix_dry_run", False)),
+            fix_update_alltim_includes=bool(d.get("fix_update_alltim_includes", True)),
+            fix_min_toas_per_backend_tim=int(d.get("fix_min_toas_per_backend_tim", 10)),
+            fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
+            fix_insert_missing_jumps=bool(d.get("fix_insert_missing_jumps", True)),
+            fix_jump_flag=str(d.get("fix_jump_flag", "-sys")),
+            fix_ensure_ephem=opt_str("fix_ensure_ephem"),
+            fix_ensure_clk=opt_str("fix_ensure_clk"),
+            fix_ensure_ne_sw=opt_str("fix_ensure_ne_sw"),
+            fix_remove_patterns=list(d.get("fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."])),
+            fix_coord_convert=opt_str("fix_coord_convert"),
+
+            binary_only_models=opt_list_str("binary_only_models"),
+
             dpi=int(d.get("dpi", 120)),
             max_covmat_params=(None if d.get("max_covmat_params") in (None, "") else d.get("max_covmat_params")),
         )

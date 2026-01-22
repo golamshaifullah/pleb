@@ -5,14 +5,17 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 
+
 def which_or_raise(cmd: str, hint: str = "") -> str:
     path = shutil.which(cmd)
     if not path:
         raise RuntimeError(f"Required executable not found on PATH: {cmd}. {hint}".strip())
     return path
 
+
 def safe_mkdir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
+
 
 def discover_pulsars(home_dir: Path) -> List[str]:
     pulsars: List[str] = []
@@ -20,6 +23,7 @@ def discover_pulsars(home_dir: Path) -> List[str]:
         if entry.is_dir() and entry.name.startswith("J") and not entry.name.startswith("."):
             pulsars.append(entry.name)
     return sorted(pulsars)
+
 
 def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Optional[str]) -> Dict[str, Path]:
     if outdir_name is None:
@@ -37,6 +41,9 @@ def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Option
         "outliers": base / tag / "OutlierSummary",
         "png": base / tag / "png",
         "logs": base / tag / "logs",
+        # new outputs from FixDataset.ipynb / AnalysePulsars.ipynb integrations
+        "fix_dataset": base / tag / "fix_dataset",
+        "binary_analysis": base / tag / "binary_analysis",
     }
     for p in paths.values():
         safe_mkdir(p)

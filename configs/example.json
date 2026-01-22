@@ -17,6 +17,23 @@
   "make_covariance_heatmaps": true,
   "make_residual_plots": true,
   "make_outlier_reports": true,
+
+  "run_fix_dataset": false,
+  "make_binary_analysis": false,
+
+  "fix_update_alltim_includes": true,
+  "fix_min_toas_per_backend_tim": 10,
+  "fix_required_tim_flags": {},
+  "fix_insert_missing_jumps": true,
+  "fix_jump_flag": "-sys",
+  "fix_ensure_ephem": null,
+  "fix_ensure_clk": null,
+  "fix_ensure_ne_sw": null,
+  "fix_remove_patterns": ["NRT.NUPPI.", "NRT.NUXPI."],
+  "fix_coord_convert": null,
+
+  "binary_only_models": null,
+
   "dpi": 120,
   "max_covmat_params": null
 }

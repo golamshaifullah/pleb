@@ -16,5 +16,23 @@ make_covariance_heatmaps = true
 make_residual_plots = true
 make_outlier_reports = true
 
+# --- optional add-ons ---
+run_fix_dataset = false
+make_binary_analysis = false
+
+# Dataset fix/report knobs (only used if run_fix_dataset=true)
+fix_update_alltim_includes = true
+fix_min_toas_per_backend_tim = 10
+# fix_required_tim_flags = { "-pta" = "EPTA" }
+fix_insert_missing_jumps = true
+fix_jump_flag = "-sys"
+# fix_ensure_ephem = "DE440"
+# fix_ensure_clk = "TT(BIPM2021)"
+fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
+# fix_coord_convert = "equatorial_to_ecliptic"  # requires astropy
+
+# Binary analysis filter (only used if make_binary_analysis=true)
+# binary_only_models = ["ELL1", "BT", "BTX"]
+
 dpi = 120
 max_covmat_params = ""  # empty -> no cap
