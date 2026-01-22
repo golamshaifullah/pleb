@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+import re
+from functools import lru_cache
 import numpy as np
 import pandas as pd
 
@@ -10,51 +12,150 @@ from .logging_utils import get_logger
 
 logger = get_logger("data_combination_pipeline.reports")
 
-def _as_float(x) -> Optional[float]:
+
+@lru_cache(maxsize=512)
+def _read_plk_cached(path_str: str) -> pd.DataFrame:
+    """Read a .plk log once per process.
+
+    The change report loops can otherwise re-read the same reference file many times.
+    """
+    return read_plklog(Path(path_str))
+
+
+def _maybe_float_series(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _hms_to_seconds(hms: str) -> Optional[float]:
+    """Parse (+/-)HH:MM:SS(.sss) or (+/-)DD:MM:SS(.sss) into seconds."""
+    if not isinstance(hms, str) or ":" not in hms:
+        return None
+    parts = hms.strip().split(":")
+    if len(parts) != 3:
+        return None
     try:
-        return float(x)
+        h0 = parts[0]
+        sign = -1.0 if h0.startswith("-") else 1.0
+        hh = abs(float(h0))
+        mm = float(parts[1])
+        ss = float(parts[2])
+        return sign * (hh * 3600.0 + mm * 60.0 + ss)
     except Exception:
         return None
 
-def get_hms_diff(hms_f: str, hms_m: str) -> str:
-    def _split(s: str):
-        hh, mm, ss = s.split(":")
-        return float(hh), float(mm), float(ss)
-    hf, mf, sf = _split(hms_f)
-    hm, mm, sm = _split(hms_m)
-    dh, dm, ds = (hf - hm), (mf - mm), (sf - sm)
-    sign = -1 if ds < 0 else 1
-    dh, dm, ds = sign*abs(dh), sign*abs(dm), sign*abs(ds)
-    return f"{dh:+.0f}:{abs(dm):02.0f}:{abs(ds):012.9f}"
+
+def _format_seconds_as_hms(seconds: float) -> str:
+    sign = "+" if seconds >= 0 else "-"
+    s = abs(float(seconds))
+    hh = int(s // 3600)
+    s -= hh * 3600
+    mm = int(s // 60)
+    s -= mm * 60
+    return f"{sign}{hh:d}:{mm:02d}:{s:012.9f}"
+
+
+def _parse_plk_stats(plk_path: Path) -> Dict[str, Optional[float]]:
+    """Extract fit statistics from tempo2 stdout captured in the plk log.
+
+    tempo2 output formats vary, so we use tolerant regexes and return None if absent.
+    """
+    text = plk_path.read_text(encoding="utf-8", errors="ignore") if plk_path.exists() else ""
+    if not text:
+        return {"chisq": None, "redchisq": None, "n_toas": None}
+
+    def _rx(patterns: List[str]) -> Optional[float]:
+        for pat in patterns:
+            m = re.search(pat, text, flags=re.IGNORECASE)
+            if m:
+                try:
+                    return float(m.group(1))
+                except Exception:
+                    continue
+        return None
+
+    chisq = _rx([
+        r"chisq\s*=\s*([0-9.+\-eE]+)",
+        r"chi\s*\^?2\s*=\s*([0-9.+\-eE]+)",
+    ])
+    redchisq = _rx([
+        r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)",
+        r"red\s*chisq\s*=\s*([0-9.+\-eE]+)",
+    ])
+    n_toas = _rx([
+        r"number\s+of\s+\w*points\s+in\s+fit\s*=\s*([0-9.+\-eE]+)",
+        r"ntoa\s*=\s*([0-9.+\-eE]+)",
+        r"number\s+of\s+toas\s*=\s*([0-9.+\-eE]+)",
+    ])
+    return {"chisq": chisq, "redchisq": redchisq, "n_toas": n_toas}
+
 
 def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict[str, Path]) -> pd.DataFrame:
-    df_ref = read_plklog(out_paths["plk"] / f"{pulsar}_{reference_branch}_plk.log")
-    df_b = read_plklog(out_paths["plk"] / f"{pulsar}_{branch}_plk.log")
+    """Compare post-fit parameters between a branch and a reference branch.
 
-    df_ref = df_ref.set_index("Param")
-    df_b = df_b.set_index("Param")
+    Optimizations vs the original notebook:
+      * cache file reads (huge when reference is compared against many branches)
+      * vectorized merge instead of Python loops
+      * add uncertainty-normalized "sigma" deltas when possible
+    """
+    ref_path = out_paths["plk"] / f"{pulsar}_{reference_branch}_plk.log"
+    br_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
 
-    params = sorted(set(df_ref.index) | set(df_b.index))
-    rows = []
-    for p in params:
-        in_ref = p in df_ref.index
-        in_b = p in df_b.index
-        if in_ref and in_b:
-            pf = df_b.loc[p, "Postfit"]
-            pr = df_ref.loc[p, "Postfit"]
-            if isinstance(pf, str) and ":" in str(pf) and isinstance(pr, str) and ":" in str(pr):
-                diff = get_hms_diff(str(pf), str(pr))
-            else:
-                vf = _as_float(pf)
-                vr = _as_float(pr)
-                diff = (vf - vr) if (vf is not None and vr is not None) else f"{pf} | {pr}"
-            rows.append((p, "both", pr, pf, diff))
-        elif in_b and not in_ref:
-            rows.append((p, "new", None, df_b.loc[p, "Postfit"], df_b.loc[p, "Postfit"]))
-        else:
-            rows.append((p, "missing", df_ref.loc[p, "Postfit"], None, None))
+    df_ref = _read_plk_cached(str(ref_path))
+    df_br = _read_plk_cached(str(br_path))
 
-    return pd.DataFrame(rows, columns=["Param", "status", "ref_postfit", "branch_postfit", "diff"])
+    keep = [c for c in ["Param", "Postfit", "Uncertainty", "Fit"] if c in df_ref.columns]
+    df_ref = df_ref[keep].copy()
+    df_br = df_br[[c for c in keep if c in df_br.columns]].copy()
+
+    m = df_ref.merge(df_br, on="Param", how="outer", suffixes=("_ref", "_branch"), indicator=True)
+    m["status"] = m["_merge"].map({"both": "both", "left_only": "missing", "right_only": "new"})
+    m = m.drop(columns=["_merge"])
+
+    # numeric diffs
+    ref_num = _maybe_float_series(m.get("Postfit_ref", pd.Series(dtype=float)))
+    br_num = _maybe_float_series(m.get("Postfit_branch", pd.Series(dtype=float)))
+    diff_num = br_num - ref_num
+
+    # hms diffs (RA/DEC style)
+    ref_hms = m.get("Postfit_ref", pd.Series(dtype=object)).astype("string")
+    br_hms = m.get("Postfit_branch", pd.Series(dtype=object)).astype("string")
+    ref_sec = ref_hms.apply(lambda x: _hms_to_seconds(str(x)) if x is not pd.NA else None)
+    br_sec = br_hms.apply(lambda x: _hms_to_seconds(str(x)) if x is not pd.NA else None)
+    diff_sec = (pd.to_numeric(br_sec, errors="coerce") - pd.to_numeric(ref_sec, errors="coerce"))
+    diff_hms_str = diff_sec.apply(lambda x: _format_seconds_as_hms(float(x)) if pd.notna(x) else pd.NA)
+
+    # uncertainty-normalized significance (numeric only)
+    uref = _maybe_float_series(m.get("Uncertainty_ref", pd.Series(dtype=float)))
+    ubr = _maybe_float_series(m.get("Uncertainty_branch", pd.Series(dtype=float)))
+    denom = np.sqrt(uref**2 + ubr**2)
+    sigma = np.where((np.isfinite(diff_num)) & (denom > 0), np.abs(diff_num) / denom, np.nan)
+
+    # Choose diff representation: HMS if applicable, else numeric, else string
+    diff_display = diff_num.astype("float64")
+    diff_display = diff_display.where(pd.notna(diff_display), pd.NA)
+    diff_display = diff_display.astype("object")
+    use_hms = diff_hms_str.notna()
+    diff_display = diff_display.where(~use_hms, diff_hms_str.astype("object"))
+
+    # for truly non-numeric values, fall back to "branch | ref" for readability
+    needs_fallback = pd.isna(diff_display) & m["Postfit_branch"].notna() & m["Postfit_ref"].notna()
+    diff_display = diff_display.where(~needs_fallback, (m["Postfit_branch"].astype(str) + " | " + m["Postfit_ref"].astype(str)))
+
+    out = pd.DataFrame({
+        "Param": m["Param"],
+        "status": m["status"],
+        "ref_postfit": m.get("Postfit_ref"),
+        "branch_postfit": m.get("Postfit_branch"),
+        "ref_uncertainty": m.get("Uncertainty_ref"),
+        "branch_uncertainty": m.get("Uncertainty_branch"),
+        "diff": diff_display,
+        "sigma": sigma,
+        "ref_fit": m.get("Fit_ref"),
+        "branch_fit": m.get("Fit_branch"),
+    })
+
+    # stable order
+    return out.sort_values(["status", "Param"], kind="mergesort", ignore_index=True)
 
 def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str) -> None:
     combined = []
@@ -77,6 +178,109 @@ def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branche
     if combined:
         combined_df = pd.concat(combined, ignore_index=True)
         combined_df.to_csv(out_paths["change_report"] / f"ALL_change_{reference_branch}_summary.tsv", sep="\t", index=False)
+
+
+def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
+    if "Fit" not in plk_df.columns:
+        return None
+    s = plk_df["Fit"].astype(str).str.strip().str.lower()
+    num = pd.to_numeric(s, errors="coerce")
+    if num.notna().any():
+        return int((num.fillna(0) > 0).sum())
+    # fallback: treat common truthy markers as fitted
+    return int(s.isin({"t", "true", "y", "yes", "fit", "fitted", "1"}).sum())
+
+
+def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[str, Optional[float]]:
+    """Summarize a tempo2 run to support model comparison.
+
+    Returns chisq/redchisq if parseable, number of TOAs, number of fitted params,
+    and WRMS of post-fit residuals (heuristic units depending on your tempo2 build/plugin).
+    """
+    plk_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
+    gen_path = out_paths["general2"] / f"{pulsar}_{branch}.general2"
+
+    stats = _parse_plk_stats(plk_path)
+
+    # Table-derived info
+    try:
+        plk_df = _read_plk_cached(str(plk_path))
+    except Exception:
+        plk_df = pd.DataFrame()
+    k = _fit_params_count(plk_df)
+
+    # n from general2 if missing
+    n = stats.get("n_toas")
+    wrms = None
+    if gen_path.exists():
+        try:
+            df = read_general2(gen_path)
+            if n is None:
+                n = float(len(df))
+            if {"post", "err"}.issubset(df.columns):
+                post = pd.to_numeric(df["post"], errors="coerce")
+                err = pd.to_numeric(df["err"], errors="coerce")
+                good = post.notna() & err.notna() & (err > 0)
+                if good.sum() > 1:
+                    y = post[good].to_numpy(dtype=float)
+                    # general2 often reports err in microseconds; keep the same heuristic as plotting.py
+                    e = (err[good].to_numpy(dtype=float) * 1e-6)
+                    w = 1.0 / (e**2)
+                    mu = np.sum(w * y) / np.sum(w)
+                    wrms = float(np.sqrt(np.sum(w * (y - mu) ** 2) / np.sum(w)))
+        except Exception:
+            pass
+
+    out = {
+        "chisq": stats.get("chisq"),
+        "redchisq": stats.get("redchisq"),
+        "n_toas": n,
+        "k_fit": float(k) if k is not None else None,
+        "wrms_post": wrms,
+    }
+
+    # model selection heuristics (Gaussian residual assumption)
+    if out["chisq"] is not None and out["k_fit"] is not None:
+        out["aic"] = float(out["chisq"] + 2.0 * out["k_fit"])  # type: ignore
+        if out["n_toas"] is not None and out["n_toas"] > 0:
+            out["bic"] = float(out["chisq"] + out["k_fit"] * np.log(out["n_toas"]))  # type: ignore
+        else:
+            out["bic"] = None
+    else:
+        out["aic"] = None
+        out["bic"] = None
+
+    return out
+
+
+def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str) -> None:
+    """Write a per-pulsar model comparison summary table vs a reference branch."""
+    rows = []
+    for pulsar in pulsars:
+        ref_stats = summarize_run(out_paths, pulsar, reference_branch)
+        for branch in branches:
+            if branch == reference_branch:
+                continue
+            st = summarize_run(out_paths, pulsar, branch)
+            row = {
+                "pulsar": pulsar,
+                "branch": branch,
+                "reference": reference_branch,
+                **{f"ref_{k}": v for k, v in ref_stats.items()},
+                **{f"br_{k}": v for k, v in st.items()},
+            }
+            # deltas
+            for k in ["chisq", "redchisq", "wrms_post", "aic", "bic"]:
+                rv, bv = ref_stats.get(k), st.get(k)
+                row[f"delta_{k}"] = (bv - rv) if (rv is not None and bv is not None) else None
+            rows.append(row)
+
+    if not rows:
+        return
+
+    df = pd.DataFrame(rows)
+    out_file = out_paths["change_report"] / f"MODEL_COMPARISON_{reference_branch}.tsv"
+    df.to_csv(out_file, sep="\t", index=False)
 
 def write_outlier_tables(home_dir: Path, out_paths: Dict[str, Path], pulsars: List[str], branches: List[str]) -> None:
     for pulsar in pulsars:

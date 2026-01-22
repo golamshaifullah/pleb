@@ -22,7 +22,7 @@ from .plotting import (
     plot_covmat_heatmaps,
     plot_residuals,
 )
-from .reports import write_change_reports, write_outlier_tables
+from .reports import write_change_reports, write_model_comparison_summary, write_outlier_tables
 
 logger = get_logger("data_combination_pipeline")
 
@@ -84,7 +84,10 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 write_outlier_tables(cfg.home_dir, out_paths, pulsars, [branch])
 
         if cfg.make_change_reports and reference_branch:
-            write_change_reports(out_paths, pulsars, compare_branches + ([reference_branch] if reference_branch else []), reference_branch)
+            branches_for_reports = compare_branches + ([reference_branch] if reference_branch else [])
+            write_change_reports(out_paths, pulsars, branches_for_reports, reference_branch)
+            # high-level fit-quality comparison (chisq/AIC/BIC/WRMS) vs reference
+            write_model_comparison_summary(out_paths, pulsars, branches_for_reports, reference_branch)
 
         if cfg.make_covariance_heatmaps:
             plot_covmat_heatmaps(out_paths, pulsars, compare_branches, dpi=int(cfg.dpi), max_params=cfg.max_covmat_params)
