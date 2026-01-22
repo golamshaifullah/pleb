@@ -94,3 +94,14 @@ Some coordinate conversion and orbital utilities need extra packages:
 - `scipy` (some solvers)
 
 You can add them via your environment manager, or extend `pyproject.toml`'s optional extras.
+
+## Unit tests
+
+```bash
+python -m pip install -e ".[dev]"
+pytest
+```
+
+Notes:
+- The tests are written to run without requiring a tempo2 installation.
+- Git-related tests are skipped automatically if GitPython isn't installed.
