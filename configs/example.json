@@ -1,0 +1,22 @@
+{
+  "home_dir": "/work/your/path/to/data-repo",
+  "singularity_image": "/work/your/path/to/container.sif",
+  "results_dir": ".",
+  "branches": [
+    "master",
+    "EPTA+InPTA"
+  ],
+  "reference_branch": "master",
+  "pulsars": "ALL",
+  "outdir_name": null,
+  "epoch": "55000",
+  "force_rerun": false,
+  "run_tempo2": true,
+  "make_toa_coverage_plots": true,
+  "make_change_reports": true,
+  "make_covariance_heatmaps": true,
+  "make_residual_plots": true,
+  "make_outlier_reports": true,
+  "dpi": 120,
+  "max_covmat_params": null
+}
