@@ -167,7 +167,7 @@ class PipelineConfig:
 
         return PipelineConfig(
             home_dir=p(d["home_dir"]),
-            dataset_name=p(d["dataset_name"]),
+            dataset_name=p(d.get("dataset_name", ".")),
             singularity_image=p(d["singularity_image"]),
             results_dir=p(d.get("results_dir", ".")),
             branches=list(d.get("branches", ["main", ""])),

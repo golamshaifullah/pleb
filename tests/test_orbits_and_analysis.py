@@ -59,7 +59,7 @@ def test_kepler_2d_returns_finite_state() -> None:
 
 
 def test_parfile_reader_and_binary_analysis(tmp_path: Path) -> None:
-    par = tmp_path / "J0000+0000.par"
+    par = tmp_path /  "test_dataset/J0000+0000.par"
     _write(
         par,
         """
@@ -82,7 +82,7 @@ TASC 50000.0
 
 
 def test_tempo2_command_helpers(tmp_path: Path) -> None:
-    prefix = build_singularity_prefix(tmp_path / "repo", tmp_path / "tempo2.sif")
+    prefix = build_singularity_prefix(tmp_path / "repo", "test_dataset", tmp_path / "tempo2.sif")
     assert prefix[:2] == ["singularity", "exec"]
     assert "/data" in " ".join(prefix)
 

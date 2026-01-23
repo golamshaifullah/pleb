@@ -92,7 +92,7 @@ def run_tempo2_for_pulsar(
         matrix_cmd = prefix + ["tempo2", "-output", "matrix", "-f", par, tim]
         run_subprocess(matrix_cmd, cov_out, cwd=work_dir)
 
-    gen2_strings = "{sat} {bat} {clock0} {clock1} {clock2} {clock3} {clock4} {shapiro} {shapiroJ} {shapiroS} {shapiroV} {shapiroU} {shapiroN} {tropo} {roemer} {tt} {tt2tb} {earth_ssb} {earth_ssb1} {earth_ssb2} {earth_ssb3} {sun_earth1} {sun_earth2} {sun_earth3} {ism} {elev} {npulse} {clock} {ipm} {freq} {pre} {pre_phase} {post} {post_phase} {err} {solarangle} {binphase}"
+    gen2_strings = "{sat} {bat} {clock0} {clock1} {clock2} {clock3} {clock4} {shapiro} {shapiroJ} {shapiroS} {shapiroV} {shapiroU} {shapiroN} {tropo} {roemer} {tt} {tt2tb} {earth_ssb} {earth_ssb1} {earth_ssb2} {earth_ssb3} {sun_earth1} {sun_earth2} {sun_earth3} {ism} {elev} {npulse} {clock} {ipm} {freq} {pre} {pre_phase} {post} {post_phase} {err} {solarangle} {binphase}\n"
     gen_cmd = prefix + [
         "tempo2",
         "-output",
