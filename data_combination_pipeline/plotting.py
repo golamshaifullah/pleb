@@ -62,7 +62,7 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
         f.write("branch\tpulsar\tsystem\tmjd_min\tmjd_max\tmean_cadence\tmedian_cadence\tntoas\tepochs\n")
 
     for ax, pulsar in zip(axes, pulsars):
-        tim_dir = home_dir / pulsar / "tims"
+        tim_dir = home_dir / dataset_name / pulsar / "tims"
         if not tim_dir.exists():
             ax.set_title(f"{pulsar}: no tims/ directory")
             ax.axis("off")
@@ -110,7 +110,7 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
 def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
     system_to_data = {}  # system -> list of (pulsar_index, mjd_array)
     for p_idx, pulsar in enumerate(pulsars):
-        tim_dir = home_dir / pulsar / "tims"
+        tim_dir = home_dir / dataset_name / pulsar / "tims"
         if not tim_dir.exists():
             continue
         for timfile in sorted(tim_dir.glob("*.tim")):
