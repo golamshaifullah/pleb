@@ -6,6 +6,7 @@ from typing import Dict, List
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import warnings
 
 try:
     from tqdm.auto import tqdm  # type: ignore
@@ -54,7 +55,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     if not cfg.home_dir.exists():
         raise FileNotFoundError(f"home_dir does not exist: {cfg.home_dir}")
     if not cfg.dataset_name.exists():
-        raise Warning(f"Dataset {cfg.dataset_name} does not exist. Assuming the pulsar folders live in the {cfg.home_dir}.")
+        warnings.warn(
+            f"Dataset {cfg.dataset_name} does not exist. "
+            f"Assuming the pulsar folders live in {cfg.home_dir}.",
+            stacklevel=2,
+        )
     if not cfg.singularity_image.exists():
         raise FileNotFoundError(f"singularity_image does not exist: {cfg.singularity_image}")
 
@@ -72,7 +77,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     # Pulsar selection
     if cfg.pulsars == "ALL":
-        pulsars = discover_pulsars(cfg.home_dir)
+        pulsars = discover_pulsars(cfg.home_dir / cfg.dataset_name)
     else:
         pulsars = list(cfg.pulsars)  # type: ignore[arg-type]
     if not pulsars:
@@ -124,7 +129,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
                 reports = []
                 for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                    rep = fix_pulsar_dataset(cfg.home_dir, pulsar, fcfg)
+                    rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
                     rep["branch"] = branch
                     reports.append(rep)
 
@@ -137,6 +142,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     for pulsar in tqdm(pulsars, desc=f"tempo2 ({branch})"):
                         run_tempo2_for_pulsar(
                             home_dir=cfg.home_dir,
+                            dataset_name=cfg.dataset_name,
                             singularity_image=cfg.singularity_image,
                             out_paths=out_paths,
                             pulsar=pulsar,
@@ -152,6 +158,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                                 ex.submit(
                                     run_tempo2_for_pulsar,
                                     home_dir=cfg.home_dir,
+                                    dataset_name=cfg.dataset_name,
                                     singularity_image=cfg.singularity_image,
                                     out_paths=out_paths,
                                     pulsar=pulsar,
@@ -170,17 +177,17 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
             if branch in compare_branches:
                 if cfg.make_toa_coverage_plots:
-                    plot_systems_per_pulsar(cfg.home_dir, out_paths, pulsars, branch, dpi=int(cfg.dpi))
-                    plot_pulsars_per_system(cfg.home_dir, out_paths, pulsars, branch, dpi=int(cfg.dpi))
+                    plot_systems_per_pulsar(cfg.home_dir, cfg.dataset_name, out_paths, pulsars, branch, dpi=int(cfg.dpi))
+                    plot_pulsars_per_system(cfg.home_dir, cfg.dataset_name, out_paths, pulsars, branch, dpi=int(cfg.dpi))
 
                 if cfg.make_outlier_reports:
-                    write_outlier_tables(cfg.home_dir, out_paths, pulsars, [branch])
+                    write_outlier_tables(cfg.home_dir, cfg.dataset_name, out_paths, pulsars, [branch])
 
             # Binary analysis per branch
             if cfg.make_binary_analysis:
                 bcfg = BinaryAnalysisConfig(only_models=cfg.binary_only_models)
                 for pulsar in pulsars:
-                    parfile = cfg.home_dir / pulsar / f"{pulsar}.par"
+                    parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
                     row = analyse_binary_from_par(parfile)
                     if bcfg.only_models and row.get("BINARY") not in set(bcfg.only_models):
                         continue

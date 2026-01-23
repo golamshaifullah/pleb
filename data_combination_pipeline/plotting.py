@@ -49,7 +49,7 @@ def savefig(fig: plt.Figure, path: Path, dpi: int) -> None:
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
-def plot_systems_per_pulsar(home_dir: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
+def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
     fig, axes = plt.subplots(nrows=len(pulsars), ncols=1, sharex=True, figsize=(12, max(2, 3*len(pulsars))))
     if len(pulsars) == 1:
         axes = [axes]
@@ -107,7 +107,7 @@ def plot_systems_per_pulsar(home_dir: Path, out_paths: Dict[str, Path], pulsars:
     axes[-1].set_xlabel("MJD")
     savefig(fig, out_paths["png"] / f"SystemsPerPulsar_{branch}.png", dpi=dpi)
 
-def plot_pulsars_per_system(home_dir: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
+def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
     system_to_data = {}  # system -> list of (pulsar_index, mjd_array)
     for p_idx, pulsar in enumerate(pulsars):
         tim_dir = home_dir / pulsar / "tims"

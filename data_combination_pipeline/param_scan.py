@@ -270,6 +270,7 @@ def _run_fit_only_plk(
     _, tim_container = tempo2_paths_in_container(pulsar)
     prefix = build_singularity_prefix(
         cfg.home_dir,
+        cfg.dataset_name,
         cfg.singularity_image,
         extra_binds=[(work_dir, "/work")],
     )
@@ -418,7 +419,7 @@ def run_param_scan(
     # Pulsar selection
     if pulsars is None:
         if cfg.pulsars == "ALL":
-            pulsar_list = discover_pulsars(cfg.home_dir)
+            pulsar_list = discover_pulsars(cfg.home_dir / cfg.dataset_name)
         else:
             pulsar_list = list(cfg.pulsars)  # type: ignore[arg-type]
     else:
@@ -471,7 +472,7 @@ def run_param_scan(
 
     def _scan_one(pulsar: str) -> List[Dict[str, object]]:
         # One worker per pulsar: runs baseline + all candidates sequentially.
-        parfile = cfg.home_dir / pulsar / f"{pulsar}.par"
+        parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
         if not parfile.exists():
             logger.warning("Missing par file: %s", parfile)
             return []

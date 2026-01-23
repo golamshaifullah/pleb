@@ -382,7 +382,7 @@ def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str],
     out.to_csv(out_file, sep="\t", index=False)
 
 
-def write_outlier_tables(home_dir: Path, out_paths: Dict[str, Path], pulsars: List[str], branches: List[str]) -> None:
+def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branches: List[str]) -> None:
     for pulsar in pulsars:
         tim_dir = home_dir / pulsar / "tims"
         tim_lookup = []

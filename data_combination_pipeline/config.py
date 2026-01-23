@@ -31,10 +31,10 @@ class PipelineConfig:
     results_dir: Path = Path(".")
 
     # Branches you want to compare/diagnose
-    branches: List[str] = field(default_factory=lambda: ["master", "EPTA"])
+    branches: List[str] = field(default_factory=lambda: ["main", "EPTA"])
 
     # Reference branch for change reports
-    reference_branch: str = "master"
+    reference_branch: str = "main"
 
     # Pulsars to process: "ALL" or list
     pulsars: PulsarSelection = "ALL"
@@ -122,7 +122,21 @@ class PipelineConfig:
             }
         )
         c.home_dir = c.home_dir.expanduser().resolve()
-        c.dataset_name = c.dataset_name.expanduser().resolve()
+        ds_raw = str(c.dataset_name)
+        ds_path = Path(ds_raw).expanduser()
+    
+        # Interpret dataset_name as:
+        # 1) absolute path -> use as-is
+        # 2) looks like a path (contains / or starts with .) -> resolve relative to config/cwd (legacy behavior)
+        # 3) plain name -> treat as a directory inside home_dir (what you expect)
+        if ds_path.is_absolute():
+            dataset_dir = ds_path
+        elif ("/" in ds_raw) or ("\\" in ds_raw) or ds_raw.startswith("."):
+            dataset_dir = ds_path.resolve()
+        else:
+            dataset_dir = (Path(c.home_dir).expanduser() / ds_raw).resolve()
+ 
+
         c.singularity_image = c.singularity_image.expanduser().resolve()
         c.results_dir = c.results_dir.expanduser().resolve()
         return c
@@ -156,8 +170,8 @@ class PipelineConfig:
             dataset_name=p(d["dataset_name"]),
             singularity_image=p(d["singularity_image"]),
             results_dir=p(d.get("results_dir", ".")),
-            branches=list(d.get("branches", ["master", "EPTA+InPTA"])),
-            reference_branch=str(d.get("reference_branch", "master")),
+            branches=list(d.get("branches", ["main", ""])),
+            reference_branch=str(d.get("reference_branch", "main")),
             pulsars=d.get("pulsars", "ALL"),
             outdir_name=(None if d.get("outdir_name") in (None, "") else d.get("outdir_name")),
             epoch=str(d.get("epoch", "55000")),

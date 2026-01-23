@@ -11,6 +11,7 @@ logger = get_logger("data_combination_pipeline.tempo2")
 
 def build_singularity_prefix(
     home_dir: Path,
+    dataset_name: Path,
     singularity_image: Path,
     extra_binds: List[tuple[Path, str]] | None = None,
 ) -> List[str]:
@@ -20,7 +21,7 @@ def build_singularity_prefix(
     Optionally bind additional host paths to container paths.
     """
     cmd: List[str] = ["singularity", "exec"]
-    binds: List[tuple[Path, str]] = [(home_dir, "/data")]
+    binds: List[tuple[Path, str]] = [(home_dir/dataset_name, "/data")]
     if extra_binds:
         binds.extend(extra_binds)
     for host, cont in binds:
@@ -48,6 +49,7 @@ def run_subprocess(cmd: List[str], stdout_path: Path, cwd: Path | None = None) -
 
 def run_tempo2_for_pulsar(
     home_dir: Path,
+    dataset_name: Path,
     singularity_image: Path,
     out_paths: Dict[str, Path],
     pulsar: str,
@@ -55,7 +57,7 @@ def run_tempo2_for_pulsar(
     epoch: str,
     force_rerun: bool = False,
 ) -> None:
-    prefix = build_singularity_prefix(home_dir, singularity_image)
+    prefix = build_singularity_prefix(home_dir, dataset_name, singularity_image)
     par, tim = tempo2_paths_in_container(pulsar)
 
     work_dir = out_paths.get("work", out_paths["logs"]) / branch / pulsar
@@ -81,7 +83,7 @@ def run_tempo2_for_pulsar(
     matrix_cmd = prefix + [
         "tempo2",
         "-output",
-        "-plugin", "matrix",
+        "matrix",
         "-f", par, tim,
     ]
     rc = run_subprocess(matrix_cmd, cov_out, cwd=work_dir)
@@ -94,7 +96,7 @@ def run_tempo2_for_pulsar(
     gen_cmd = prefix + [
         "tempo2",
         "-output",
-        "-plugin", "general2",
+        "general2",
         "-f", par, tim,
         "-s", gen2_strings,
     ]

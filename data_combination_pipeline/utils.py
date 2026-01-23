@@ -27,7 +27,7 @@ def discover_pulsars(home_dir: Path) -> List[str]:
 
 def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Optional[str]) -> Dict[str, Path]:
     if outdir_name is None:
-        outdir_name = "EPTA_combination_report_" + datetime.now().strftime("%Y%m%dT%H%M%S")
+        outdir_name = "EPTA_combination_report_" + datetime.now().strftime("%Y%m%dT%H%M")
     base = results_dir / outdir_name
     tag = "-".join(branches)
 
