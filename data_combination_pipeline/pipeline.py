@@ -94,6 +94,12 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name)
     logger.info("Writing outputs to: %s", out_paths["tag"])
 
+    # Ensure fix-dataset output path exists even if the output tree helper doesn't pre-create it
+    if "fix_dataset" not in out_paths:
+        out_paths["fix_dataset"] = out_paths["tag"] / "fix_dataset"
+    out_paths["fix_dataset"].mkdir(parents=True, exist_ok=True)
+
+
     # Collect binary analysis rows as we iterate branches
     binary_rows: List[Dict[str, object]] = []
     qc_rows: List[Dict[str, object]] = []
@@ -104,36 +110,40 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             checkout(repo, branch)
 
             # Optional dataset-fix reporting (report-only inside the multi-branch pipeline)
-            if cfg.run_fix_dataset:
-                if cfg.fix_apply:
-                    raise RuntimeError(
-                        "run_fix_dataset + fix_apply is not supported inside run_pipeline because it would dirty the working tree and break branch switching. "
-                        "Use the dataset_fix helpers directly (or add a commit/branch workflow) if you want to apply fixes."
-                    )
-
-                fcfg = FixDatasetConfig(
-                    apply=False,
-                    backup=bool(cfg.fix_backup),
-                    dry_run=bool(cfg.fix_dry_run),
-                    update_alltim_includes=bool(cfg.fix_update_alltim_includes),
-                    min_toas_per_backend_tim=int(cfg.fix_min_toas_per_backend_tim),
-                    required_tim_flags=dict(cfg.fix_required_tim_flags),
-                    insert_missing_jumps=bool(cfg.fix_insert_missing_jumps),
-                    jump_flag=str(cfg.fix_jump_flag),
-                    ensure_ephem=cfg.fix_ensure_ephem,
-                    ensure_clk=cfg.fix_ensure_clk,
-                    ensure_ne_sw=cfg.fix_ensure_ne_sw,
-                    remove_patterns=list(cfg.fix_remove_patterns),
-                    coord_convert=cfg.fix_coord_convert,
+            
+            # Dataset-fix reporting (forced; report-only inside the multi-branch pipeline)
+            # NOTE: We intentionally do NOT apply fixes here because it would dirty the git working tree and break branch switching.
+            if getattr(cfg, "fix_apply", False):
+                logger.warning(
+                    "fix_apply=true was requested, but run_pipeline forces the FixDataset step to be report-only "
+                    "so branch switching remains safe. Ignoring fix_apply and running with apply=False."
                 )
 
-                reports = []
-                for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                    rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
-                    rep["branch"] = branch
-                    reports.append(rep)
+            fcfg = FixDatasetConfig(
+                apply=False,
+                backup=bool(getattr(cfg, "fix_backup", False)),
+                dry_run=bool(getattr(cfg, "fix_dry_run", False)),
+                update_alltim_includes=bool(getattr(cfg, "fix_update_alltim_includes", False)),
+                min_toas_per_backend_tim=int(getattr(cfg, "fix_min_toas_per_backend_tim", 0) or 0),
+                required_tim_flags=dict(getattr(cfg, "fix_required_tim_flags", {}) or {}),
+                insert_missing_jumps=bool(getattr(cfg, "fix_insert_missing_jumps", False)),
+                jump_flag=str(getattr(cfg, "fix_jump_flag", "")),
+                ensure_ephem=getattr(cfg, "fix_ensure_ephem", None),
+                ensure_clk=getattr(cfg, "fix_ensure_clk", None),
+                ensure_ne_sw=getattr(cfg, "fix_ensure_ne_sw", None),
+                remove_patterns=list(getattr(cfg, "fix_remove_patterns", []) or []),
+                coord_convert=getattr(cfg, "fix_coord_convert", None),
+            )
 
-                write_fix_report(reports, out_paths["fix_dataset"] / branch)
+            reports = []
+            for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
+                rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
+                rep["branch"] = branch
+                reports.append(rep)
+
+            write_fix_report(reports, out_paths["fix_dataset"] / branch)
+
+
 
             # tempo2 runs (parallelizable across pulsars)
             if cfg.run_tempo2:
