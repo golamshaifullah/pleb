@@ -107,12 +107,17 @@ F0  100  100.0  0.5  0.0  1
 """,
     )
 
+    # general2 is parsed only between these markers
     _write(
         gen,
         """
+Some tempo2 preamble that should be ignored
+Starting general2 plugin
 sat post err
 55000 1.0 2.0
 55001 2.0 2.0
+Finished general2 plugin
+Some trailer that should also be ignored
 """,
     )
 
@@ -123,6 +128,6 @@ sat post err
     summary = summarize_run(out_paths, "J0000+0000", "master")
     assert summary["chisq"] == 10.0
     assert summary["redchisq"] == 1.25
-    assert summary["n_toas"] in (2.0, 2)  # parsed as float
+    assert summary["n_toas"] in (2.0, 2)  # parsed as float sometimes
     assert summary["wrms_post"] is not None
     assert np.isfinite(summary["wrms_post"])
