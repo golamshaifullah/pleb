@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List, Optional
-import pandas as pd
 from io import StringIO
 import re
+
+import numpy as np
+import pandas as pd
 
 from .tim_reader import read_tim_file_robust
 
@@ -74,12 +76,20 @@ GENERAL2_FORMAT = (
 GENERAL2_COLUMNS = re.findall(r"\{([^}]+)\}", GENERAL2_FORMAT)
 
 def read_general2(file: Path) -> pd.DataFrame:
+    """
+    Parse general2 output by extracting lines between:
+      'Starting general2 plugin'
+      ...
+      'Finished general2 plugin'
+
+    The block is assumed to contain rows formatted exactly per GENERAL2_FORMAT.
+    No header detection is performed.
+    """
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
 
     lines = file.read_text(encoding="utf-8", errors="ignore").splitlines()
 
-    # Find block bounds
     try:
         start_idx = next(i for i, ln in enumerate(lines) if start_marker in ln) + 1
         end_idx = next(i for i, ln in enumerate(lines[start_idx:], start=start_idx) if end_marker in ln)
@@ -91,20 +101,8 @@ def read_general2(file: Path) -> pd.DataFrame:
 
     block = [ln.strip() for ln in lines[start_idx:end_idx] if ln.strip()]
     if not block:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=GENERAL2_COLUMNS)
 
-    # If the first line looks like a header, drop it and use it as column names
-    first = block[0].split()
-    header_like = (len(first) >= 2) and all(any(ch.isalpha() for ch in tok) for tok in first)
-    if header_like and ("sat" in first or "post" in first or "err" in first):
-        cols = first
-        block = block[1:]
-        if not block:
-            return pd.DataFrame(columns=cols)
-    else:
-        cols = GENERAL2_COLUMNS
-
-    # Read raw table (don’t trust pandas’ header inference)
     df = pd.read_csv(
         StringIO("\n".join(block) + "\n"),
         sep=r"\s+",
@@ -112,15 +110,21 @@ def read_general2(file: Path) -> pd.DataFrame:
         engine="python",
     )
 
-    # Assign names robustly even if column counts differ slightly
+    # Assign canonical column names (pad with colN if general2 output has extras)
+    cols = list(GENERAL2_COLUMNS)
     ncol = df.shape[1]
     if len(cols) < ncol:
-        cols = cols + [f"col{i}" for i in range(len(cols), ncol)]
+        cols += [f"col{i}" for i in range(len(cols), ncol)]
     df.columns = cols[:ncol]
 
-    # Numeric conversion
+    # Convert all columns to numeric (general2 should be numeric-only anyway)
     for c in df.columns:
         df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # Convenience day bucket (avoids pandas Int64 "safe cast" issues)
+    if "sat" in df.columns:
+        sat = df["sat"]
+        df["mjd_int"] = pd.Series(np.floor(sat), index=df.index).astype("Int64")
 
     return df
 
