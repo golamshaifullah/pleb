@@ -74,13 +74,10 @@ GENERAL2_FORMAT = (
 )
 GENERAL2_COLUMNS = re.findall(r"\{([^}]+)\}", GENERAL2_FORMAT)
 
-# If you truly want hard dtypes, set them here.
-# Safer default: float64 everywhere (general2 is numeric-only; ints get stored as floats).
-GENERAL2_DTYPES = {c: "float64" for c in GENERAL2_COLUMNS}
-
 def read_general2(file: Path) -> pd.DataFrame:
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
+    n = len(GENERAL2_COLUMNS)
 
     lines = file.read_text(encoding="utf-8", errors="ignore").splitlines()
     try:
@@ -93,26 +90,31 @@ def read_general2(file: Path) -> pd.DataFrame:
     if not block:
         return pd.DataFrame(columns=GENERAL2_COLUMNS)
 
-    # Hard contract: every row must match the general2 -s format width
-    expected = len(GENERAL2_COLUMNS)
-    nfields0 = len(block[0].split())
-    if nfields0 != expected:
-        raise ValueError(
-            f"{file}: expected {expected} fields per row from GENERAL2_FORMAT, got {nfields0} "
-            f"on first data row. Check your general2 -s format vs output."
-        )
+    rows: list[list[float]] = []
 
-    df = pd.read_csv(
-        StringIO("\n".join(block) + "\n"),
-        sep=r"\s+",
-        header=None,
-        names=GENERAL2_COLUMNS,
-        dtype=GENERAL2_DTYPES,
-        engine="python",
-    )
+    for ln in block:
+        parts = ln.split()
 
-    # Convenience day bucket (this is derived, so created after read)
+        # Must have at least N fields to match the format; skip junk lines like "-nan"
+        if len(parts) < n:
+            continue
+
+        # Take only the first N fields; ignore any trailing "ERROR: ..." etc
+        parts = parts[:n]
+
+        # Convert to float; if any token isn't numeric, skip the line
+        try:
+            vals = [float(x) for x in parts]
+        except ValueError:
+            continue
+
+        rows.append(vals)
+
+    df = pd.DataFrame(rows, columns=GENERAL2_COLUMNS).astype("float64")
+
+    # Convenience integer day bucket for joins/grouping downstream
     df["mjd_int"] = np.floor(df["sat"]).astype("Int64")
+
     return df
 
 def read_tim_file(timfile: Path) -> pd.DataFrame:

@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 import re
 import shutil
+import json
+import hashlib
+import numpy as np
+import pandas as pd
 
 from .logging_utils import get_logger
 
@@ -48,6 +52,20 @@ class FixDatasetConfig:
     # tim flag insertion (applies to per-backend tims under <psr>/tims/)
     # Example: {"-pta": "EPTA", "-be": "P200", "-sys": "SomeSys"}
     required_tim_flags: Dict[str, str] = field(default_factory=dict)
+
+    # System flag inference (smart -sys/-group/-pta creation)
+    infer_system_flags: bool = False
+    system_flag_table_path: Optional[str] = None  # JSON mapping stored at dataset root if None
+    system_flag_overwrite_existing: bool = False
+    backend_overrides: Dict[str, str] = field(default_factory=dict)  # tim basename -> backend
+    raise_on_backend_missing: bool = False
+
+    # TIM hygiene
+    dedupe_toas_within_tim: bool = False
+    check_duplicate_backend_tims: bool = False
+
+    # Overlap handling (cheap: exact TOA duplicate removal across known overlapping backends)
+    remove_overlaps_exact: bool = False
 
     # parfile maintenance
     insert_missing_jumps: bool = True
@@ -307,6 +325,24 @@ def update_parfile_jumps(
             found.add(parts[2])
 
         new_lines.append(" ".join(parts))
+
+    
+    # If ensure_* requested but the key is missing entirely, insert it (tempo2 accepts anywhere; keep near top).
+    present_keys = {(_cleanline(l).split()[0] if _cleanline(l).strip() else '') for l in lines if _cleanline(l).strip()}
+    to_insert: List[str] = []
+    if ensure_ephem is not None and "EPHEM" not in present_keys:
+        to_insert.append(f"EPHEM {ensure_ephem}")
+    if ensure_clk is not None and "CLK" not in present_keys:
+        to_insert.append(f"CLK {ensure_clk}")
+    if ensure_ne_sw is not None and "NE_SW" not in present_keys:
+        to_insert.append(f"NE_SW {ensure_ne_sw}")
+    if to_insert:
+        changed = True
+        # Insert after any leading comments/blanks, otherwise at start.
+        insert_at = 0
+        while insert_at < len(new_lines) and (not new_lines[insert_at].strip() or new_lines[insert_at].lstrip().startswith(("C", "#"))):
+            insert_at += 1
+        new_lines[insert_at:insert_at] = to_insert + [""]
 
     missing = sorted(list(wanted - found))
     if missing:
@@ -579,6 +615,47 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         )
         report["steps"].append({"update_alltim_includes": rep})
 
+
+# TIM hygiene: dedupe within each backend tim
+if cfg.dedupe_toas_within_tim:
+    tims = list_backend_timfiles(psr_dir)
+    reps = []
+    for t in tims:
+        try:
+            reps.append(dedupe_timfile_toas(t, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run))
+        except Exception as e:
+            reps.append({"timfile": str(t), "error": str(e)})
+    report["steps"].append({"dedupe_toas_within_tim": reps})
+
+# Smart system flag inference: ensure -sys/-group/-pta in every TOA line
+if cfg.infer_system_flags:
+    tims = list_backend_timfiles(psr_dir)
+    reps = []
+    for t in tims:
+        try:
+            reps.append(infer_and_apply_system_flags(t, cfg))
+        except Exception as e:
+            reps.append({"timfile": str(t), "error": str(e)})
+    report["steps"].append({"infer_system_flags": reps})
+
+# Cheap overlap removal (exact duplicates across known overlapping backend tims)
+if cfg.remove_overlaps_exact:
+    try:
+        rep = remove_overlaps_exact(psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run)
+    except Exception as e:
+        rep = {"error": str(e)}
+    report["steps"].append({"remove_overlaps_exact": rep})
+
+# Duplicate backend timfile detection (content-identical TOA sets)
+if cfg.check_duplicate_backend_tims:
+    try:
+        dups = find_duplicate_backend_timfiles(list_backend_timfiles(psr_dir))
+        rep = {"groups": [[str(p) for p in g] for g in dups]}
+    except Exception as e:
+        rep = {"error": str(e)}
+    report["steps"].append({"duplicate_backend_timfiles": rep})
+
+
     if cfg.required_tim_flags:
         tims = list_backend_timfiles(psr_dir)
         tim_reports = []
@@ -667,3 +744,216 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
     summary_path.write_text(header + "\n".join([f"{a}\t{b}\t{c}\t{d}" for a, b, c, d in rows]) + "\n", encoding="utf-8")
 
     return detail_path
+
+
+# Known overlapping backend .tim basenames (from legacy FixDataset notebook).
+# These are NOT pulsar-specific; they describe backends that can contain overlapping TOAs.
+OVERLAPPED_TIMFILES: Dict[str, List[str]] = {
+    "EFF.P200.1380.tim": ["EFF.EBPP.1360.tim", "EFF.EBPP.1410.tim"],
+    "EFF.P217.1380.tim": ["EFF.EBPP.1360.tim", "EFF.EBPP.1410.tim"],
+    "EFF.S110.2487.tim": ["EFF.EBPP.2639.tim", "EFF.EBPP.2639.tim"],
+    "JBO.ROACH.1520.tim": ["JBO.DFB.1400.tim", "JBO.DFB.1520.tim"],
+    "JBO.DFB.1520.tim": ["JBO.DFB.1400.tim"],
+    "NRT.NUPPI.1484.tim": ["NRT.BON.1400.tim", "NRT.BON.1600.tim"],
+    "NRT.NUPPI.1854.tim": ["NRT.BON.1600.tim", "NRT.BON.2000.tim"],
+    "NRT.NUPPI.2539.tim": ["NRT.BON.2000.tim"],
+}
+
+def _toa_key_from_line(line: str) -> Optional[Tuple[str, str, str, str]]:
+    """Cheap TOA identity key for FORMAT 1: first 4 columns as strings."""
+    if not is_toa_line(line):
+        return None
+    parts = line.strip().split()
+    if len(parts) < 4:
+        return None
+    return (parts[0], parts[1], parts[2], parts[3])
+
+def dedupe_timfile_toas(
+    timfile: Path,
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
+    """Remove exact duplicate TOA lines within a single .tim file (FORMAT 1).
+
+    This is intentionally conservative: only exact duplicates on first 4 columns are removed.
+    Directives/comments are preserved in place.
+    """
+    if not timfile.exists():
+        return {"timfile": str(timfile), "changed": False, "removed": 0}
+
+    lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+    seen: Set[Tuple[str, str, str, str]] = set()
+    removed = 0
+    new_lines: List[str] = []
+    changed = False
+
+    for raw in lines:
+        key = _toa_key_from_line(raw)
+        if key is None:
+            new_lines.append(_cleanline(raw))
+            continue
+        if key in seen:
+            removed += 1
+            changed = True
+            # drop duplicate
+            continue
+        seen.add(key)
+        new_lines.append(_cleanline(raw))
+
+    if dry_run or not apply or not changed:
+        return {"timfile": str(timfile), "changed": bool(changed), "removed": int(removed)}
+
+    if backup:
+        _backup_file(timfile)
+    timfile.write_text("\\n".join(new_lines) + "\\n", encoding="utf-8")
+    return {"timfile": str(timfile), "changed": True, "removed": int(removed)}
+
+
+def _infer_backend_override(cfg: FixDatasetConfig, timfile: Path) -> Optional[str]:
+    """Return an override backend name for this timfile if provided."""
+    base = timfile.name
+    if cfg.backend_overrides and base in cfg.backend_overrides:
+        return str(cfg.backend_overrides[base])
+    return None
+
+
+def infer_and_apply_system_flags(
+    timfile: Path,
+    cfg: FixDatasetConfig,
+) -> Dict[str, object]:
+    """Infer -sys/-group/-pta using system_flag_inference and apply to the timfile.
+
+    If backend cannot be inferred and no override exists, this records an error (and optionally raises).
+    """
+    try:
+        from .system_flag_inference import (
+            BackendMissingError,
+            infer_sys_group_pta,
+            apply_flags_to_timfile,
+            update_mapping_table,
+        )
+    except Exception as e:
+        return {"timfile": str(timfile), "error": f"system_flag_inference import failed: {e}"}
+
+    override_backend = _infer_backend_override(cfg, timfile)
+
+    try:
+        inferred = infer_sys_group_pta(timfile, override_backend=override_backend)
+    except BackendMissingError as e:
+        msg = str(e)
+        if cfg.raise_on_backend_missing:
+            raise
+        return {"timfile": str(timfile), "error": msg, "sample_toa_line": e.sample_toa_line}
+
+    stats = apply_flags_to_timfile(
+        timfile,
+        inferred,
+        apply=cfg.apply,
+        backup=cfg.backup,
+        dry_run=cfg.dry_run,
+        overwrite_existing=cfg.system_flag_overwrite_existing,
+    )
+
+    # Update a global mapping table at dataset root (keyed by timfile basename).
+    try:
+        # Dataset root is assumed to be parent of psr_dir; fall back to tim's grandparent.
+        dataset_root = timfile.parent.parent
+        mapping_path = Path(cfg.system_flag_table_path) if cfg.system_flag_table_path else (dataset_root / "system_flag_table.json")
+        inferred2 = inferred.copy()
+        inferred2["timfile"] = timfile.name
+        update_mapping_table(mapping_path, inferred2)
+        stats["mapping_table"] = str(mapping_path)
+    except Exception as e:
+        stats["mapping_error"] = str(e)
+
+    return stats
+
+
+def _timfile_signature(timfile: Path) -> str:
+    """Hash signature of TOA keys for duplicate-tim detection (order-independent)."""
+    keys: List[str] = []
+    for raw in timfile.read_text(encoding="utf-8", errors="ignore").splitlines():
+        k = _toa_key_from_line(raw)
+        if k is None:
+            continue
+        keys.append("|".join(k))
+    keys.sort()
+    h = hashlib.sha1("\\n".join(keys).encode("utf-8", errors="ignore")).hexdigest()
+    return h
+
+
+def find_duplicate_backend_timfiles(timfiles: Sequence[Path]) -> List[List[Path]]:
+    """Find backend timfiles that contain exactly the same set of TOAs."""
+    by_sig: Dict[str, List[Path]] = {}
+    for t in timfiles:
+        try:
+            sig = _timfile_signature(t)
+        except Exception:
+            continue
+        by_sig.setdefault(sig, []).append(t)
+    return [grp for grp in by_sig.values() if len(grp) > 1]
+
+
+def remove_overlaps_exact(
+    psr_dir: Path,
+    overlap_map: Dict[str, List[str]] = OVERLAPPED_TIMFILES,
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
+    """Cheap overlap remover: for known overlapping backend pairs, comment out exact duplicate TOAs in 'drop' files.
+
+    This will NOT attempt fuzzy time/freq matching; it only removes exact duplicates based on first 4 columns.
+    """
+    tims_by_name = {t.name: t for t in list_backend_timfiles(psr_dir)}
+    changed_files = []
+    total_commented = 0
+
+    for retain_name, drop_list in overlap_map.items():
+        retain = tims_by_name.get(retain_name)
+        if retain is None:
+            continue
+
+        # Build retain key set
+        retain_keys: Set[Tuple[str, str, str, str]] = set()
+        for raw in retain.read_text(encoding="utf-8", errors="ignore").splitlines():
+            k = _toa_key_from_line(raw)
+            if k is not None:
+                retain_keys.add(k)
+
+        for drop_name in drop_list:
+            drop = tims_by_name.get(drop_name)
+            if drop is None:
+                continue
+
+            lines = drop.read_text(encoding="utf-8", errors="ignore").splitlines()
+            new_lines: List[str] = []
+            commented = 0
+            file_changed = False
+
+            for raw in lines:
+                k = _toa_key_from_line(raw)
+                if k is None:
+                    new_lines.append(_cleanline(raw))
+                    continue
+                if k in retain_keys and not raw.lstrip().startswith("C"):
+                    # comment this TOA line out
+                    new_lines.append("C " + _cleanline(raw))
+                    commented += 1
+                    file_changed = True
+                else:
+                    new_lines.append(_cleanline(raw))
+
+            if file_changed:
+                total_commented += commented
+                changed_files.append(str(drop))
+                if not dry_run and apply:
+                    if backup:
+                        _backup_file(drop)
+                    drop.write_text("\\n".join(new_lines) + "\\n", encoding="utf-8")
+
+    return {"changed_files": changed_files, "commented": int(total_commented)}
+
+
+
