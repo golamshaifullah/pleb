@@ -65,7 +65,6 @@ def read_covmat(file: Path) -> pd.DataFrame:
         df = df.drop(index="Finishing")
     return df.apply(pd.to_numeric, errors="coerce")
 
-# Must match the -s string used in the tempo2 general2 call
 GENERAL2_FORMAT = (
     "{sat} {bat} {clock0} {clock1} {clock2} {clock3} {clock4} {shapiro} {shapiroJ} "
     "{shapiroS} {shapiroV} {shapiroU} {shapiroN} {tropo} {roemer} {tt} {tt2tb} "
@@ -75,57 +74,45 @@ GENERAL2_FORMAT = (
 )
 GENERAL2_COLUMNS = re.findall(r"\{([^}]+)\}", GENERAL2_FORMAT)
 
-def read_general2(file: Path) -> pd.DataFrame:
-    """
-    Parse general2 output by extracting lines between:
-      'Starting general2 plugin'
-      ...
-      'Finished general2 plugin'
+# If you truly want hard dtypes, set them here.
+# Safer default: float64 everywhere (general2 is numeric-only; ints get stored as floats).
+GENERAL2_DTYPES = {c: "float64" for c in GENERAL2_COLUMNS}
 
-    The block is assumed to contain rows formatted exactly per GENERAL2_FORMAT.
-    No header detection is performed.
-    """
+def read_general2(file: Path) -> pd.DataFrame:
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
 
     lines = file.read_text(encoding="utf-8", errors="ignore").splitlines()
-
     try:
-        start_idx = next(i for i, ln in enumerate(lines) if start_marker in ln) + 1
-        end_idx = next(i for i, ln in enumerate(lines[start_idx:], start=start_idx) if end_marker in ln)
+        start = next(i for i, ln in enumerate(lines) if start_marker in ln) + 1
+        end = next(i for i, ln in enumerate(lines[start:], start=start) if end_marker in ln)
     except StopIteration as e:
-        raise ValueError(
-            f"Could not find general2 markers in {file} "
-            f"(need '{start_marker}' and '{end_marker}')."
-        ) from e
+        raise ValueError(f"Missing general2 markers in {file}") from e
 
-    block = [ln.strip() for ln in lines[start_idx:end_idx] if ln.strip()]
+    block = [ln.strip() for ln in lines[start:end] if ln.strip()]
     if not block:
         return pd.DataFrame(columns=GENERAL2_COLUMNS)
+
+    # Hard contract: every row must match the general2 -s format width
+    expected = len(GENERAL2_COLUMNS)
+    nfields0 = len(block[0].split())
+    if nfields0 != expected:
+        raise ValueError(
+            f"{file}: expected {expected} fields per row from GENERAL2_FORMAT, got {nfields0} "
+            f"on first data row. Check your general2 -s format vs output."
+        )
 
     df = pd.read_csv(
         StringIO("\n".join(block) + "\n"),
         sep=r"\s+",
         header=None,
+        names=GENERAL2_COLUMNS,
+        dtype=GENERAL2_DTYPES,
         engine="python",
     )
 
-    # Assign canonical column names (pad with colN if general2 output has extras)
-    cols = list(GENERAL2_COLUMNS)
-    ncol = df.shape[1]
-    if len(cols) < ncol:
-        cols += [f"col{i}" for i in range(len(cols), ncol)]
-    df.columns = cols[:ncol]
-
-    # Convert all columns to numeric (general2 should be numeric-only anyway)
-    for c in df.columns:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-
-    # Convenience day bucket (avoids pandas Int64 "safe cast" issues)
-    if "sat" in df.columns:
-        sat = df["sat"]
-        df["mjd_int"] = pd.Series(np.floor(sat), index=df.index).astype("Int64")
-
+    # Convenience day bucket (this is derived, so created after read)
+    df["mjd_int"] = np.floor(df["sat"]).astype("Int64")
     return df
 
 def read_tim_file(timfile: Path) -> pd.DataFrame:
