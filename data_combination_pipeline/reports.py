@@ -46,6 +46,16 @@ def _maybe_float_series(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
 
+def _mjd_day_int(series: pd.Series) -> pd.Series:
+    """Return integer MJD day as pandas nullable Int64.
+
+    Accepts fractional MJDs and non-numeric tokens; non-numeric become <NA>.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    return np.floor(s).astype("Int64")
+
+
+
 def _hms_to_seconds(hms: str) -> Optional[float]:
     """Parse (+/-)HH:MM:SS(.sss) or (+/-)DD:MM:SS(.sss) into seconds."""
     if not isinstance(hms, str) or ":" not in hms:
@@ -395,12 +405,12 @@ def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str
                 if mjd.empty:
                     continue
                 tmp = pd.DataFrame({
-                    "mjd_int": mjd.astype(int).astype(float),
+                    "mjd_int": _mjd_day_int(mjd),
                     "system": timfile.stem,
                     "timfile": str(timfile),
                 })
                 tim_lookup.append(tmp)
-        tim_lookup_df = pd.concat(tim_lookup, ignore_index=True) if tim_lookup else pd.DataFrame(columns=["mjd_int","system","timfile"])
+        tim_lookup_df = pd.concat(tim_lookup, ignore_index=True) if tim_lookup else pd.DataFrame({"mjd_int": pd.Series(dtype="Int64"), "system": pd.Series(dtype="string"), "timfile": pd.Series(dtype="string")})
 
         for branch in branches:
             gen_file = out_paths["general2"] / f"{pulsar}_{branch}.general2"
@@ -415,7 +425,7 @@ def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str
             if "sat" not in df.columns or "post" not in df.columns:
                 continue
 
-            df["mjd_int"] = pd.to_numeric(df["sat"], errors="coerce").astype("Int64")
+            df["mjd_int"] = _mjd_day_int(df["sat"])
             df["post_num"] = pd.to_numeric(df["post"], errors="coerce")
 
             good = df["mjd_int"].notna() & df["post_num"].notna()
