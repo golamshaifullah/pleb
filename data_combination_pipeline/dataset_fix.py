@@ -616,44 +616,44 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         report["steps"].append({"update_alltim_includes": rep})
 
 
-# TIM hygiene: dedupe within each backend tim
-if cfg.dedupe_toas_within_tim:
-    tims = list_backend_timfiles(psr_dir)
-    reps = []
-    for t in tims:
+    # TIM hygiene: dedupe within each backend tim
+    if cfg.dedupe_toas_within_tim:
+        tims = list_backend_timfiles(psr_dir)
+        reps = []
+        for t in tims:
+            try:
+                reps.append(dedupe_timfile_toas(t, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run))
+            except Exception as e:
+                reps.append({"timfile": str(t), "error": str(e)})
+        report["steps"].append({"dedupe_toas_within_tim": reps})
+
+    # Smart system flag inference: ensure -sys/-group/-pta in every TOA line
+    if cfg.infer_system_flags:
+        tims = list_backend_timfiles(psr_dir)
+        reps = []
+        for t in tims:
+            try:
+                reps.append(infer_and_apply_system_flags(t, cfg))
+            except Exception as e:
+                reps.append({"timfile": str(t), "error": str(e)})
+        report["steps"].append({"infer_system_flags": reps})
+
+    # Cheap overlap removal (exact duplicates across known overlapping backend tims)
+    if cfg.remove_overlaps_exact:
         try:
-            reps.append(dedupe_timfile_toas(t, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run))
+            rep = remove_overlaps_exact(psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run)
         except Exception as e:
-            reps.append({"timfile": str(t), "error": str(e)})
-    report["steps"].append({"dedupe_toas_within_tim": reps})
+            rep = {"error": str(e)}
+        report["steps"].append({"remove_overlaps_exact": rep})
 
-# Smart system flag inference: ensure -sys/-group/-pta in every TOA line
-if cfg.infer_system_flags:
-    tims = list_backend_timfiles(psr_dir)
-    reps = []
-    for t in tims:
+    # Duplicate backend timfile detection (content-identical TOA sets)
+    if cfg.check_duplicate_backend_tims:
         try:
-            reps.append(infer_and_apply_system_flags(t, cfg))
+            dups = find_duplicate_backend_timfiles(list_backend_timfiles(psr_dir))
+            rep = {"groups": [[str(p) for p in g] for g in dups]}
         except Exception as e:
-            reps.append({"timfile": str(t), "error": str(e)})
-    report["steps"].append({"infer_system_flags": reps})
-
-# Cheap overlap removal (exact duplicates across known overlapping backend tims)
-if cfg.remove_overlaps_exact:
-    try:
-        rep = remove_overlaps_exact(psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run)
-    except Exception as e:
-        rep = {"error": str(e)}
-    report["steps"].append({"remove_overlaps_exact": rep})
-
-# Duplicate backend timfile detection (content-identical TOA sets)
-if cfg.check_duplicate_backend_tims:
-    try:
-        dups = find_duplicate_backend_timfiles(list_backend_timfiles(psr_dir))
-        rep = {"groups": [[str(p) for p in g] for g in dups]}
-    except Exception as e:
-        rep = {"error": str(e)}
-    report["steps"].append({"duplicate_backend_timfiles": rep})
+            rep = {"error": str(e)}
+        report["steps"].append({"duplicate_backend_timfiles": rep})
 
 
     if cfg.required_tim_flags:
