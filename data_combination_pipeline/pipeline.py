@@ -65,6 +65,41 @@ def _cfg_get(cfg, name: str, default=None):
     return default
 
 
+def _cfg_get_bool(cfg, name: str, default: bool = False) -> bool:
+    """Like _cfg_get, but parse common string/int representations into a real bool.
+
+    This matters because bool("0") is True in Python, which is not what we want for env vars.
+    """
+    v = None
+    try:
+        v = getattr(cfg, name)
+    except Exception:
+        v = None
+
+    if v is None:
+        env_key = {
+            "fix_apply": "FIXDATASET_APPLY",
+            "run_fix_dataset": "RUN_FIX_DATASET",
+        }.get(name)
+        if env_key:
+            v = os.environ.get(env_key)
+
+    if v is None:
+        return bool(default)
+
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(int(v))
+
+    s = str(v).strip().lower()
+    if s in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "f", "no", "n", "off", ""}:
+        return False
+    # Fall back to Python truthiness for odd values
+    return bool(s)
+
 def _fix_cfg_fields() -> set[str]:
     """Return the supported FixDatasetConfig field names (works even if FixDatasetConfig evolves)."""
     try:
@@ -281,7 +316,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     qc_rows: List[Dict[str, object]] = []
 
     # If requested, apply FixDataset on a new branch and commit the resulting .par/.tim files.
-    if bool(_cfg_get(cfg, "fix_apply", False)):
+    if _cfg_get_bool(cfg, "fix_apply", False):
         fix_branch_name = str(_cfg_get(cfg, "fix_branch_name", "") or "").strip()
         if not fix_branch_name:
             raise RuntimeError(
@@ -331,7 +366,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 # pipelineb feature: if we just applied fixes and we're only running one branch,
                 # force tempo2 rerun unless user explicitly disabled it.
                 force_rerun = bool(cfg.force_rerun) or (
-                    bool(_cfg_get(cfg, "fix_apply", False)) and len(branches_to_run) == 1 and bool(getattr(cfg, "run_fix_dataset", True))
+                    _cfg_get_bool(cfg, "fix_apply", False) and len(branches_to_run) == 1 and bool(getattr(cfg, "run_fix_dataset", True))
                 )
 
                 if n_jobs == 1:
