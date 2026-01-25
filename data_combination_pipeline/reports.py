@@ -1,3 +1,5 @@
+"""Report generation utilities for pipeline outputs."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,15 +9,23 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 
-from .parsers import read_plklog, read_general2, read_tim_file
+from .parsers import PlkParseError, read_plklog, read_general2, read_tim_file
 from .logging_utils import get_logger
 
 logger = get_logger("data_combination_pipeline.reports")
 
 def _chi2_sf(x: float, df: float) -> float:
-    """Survival function for chi-square distribution.
+    """Compute the chi-square survival function.
 
-    Uses SciPy if available, otherwise falls back to mpmath.
+    Args:
+        x: Test statistic value.
+        df: Degrees of freedom.
+
+    Returns:
+        Survival function value (1 - CDF). Returns NaN if unavailable.
+
+    Notes:
+        Uses SciPy if available, otherwise falls back to mpmath.
     """
     if x is None or df is None:
         return float("nan")
@@ -43,6 +53,7 @@ def _read_plk_cached(path_str: str) -> pd.DataFrame:
 
 
 def _maybe_float_series(s: pd.Series) -> pd.Series:
+    """Convert a series to floats with NaN on failure."""
     return pd.to_numeric(s, errors="coerce")
 
 
@@ -75,6 +86,7 @@ def _hms_to_seconds(hms: str) -> Optional[float]:
 
 
 def _format_seconds_as_hms(seconds: float) -> str:
+    """Format seconds as a signed H:MM:SS.s string."""
     sign = "+" if seconds >= 0 else "-"
     s = abs(float(seconds))
     hh = int(s // 3600)
@@ -126,6 +138,15 @@ def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict
       * cache file reads (huge when reference is compared against many branches)
       * vectorized merge instead of Python loops
       * add uncertainty-normalized "sigma" deltas when possible
+
+    Args:
+        branch: Branch name to compare.
+        reference_branch: Reference branch name.
+        pulsar: Pulsar name.
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+
+    Returns:
+        A merged dataframe with parameter differences and status flags.
     """
     ref_path = out_paths["plk"] / f"{pulsar}_{reference_branch}_plk.log"
     br_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
@@ -187,16 +208,47 @@ def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict
     # stable order
     return out.sort_values(["status", "Param"], kind="mergesort", ignore_index=True)
 
+def _warn_plk_skip(pulsar: str, branch: str, reference_branch: str, path: Optional[Path], reason: str) -> None:
+    """Log a warning for a skipped change report due to PLK issues."""
+    path_str = str(path) if path is not None else "unknown path"
+    logger.warning(
+        "Skipping change report for %s (%s vs %s): %s (%s)",
+        pulsar,
+        branch,
+        reference_branch,
+        reason,
+        path_str,
+    )
+
+
 def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str) -> None:
+    """Write per-pulsar change reports and a combined summary.
+
+    Args:
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branches: Branches to compare (includes the reference branch).
+        reference_branch: Reference branch name.
+    """
     combined = []
+    skipped = 0
     for branch in branches:
         if branch == reference_branch:
             continue
         for pulsar in pulsars:
             try:
                 df = compare_plk(branch, reference_branch, pulsar, out_paths)
-            except FileNotFoundError:
-                logger.warning("Missing plk logs for change report: %s (%s vs %s)", pulsar, branch, reference_branch)
+            except FileNotFoundError as e:
+                _warn_plk_skip(pulsar, branch, reference_branch, Path(e.filename) if e.filename else None, "Missing plk log")
+                skipped += 1
+                continue
+            except PlkParseError as e:
+                _warn_plk_skip(pulsar, branch, reference_branch, e.path, e.reason)
+                skipped += 1
+                continue
+            except ValueError as e:
+                _warn_plk_skip(pulsar, branch, reference_branch, None, f"Unparseable plk log: {e}")
+                skipped += 1
                 continue
             out_file = out_paths["change_report"] / f"{pulsar}_change_{reference_branch}_to_{branch}.tsv"
             df.to_csv(out_file, sep="\t", index=False)
@@ -208,9 +260,12 @@ def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branche
     if combined:
         combined_df = pd.concat(combined, ignore_index=True)
         combined_df.to_csv(out_paths["change_report"] / f"ALL_change_{reference_branch}_summary.tsv", sep="\t", index=False)
+    if skipped:
+        logger.warning("Skipped %d change report(s) due to missing/unparseable plk logs.", skipped)
 
 
 def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
+    """Count the number of fitted parameters in a PLK table."""
     if "Fit" not in plk_df.columns:
         return None
     s = plk_df["Fit"].astype(str).str.strip().str.lower()
@@ -224,8 +279,13 @@ def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
 def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[str, Optional[float]]:
     """Summarize a tempo2 run to support model comparison.
 
-    Returns chisq/redchisq if parseable, number of TOAs, number of fitted params,
-    and WRMS of post-fit residuals (heuristic units depending on your tempo2 build/plugin).
+    Args:
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsar: Pulsar name.
+        branch: Branch name.
+
+    Returns:
+        Summary dictionary containing fit statistics and derived model metrics.
     """
     plk_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
     gen_path = out_paths["general2"] / f"{pulsar}_{branch}.general2"
@@ -284,7 +344,14 @@ def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[
 
 
 def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str) -> None:
-    """Write a per-pulsar model comparison summary table vs a reference branch."""
+    """Write a per-pulsar model comparison summary table vs a reference branch.
+
+    Args:
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branches: Branches to compare (includes the reference branch).
+        reference_branch: Reference branch name.
+    """
     rows = []
     for pulsar in pulsars:
         ref_stats = summarize_run(out_paths, pulsar, reference_branch)
@@ -335,8 +402,15 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
 def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str, z_threshold: float = 3.0) -> None:
     """Summarize 'new' parameters in each branch vs reference and their Wald z = |x|/σ.
 
-    This is a rapid way to screen whether newly-added fitted parameters look significant,
-    without running extra tempo2 fits.
+    This is a rapid way to screen whether newly-added fitted parameters look
+    significant without running extra tempo2 fits.
+
+    Args:
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branches: Branches to compare (includes the reference branch).
+        reference_branch: Reference branch name.
+        z_threshold: Significance threshold for reporting counts.
     """
     rows = []
     for pulsar in pulsars:
@@ -358,9 +432,15 @@ def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str],
             # (Fit column can be missing or non-numeric depending on tempo2 build).
             new_df = df[df.get("status") == "new"].copy()
 
-            # Pull branch postfit/unc
-            post = pd.to_numeric(new_df.get("Postfit_branch"), errors="coerce")
-            unc = pd.to_numeric(new_df.get("Uncertainty_branch"), errors="coerce")
+            # Pull branch postfit/unc (compare_plk outputs branch_* columns)
+            post = pd.to_numeric(
+                new_df.get("branch_postfit", pd.Series(index=new_df.index, dtype=float)),
+                errors="coerce",
+            )
+            unc = pd.to_numeric(
+                new_df.get("branch_uncertainty", pd.Series(index=new_df.index, dtype=float)),
+                errors="coerce",
+            )
             z = (post.abs() / unc).where((unc > 0) & post.notna(), np.nan)
 
             n_new = int(new_df.shape[0])
@@ -393,6 +473,15 @@ def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str],
 
 
 def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branches: List[str]) -> None:
+    """Write per-pulsar outlier tables from general2 outputs.
+
+    Args:
+        home_dir: Root data repository.
+        dataset_name: Dataset name or path.
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branches: Branches to include.
+    """
     for pulsar in pulsars:
         tim_dir = home_dir / pulsar / "tims"
         tim_lookup = []

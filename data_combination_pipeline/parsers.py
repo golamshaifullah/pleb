@@ -1,3 +1,5 @@
+"""Parsers for tempo2 outputs and pipeline text formats."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,23 +12,61 @@ import pandas as pd
 
 from .tim_reader import read_tim_file_robust
 
+class PlkParseError(ValueError):
+    """Raised when a tempo2 plk log cannot be parsed."""
+
+    def __init__(self, path: Path, reason: str) -> None:
+        """Initialize the error with a path and reason."""
+        super().__init__(f"{reason} in {path}")
+        self.path = path
+        self.reason = reason
+
 def _find_header_line(lines: List[str], startswith: str) -> Optional[int]:
+    """Return the line index whose stripped content starts with ``startswith``."""
     for i, line in enumerate(lines):
         if line.strip().startswith(startswith):
             return i
     return None
 
 def read_plklog(file: Path) -> pd.DataFrame:
+    """Parse a tempo2 ``plk`` log into a parameter table.
+
+    Args:
+        file: Path to a ``*_plk.log`` file.
+
+    Returns:
+        DataFrame with columns: ``Param``, ``Prefit``, ``Postfit``,
+        ``Uncertainty``, ``Difference``, ``Fit``.
+
+    Raises:
+        FileNotFoundError: If the log file does not exist.
+        PlkParseError: If the log is empty or the table cannot be parsed.
+    """
     if not file.exists():
         raise FileNotFoundError(str(file))
 
-    lines = file.read_text(encoding="utf-8", errors="ignore").splitlines(True)
+    text = file.read_text(encoding="utf-8", errors="ignore")
+    if not text.strip():
+        raise PlkParseError(file, "Empty plk log")
+
+    lines = text.splitlines(True)
 
     header_i = _find_header_line(lines, "Param")
     if header_i is None:
         header_i = next((i for i, l in enumerate(lines) if "Param" in l and "Postfit" in l), None)
     if header_i is None:
-        raise ValueError(f"Could not find plk table header in {file}")
+        param_rx = re.compile(r"\bparam(?:eter)?\b", re.IGNORECASE)
+        pre_rx = re.compile(r"\bpre[- ]?fit\b", re.IGNORECASE)
+        post_rx = re.compile(r"\bpost[- ]?fit\b", re.IGNORECASE)
+        for i, l in enumerate(lines):
+            s = l.strip()
+            if not s:
+                continue
+            if param_rx.search(s) and pre_rx.search(s) and post_rx.search(s):
+                header_i = i
+                break
+    if header_i is None:
+        raise PlkParseError(file, "Could not find plk table header")
 
     rows = []
     for line in lines[header_i + 1:]:
@@ -40,10 +80,25 @@ def read_plklog(file: Path) -> pd.DataFrame:
             continue
         rows.append(parts[:6])
 
+    if not rows:
+        raise PlkParseError(file, "Plk table header found but no data rows parsed")
+
     df = pd.DataFrame(rows, columns=["Param", "Prefit", "Postfit", "Uncertainty", "Difference", "Fit"])
     return df
 
 def read_covmat(file: Path) -> pd.DataFrame:
+    """Parse a tempo2 covariance matrix text file.
+
+    Args:
+        file: Path to a covariance matrix file.
+
+    Returns:
+        DataFrame indexed by parameter name with numeric values.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the header or table cannot be parsed.
+    """
     if not file.exists():
         raise FileNotFoundError(str(file))
 
@@ -75,6 +130,17 @@ GENERAL2_FORMAT = (
 GENERAL2_COLUMNS = re.findall(r"\{([^}]+)\}", GENERAL2_FORMAT)
 
 def read_general2(file: Path) -> pd.DataFrame:
+    """Parse tempo2 general2 plugin output embedded in a log file.
+
+    Args:
+        file: Path to a log containing general2 plugin output.
+
+    Returns:
+        DataFrame of parsed general2 rows. Empty if no data rows exist.
+
+    Raises:
+        ValueError: If general2 start/end markers are missing.
+    """
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
     n = len(GENERAL2_COLUMNS)
@@ -118,4 +184,5 @@ def read_general2(file: Path) -> pd.DataFrame:
     return df
 
 def read_tim_file(timfile: Path) -> pd.DataFrame:
+    """Read a tempo2 .tim file using the robust reader."""
     return read_tim_file_robust(timfile)

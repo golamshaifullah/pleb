@@ -1,9 +1,16 @@
 """Data Combination Diagnostics Pipeline.
 
-Refactored from the original Jupyter notebook into a reusable Python package.
+This package provides the refactored pipeline formerly implemented in notebooks.
+It exposes a small public API for running the full pipeline, running parameter
+scans, and applying FixDataset operations programmatically.
 
-This package is intentionally light to import. Heavy dependencies (e.g. GitPython)
-are only imported when you call the corresponding entry points.
+The package is intentionally light to import. Heavy dependencies (for example
+GitPython or libstempo/pta_qc) are imported lazily by the entry points.
+
+See Also:
+    data_combination_pipeline.pipeline.run_pipeline: Full pipeline implementation.
+    data_combination_pipeline.param_scan.run_param_scan: Parameter scan runner.
+    data_combination_pipeline.dataset_fix: FixDataset helpers.
 """
 
 from __future__ import annotations
@@ -14,14 +21,35 @@ from .pulsar_analysis import BinaryAnalysisConfig, write_binary_analysis
 
 
 def run_pipeline(cfg: PipelineConfig):
-    """Lazy import wrapper for :func:`data_combination_pipeline.pipeline.run_pipeline`."""
+    """Run the full data-combination pipeline.
+
+    This is a lightweight wrapper that lazily imports the heavy pipeline module.
+
+    Args:
+        cfg: Pipeline configuration.
+
+    Returns:
+        A dictionary of output paths as returned by
+        :func:`data_combination_pipeline.pipeline.run_pipeline`.
+    """
     from .pipeline import run_pipeline as _run
 
     return _run(cfg)
 
 
 def run_param_scan(cfg: PipelineConfig, **kwargs):
-    """Lazy import wrapper for :func:`data_combination_pipeline.param_scan.run_param_scan`."""
+    """Run a parameter scan (fit-only) workflow.
+
+    This wrapper lazily imports the parameter scan module.
+
+    Args:
+        cfg: Pipeline configuration.
+        **kwargs: Forwarded to
+            :func:`data_combination_pipeline.param_scan.run_param_scan`.
+
+    Returns:
+        A dictionary of output paths produced by the scan.
+    """
     from .param_scan import run_param_scan as _run
 
     return _run(cfg, **kwargs)

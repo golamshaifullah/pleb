@@ -71,6 +71,7 @@ class BackendMissingError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SystemInferenceConfig:
+    """Configuration for system flag inference from .tim files."""
     # flag keys to consult for backend/bw/nband if present on TOA lines
     backend_flag: str = "-be"
     bandwidth_flags: Tuple[str, ...] = ("-bw", "-BW", "-bandwidth", "-bwidth")
@@ -82,6 +83,7 @@ class SystemInferenceConfig:
 
 
 def is_toa_line(raw: str) -> bool:
+    """Return True if a raw line appears to be a TOA data line."""
     s = raw.strip()
     if not s:
         return False
@@ -92,6 +94,7 @@ def is_toa_line(raw: str) -> bool:
 
 
 def _extract_flags(line: str) -> Dict[str, str]:
+    """Extract ``-flag value`` pairs from a TOA line."""
     # Only scan the part after the first 4 columns to reduce false positives.
     parts = line.split()
     if len(parts) <= 4:
@@ -101,6 +104,7 @@ def _extract_flags(line: str) -> Dict[str, str]:
 
 
 def _infer_telescope_code(timfile: Path) -> Optional[str]:
+    """Infer telescope code from a .tim filename."""
     stem = timfile.name
     # common: TEL.BE.xxx.tim
     toks = stem.split(".")
@@ -110,6 +114,7 @@ def _infer_telescope_code(timfile: Path) -> Optional[str]:
 
 
 def _infer_backend_from_filename(timfile: Path, tel: Optional[str]) -> Optional[str]:
+    """Infer backend name from a .tim filename."""
     toks = timfile.name.split(".")
     if tel and toks and toks[0] == tel and len(toks) >= 2:
         return toks[1]
@@ -174,7 +179,20 @@ def parse_tim_toa_table(timfile: Path, cfg: SystemInferenceConfig = SystemInfere
 
 def infer_backend(timfile: Path, df: pd.DataFrame, cfg: SystemInferenceConfig = SystemInferenceConfig(),
                   override_backend: Optional[str] = None) -> str:
-    """Infer backend name for a tim file."""
+    """Infer backend name for a tim file.
+
+    Args:
+        timfile: Path to the tim file.
+        df: Parsed TOA table from :func:`parse_tim_toa_table`.
+        cfg: System inference configuration.
+        override_backend: Optional explicit backend name.
+
+    Returns:
+        Backend name.
+
+    Raises:
+        BackendMissingError: If the backend cannot be inferred.
+    """
     if override_backend:
         return override_backend
 
@@ -204,15 +222,22 @@ def infer_subband_centres(
     nband: int,
     round_mhz: int = 1,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Vectorised: assign each frequency to a subband index and compute that subband centre.
+    """Assign each frequency to a subband index and center.
 
     Uses:
-      sub_bw = bw/nband
-      f_lo = min(freqs) - sub_bw/2  (assumes min freq is the lowest subband centre)
-      idx = floor((freq - f_lo)/sub_bw) clipped to [0, nband-1]
-      centre = f_lo + (idx+0.5)*sub_bw
+        sub_bw = bw/nband
+        f_lo = min(freqs) - sub_bw/2
+        idx = floor((freq - f_lo)/sub_bw), clipped to [0, nband-1]
+        centre = f_lo + (idx+0.5)*sub_bw
 
-    Returns (idx, centre_rounded_mhz).
+    Args:
+        freqs_mhz: Frequency array in MHz.
+        bw_mhz: Total bandwidth in MHz.
+        nband: Number of subbands.
+        round_mhz: Decimal rounding for centers.
+
+    Returns:
+        Tuple of (subband_index, centre_mhz_rounded).
     """
     if nband <= 0 or bw_mhz <= 0:
         raise ValueError("bw_mhz and nband must be positive")
@@ -237,8 +262,16 @@ def infer_sys_group_pta(
 ) -> pd.DataFrame:
     """Infer -sys/-group/-pta values for each TOA row.
 
-    Returns a DataFrame with columns:
-      line_idx, sys, group, pta, backend, tel, centre_mhz, bw_mhz, nband
+    Args:
+        timfile: Path to the tim file.
+        cfg: System inference configuration.
+        override_backend: Optional backend override.
+        override_telescope: Optional telescope override.
+        override_pta: Optional PTA override.
+
+    Returns:
+        DataFrame with columns: ``line_idx``, ``sys``, ``group``, ``pta``,
+        ``backend``, ``tel``, ``centre_mhz``, ``bw_mhz``, ``nband``.
     """
     df = parse_tim_toa_table(timfile, cfg=cfg)
     if df.empty:
@@ -298,10 +331,16 @@ def apply_flags_to_timfile(
 ) -> Dict[str, object]:
     """Rewrite timfile so each TOA line has -sys/-group/-pta.
 
-    - If overwrite_existing=False, only adds missing flags.
-    - If overwrite_existing=True, replaces existing values.
+    Args:
+        timfile: Path to tim file to update.
+        inferred: Inferred flags from :func:`infer_sys_group_pta`.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return stats.
+        overwrite_existing: If True, replace existing flag values.
 
-    Returns stats dict.
+    Returns:
+        Stats dictionary containing counts and file path.
     """
     if inferred.empty:
         return {"timfile": str(timfile), "changed": False, "added": 0, "overwritten": 0}
@@ -360,16 +399,15 @@ def apply_flags_to_timfile(
 
 
 def canonicalise_centres(assignments: pd.DataFrame, tol_mhz: float = 1.0) -> pd.DataFrame:
-    """Second pass: snap centre_mhz values across pulsars.
+    """Snap center frequencies across pulsars within a tolerance.
 
-    Input must have columns: tel, backend, bw_mhz, nband, centre_mhz, sys.
+    Args:
+        assignments: Assignment table with columns ``tel``, ``backend``,
+            ``bw_mhz``, ``nband``, ``centre_mhz``, ``sys``, ``group``.
+        tol_mhz: Frequency tolerance for clustering.
 
-    Strategy:
-      For each (tel, backend, bw_mhz, nband) group:
-        - sort unique centres
-        - cluster consecutive centres within tol_mhz
-        - canonical centre = rounded median of the cluster
-        - rewrite centre_mhz + sys/group strings
+    Returns:
+        Updated assignments with canonicalized center frequencies.
     """
     required = {"tel", "backend", "bw_mhz", "nband", "centre_mhz", "sys", "group"}
     missing = required - set(assignments.columns)
@@ -416,9 +454,14 @@ def canonicalise_centres(assignments: pd.DataFrame, tol_mhz: float = 1.0) -> pd.
 
 
 def update_mapping_table(mapping_path: Path, inferred: pd.DataFrame) -> Dict[str, List[str]]:
-    """Persist a mapping table for timfile-name -> list of sys values (unique).
+    """Persist a mapping table for timfile-name -> list of sys values.
 
-    This is compatible with your earlier "jumps_per_system" concept, but keyed by tim filename.
+    Args:
+        mapping_path: JSON file path to write/update.
+        inferred: Inferred assignments with ``timfile`` and ``sys`` columns.
+
+    Returns:
+        Mapping dictionary written to disk.
     """
     mapping_path.parent.mkdir(parents=True, exist_ok=True)
     if mapping_path.exists():

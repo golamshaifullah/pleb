@@ -1,3 +1,9 @@
+"""Command-line interface for the data-combination pipeline.
+
+This module wires config loading/overrides to :func:`run_pipeline` and
+:func:`run_param_scan`.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -22,6 +28,11 @@ from .param_scan import run_param_scan
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser.
+
+    Returns:
+        An :class:`argparse.ArgumentParser` configured with pipeline options.
+    """
     p = argparse.ArgumentParser(description="Data combination diagnostics pipeline (tempo2 + plots + reports).")
     p.add_argument("--config",default=None,help="Path to config file (.json or .toml). Use '-' to read from stdin. Optional if using --set.",)
     p.add_argument("--set",dest="overrides",action="append",default=[],metavar="KEY=VALUE",help="Override/add a config key. Repeatable. Dotted keys allowed (e.g. fix.required_tim_flags.-pta=\"EPTA\").",)
@@ -29,6 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--outdir-name", type=str, default=None, help="Override outdir_name from config.")
     p.add_argument("--force-rerun", action="store_true", help="Re-run tempo2 even if outputs exist.")
     p.add_argument("--no-tempo2", action="store_true", help="Skip tempo2 run; use existing outputs if present.")
+    p.add_argument("--no-change-reports", action="store_true", help="Skip change report generation.")
+    p.add_argument("--testing", action="store_true", help="Enable testing mode (skips change reports).")
     p.add_argument("--jobs", type=int, default=None, help="Number of parallel workers to run pulsars concurrently (per branch).")
     p.add_argument("--qc", action="store_true", help="Run optional pta_qc outlier detection (requires pta_qc + libstempo).")
     p.add_argument("--qc-backend-col", default=None, help="Backend grouping column for pta_qc (default from config: group).")
@@ -97,9 +110,13 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 def _parse_value_as_toml_literal(raw: str):
-    """
-    Parse VALUE using TOML literal rules when possible (true/false, numbers, arrays, inline tables, quoted strings).
-    Fallback: plain string.
+    """Parse a TOML literal from a CLI override.
+
+    Args:
+        raw: Raw string value from ``--set KEY=VALUE``.
+
+    Returns:
+        Parsed TOML value when possible; otherwise the raw string.
     """
     raw = raw.strip()
     if raw == "":
@@ -113,6 +130,13 @@ def _parse_value_as_toml_literal(raw: str):
         return raw
 
 def _set_dotted_key(d: dict, key: str, value):
+    """Set a nested value in a dict using dotted-key notation.
+
+    Args:
+        d: Dictionary to update in-place.
+        key: Dotted key path (e.g., ``"fix.required_tim_flags.-pta"``).
+        value: Value to set.
+    """
     parts = [p for p in key.split(".") if p]
     cur = d
     for p in parts[:-1]:
@@ -122,6 +146,18 @@ def _set_dotted_key(d: dict, key: str, value):
     cur[parts[-1]] = value
 
 def _load_config_dict(config_arg: str | None) -> dict:
+    """Load a raw config dictionary from a file or stdin.
+
+    Args:
+        config_arg: Path to a config file or "-" to read from stdin.
+
+    Returns:
+        The raw configuration dictionary (top-level keys).
+
+    Raises:
+        FileNotFoundError: If the specified config file does not exist.
+        ValueError: If the file extension is unsupported.
+    """
     if not config_arg:
         return {}
     if config_arg == "-":
@@ -146,8 +182,13 @@ def _load_config_dict(config_arg: str | None) -> dict:
     raise ValueError("Config must be .toml or .json")
 
 def _dump_toml_no_nulls(data: dict) -> str:
-    """
-    TOML has no null; omit None values.
+    """Serialize a dict to TOML, omitting ``None`` values.
+
+    Args:
+        data: Data to serialize.
+
+    Returns:
+        TOML string with ``None`` values omitted.
     """
     def to_tomlkit(obj):
         if isinstance(obj, dict):
@@ -171,6 +212,14 @@ def _dump_toml_no_nulls(data: dict) -> str:
 
 
 def main(argv=None) -> int:
+    """Run the CLI entry point.
+
+    Args:
+        argv: Optional argument list (defaults to ``sys.argv``).
+
+    Returns:
+        Process exit code.
+    """
     args = build_parser().parse_args(argv)
 
     cfg = PipelineConfig.load(args.config)
@@ -204,6 +253,10 @@ def main(argv=None) -> int:
         cfg.force_rerun = True
     if args.no_tempo2:
         cfg.run_tempo2 = False
+    if args.no_change_reports:
+        cfg.make_change_reports = False
+    if args.testing:
+        cfg.testing_mode = True
 
     if args.jobs is not None:
         cfg.jobs = int(args.jobs)

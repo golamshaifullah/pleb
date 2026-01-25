@@ -1,3 +1,5 @@
+"""Robust .tim file parsing utilities."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,11 +10,14 @@ import pandas as pd
 
 
 def _to_numeric_maybe(s: pd.Series) -> pd.Series:
-    """
-    Best-effort numeric conversion compatible with pandas>=2.2.
+    """Convert a series to numeric when feasible.
 
-    - convert where possible (errors='coerce')
-    - if conversion yields all-NaN but original had values, keep original
+    Args:
+        s: Input pandas series.
+
+    Returns:
+        Numeric series where possible. If conversion yields all-NaN but the
+        original series had values, the original series is returned.
     """
     if pd.api.types.is_numeric_dtype(s):
         return s
@@ -79,14 +84,14 @@ def _normalize_tim_line(line: str) -> str:
 
 
 def _fix_padd_continuations(lines: List[str]) -> List[str]:
-    """
-    Merge '-padd ...' lines that have been broken onto their own line.
+    """Merge '-padd ...' lines that have been broken onto their own line.
 
-    Common failure mode:
-        <toa line ...>
-        -padd  12.3
+    Args:
+        lines: Raw lines from a tim file.
 
-    We join "-padd ..." onto the previous non-skipped line.
+    Returns:
+        Lines with detached ``-padd`` continuations joined to the prior
+        non-skipped line when possible.
     """
     out: List[str] = []
     prev_kept_idx: Optional[int] = None
@@ -121,11 +126,16 @@ def read_tim_file_robust(
     prune_by_mjd: bool = True,
     mjd_min: float = 10_000.0,
 ) -> pd.DataFrame:
-    """
-    Robust tim reader for messy, hand-edited tim files.
+    """Read a tempo2 .tim file with best-effort heuristics.
 
-    Returns a DataFrame with columns 0..N-1 holding tokens.
-    Numeric columns are converted where possible without destroying string columns.
+    Args:
+        timfile: Path to the ``.tim`` file.
+        prune_by_mjd: If True, drop rows that do not look like TOAs.
+        mjd_min: Minimum MJD threshold used for pruning.
+
+    Returns:
+        DataFrame with columns 0..N-1 holding tokens. Numeric columns are
+        converted where possible without destroying string columns.
     """
     timfile = Path(timfile)
     if not timfile.exists():
@@ -177,9 +187,13 @@ def read_tim_file_robust(
 
 
 def _guess_mjd_column(df: pd.DataFrame) -> Optional[int]:
-    """
-    Find the column that most likely contains MJD.
-    We look for a mostly-numeric column with median in a plausible MJD range.
+    """Heuristically identify the MJD column in a tokenized .tim table.
+
+    Args:
+        df: Tokenized tim dataframe.
+
+    Returns:
+        Column index containing MJD values, or ``None`` if not found.
     """
     best: Optional[int] = None
     best_score = -1.0

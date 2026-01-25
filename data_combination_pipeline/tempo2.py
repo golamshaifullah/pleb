@@ -1,3 +1,5 @@
+"""tempo2 execution helpers for the pipeline."""
+
 from __future__ import annotations
 
 import subprocess
@@ -30,11 +32,22 @@ def build_singularity_prefix(
     return cmd
 
 def tempo2_paths_in_container(pulsar: str) -> Tuple[str, str]:
+    """Return container paths for a pulsar's .par and .tim files."""
     par = f"/data/{pulsar}/{pulsar}.par"
     tim = f"/data/{pulsar}/{pulsar}_all.tim"
     return par, tim
 
 def run_subprocess(cmd: List[str], stdout_path: Path, cwd: Path | None = None) -> int:
+    """Run a subprocess and capture stdout/stderr to a file.
+
+    Args:
+        cmd: Command list to execute.
+        stdout_path: File to write stdout/stderr logs to.
+        cwd: Optional working directory.
+
+    Returns:
+        Subprocess return code.
+    """
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     logger.debug("Running: %s", " ".join(cmd))
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=str(cwd) if cwd else None)
@@ -57,6 +70,18 @@ def run_tempo2_for_pulsar(
     epoch: str,
     force_rerun: bool = False,
 ) -> None:
+    """Run tempo2 to generate PLK, covariance, and general2 outputs for a pulsar.
+
+    Args:
+        home_dir: Root data repository.
+        dataset_name: Dataset name or path.
+        singularity_image: Singularity/Apptainer image containing tempo2.
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsar: Pulsar name.
+        branch: Branch name (used for output filenames).
+        epoch: Tempo2 epoch value.
+        force_rerun: If True, run even when outputs already exist.
+    """
     prefix = build_singularity_prefix(home_dir, dataset_name, singularity_image)
     par, tim = tempo2_paths_in_container(pulsar)
 

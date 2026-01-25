@@ -1,3 +1,9 @@
+"""Main orchestration logic for the data-combination pipeline.
+
+This module coordinates git branch management, tempo2 runs, report generation,
+and optional quality-control steps.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +12,7 @@ from typing import Dict, List, Optional
 import os
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import importlib.util
 
 import pandas as pd
 
@@ -37,16 +44,26 @@ from .utils import discover_pulsars, make_output_tree, which_or_raise
 
 # Add-ons from FixDataset.ipynb / AnalysePulsars.ipynb
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
-from .outlier_qc import PTAQCConfig, run_pta_qc_for_parfile, summarize_pta_qc
+from .outlier_qc import PTAQCConfig, run_pta_qc_for_parfile_subprocess, summarize_pta_qc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
 
 logger = get_logger("data_combination_pipeline")
 
 
 def _cfg_get(cfg, name: str, default=None):
-    """Safely get a config value from cfg or environment (used for notebook-driven runs).
+    """Safely read a config value from an object or environment.
 
-    NOTE: This keeps PipelineConfig schema changes optional for notebook UX.
+    Args:
+        cfg: Config object (typically :class:`PipelineConfig`).
+        name: Attribute name to read.
+        default: Fallback value when missing.
+
+    Returns:
+        The resolved config value or ``default``.
+
+    Notes:
+        This keeps :class:`PipelineConfig` schema changes optional for
+        notebook-driven workflows by allowing environment overrides.
     """
     try:
         return getattr(cfg, name)
@@ -66,9 +83,18 @@ def _cfg_get(cfg, name: str, default=None):
 
 
 def _cfg_get_bool(cfg, name: str, default: bool = False) -> bool:
-    """Like _cfg_get, but parse common string/int representations into a real bool.
+    """Resolve a config value as a boolean.
 
-    This matters because bool("0") is True in Python, which is not what we want for env vars.
+    Args:
+        cfg: Config object (typically :class:`PipelineConfig`).
+        name: Attribute name to read.
+        default: Fallback value when missing.
+
+    Returns:
+        Boolean interpretation of the configuration value.
+
+    Notes:
+        This avoids Python's ``bool("0")`` pitfall for environment overrides.
     """
     v = None
     try:
@@ -101,7 +127,7 @@ def _cfg_get_bool(cfg, name: str, default: bool = False) -> bool:
     return bool(s)
 
 def _fix_cfg_fields() -> set[str]:
-    """Return the supported FixDatasetConfig field names (works even if FixDatasetConfig evolves)."""
+    """Return the supported :class:`FixDatasetConfig` field names."""
     try:
         from dataclasses import fields as dc_fields
 
@@ -112,11 +138,18 @@ def _fix_cfg_fields() -> set[str]:
 
 
 def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
-    """Create FixDatasetConfig from PipelineConfig, filtering unknown keys.
+    """Create a :class:`FixDatasetConfig` from a :class:`PipelineConfig`.
 
-    pipelineb introduced a broader set of fix_* knobs. This builder keeps compatibility:
-      * If FixDatasetConfig in this checkout supports a knob -> it's passed through.
-      * If not -> it's ignored (no TypeError).
+    Args:
+        cfg: Pipeline configuration.
+        apply: Whether FixDataset should apply and commit changes.
+
+    Returns:
+        A :class:`FixDatasetConfig` with only supported fields populated.
+
+    Notes:
+        The pipeline config may contain more ``fix_*`` fields than are supported
+        by a given FixDataset version; unsupported fields are ignored.
     """
     # Apply-mode safety: avoid leaving backup artifacts that dirty the repo.
     dry_run = bool(_cfg_get(cfg, "fix_dry_run", False))
@@ -184,6 +217,13 @@ def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
     supported = _fix_cfg_fields()
     filtered = {k: v for k, v in kwargs.items() if k in supported}
     return FixDatasetConfig(**filtered)
+
+
+def _pta_qc_available() -> bool:
+    try:
+        return importlib.util.find_spec("pta_qc") is not None
+    except Exception:
+        return False
 
 
 def _apply_fixdataset_and_commit(
@@ -260,11 +300,40 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     """Run the full diagnostics pipeline.
 
     Concurrency model:
-      * Git branch checkouts are always single-threaded.
-      * Within each branch, pulsars can be processed concurrently using cfg.jobs.
-      * Each pulsar uses its own work directory to avoid tempo2 output collisions.
+        * Git branch checkouts are single-threaded.
+        * Within each branch, pulsars can be processed concurrently using ``cfg.jobs``.
+        * Each pulsar uses its own work directory to avoid tempo2 output collisions.
+
+    Args:
+        config: Pipeline configuration.
+
+    Returns:
+        Mapping of output path labels to their filesystem paths.
+
+    Raises:
+        FileNotFoundError: If required paths (home_dir, singularity image) are missing.
+        RuntimeError: For missing dependencies or invalid configuration.
     """
     cfg = config.resolved()
+
+    run_fix_dataset = _cfg_get_bool(cfg, "run_fix_dataset", False)
+    fix_apply = _cfg_get_bool(cfg, "fix_apply", False)
+    run_pta_qc = bool(getattr(cfg, "run_pta_qc", False))
+
+    logger.info(
+        "Config flags: run_fix_dataset=%s fix_apply=%s run_pta_qc=%s",
+        run_fix_dataset,
+        fix_apply,
+        run_pta_qc,
+    )
+    if fix_apply:
+        logger.info(
+            "FixDataset apply config: branch=%s base=%s commit_message=%s",
+            str(_cfg_get(cfg, "fix_branch_name", "") or "").strip() or "<missing>",
+            str(_cfg_get(cfg, "fix_base_branch", "") or "").strip() or "<auto>",
+            str(_cfg_get(cfg, "fix_commit_message", "") or "").strip() or "<default>",
+        )
+    logger.info("pta_qc available: %s", _pta_qc_available())
 
     if not cfg.home_dir.exists():
         raise FileNotFoundError(f"home_dir does not exist: {cfg.home_dir}")
@@ -301,7 +370,12 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     reference_branch = str(cfg.reference_branch) if cfg.reference_branch else ""
 
     branches_to_run = compare_branches.copy()
-    if reference_branch and reference_branch not in branches_to_run and cfg.make_change_reports:
+    change_reports_enabled = bool(cfg.make_change_reports) and bool(reference_branch)
+    if getattr(cfg, "testing_mode", False):
+        logger.info("Testing mode enabled: change reports will be skipped.")
+        change_reports_enabled = False
+
+    if reference_branch and reference_branch not in branches_to_run and change_reports_enabled:
         branches_to_run.append(reference_branch)
 
     out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name)
@@ -314,9 +388,16 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     binary_rows: List[Dict[str, object]] = []
     qc_rows: List[Dict[str, object]] = []
+    qc_enabled = run_pta_qc
+    if run_pta_qc and not _pta_qc_available():
+        logger.error(
+            "run_pta_qc=true but pta_qc is not importable. QC stage will be skipped. "
+            "Install pta_qc (and libstempo) to enable QC."
+        )
+        qc_enabled = False
 
     # If requested, apply FixDataset on a new branch and commit the resulting .par/.tim files.
-    if _cfg_get_bool(cfg, "fix_apply", False):
+    if fix_apply:
         fix_branch_name = str(_cfg_get(cfg, "fix_branch_name", "") or "").strip()
         if not fix_branch_name:
             raise RuntimeError(
@@ -354,11 +435,14 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             # Forced fix_dataset reporting per branch (report-only; never modifies the repo in this loop)
             fcfg = _build_fixdataset_config(cfg, apply=False)
             reports = []
-            for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
-                rep["branch"] = branch
-                reports.append(rep)
-            write_fix_report(reports, out_paths["fix_dataset"] / branch)
+            if run_fix_dataset:
+                for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
+                    rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
+                    rep["branch"] = branch
+                    reports.append(rep)
+                write_fix_report(reports, out_paths["fix_dataset"] / branch)
+            else:
+                logger.info("FixDataset report-only stage skipped (run_fix_dataset=false).")
 
             # tempo2 runs (parallelizable across pulsars)
             if cfg.run_tempo2:
@@ -405,6 +489,34 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         ):
                             fut.result()
 
+            if qc_enabled:
+                qc_cfg = PTAQCConfig(
+                    backend_col=str(getattr(cfg, "pta_qc_backend_col", "group")),
+                    drop_unmatched=bool(getattr(cfg, "pta_qc_drop_unmatched", False)),
+                    merge_tol_seconds=float(getattr(cfg, "pta_qc_merge_tol_seconds", 2.0)),
+                    tau_corr_minutes=float(getattr(cfg, "pta_qc_tau_corr_minutes", 30.0)),
+                    fdr_q=float(getattr(cfg, "pta_qc_fdr_q", 0.01)),
+                    mark_only_worst_per_day=bool(getattr(cfg, "pta_qc_mark_only_worst_per_day", True)),
+                    tau_rec_days=float(getattr(cfg, "pta_qc_tau_rec_days", 7.0)),
+                    window_mult=float(getattr(cfg, "pta_qc_window_mult", 5.0)),
+                    min_points=int(getattr(cfg, "pta_qc_min_points", 6)),
+                    delta_chi2_thresh=float(getattr(cfg, "pta_qc_delta_chi2_thresh", 25.0)),
+                )
+                qc_out_dir = out_paths["qc"] / branch
+                qc_out_dir.mkdir(parents=True, exist_ok=True)
+                for pulsar in tqdm(pulsars, desc=f"pta_qc ({branch})"):
+                    parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
+                    out_csv = qc_out_dir / f"{pulsar}_qc.csv"
+                    try:
+                        df = run_pta_qc_for_parfile_subprocess(parfile, out_csv, qc_cfg)
+                    except Exception as e:
+                        logger.warning("pta_qc failed for %s (%s); skipping QC for this pulsar: %s", pulsar, branch, e)
+                        qc_rows.append({"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv), "qc_error": str(e)})
+                        continue
+                    row = {"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv)}
+                    row.update(summarize_pta_qc(df))
+                    qc_rows.append(row)
+
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
             if branch in compare_branches:
                 if cfg.make_toa_coverage_plots:
@@ -427,7 +539,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     binary_rows.append(row)
 
         # Cross-branch reports
-        if cfg.make_change_reports and reference_branch:
+        if change_reports_enabled:
             branches_for_reports = list(compare_branches)
             if reference_branch not in branches_for_reports:
                 branches_for_reports.append(reference_branch)

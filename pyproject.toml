@@ -1,32 +1,31 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "data-combination-pipeline"
-version = "0.2.2"
-description = "Refactored tempo2 data combination diagnostics pipeline."
+name = "pta-qc"
+version = "0.1.0"
+description = "PTA residual quality-control toolkit."
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "pandas",
-    "matplotlib",
-    "GitPython",
-    "tqdm",
+  "numpy>=1.22",
+  "pandas>=1.5",
+  "scipy>=1.9",
 ]
 
 [project.optional-dependencies]
-viz = ["seaborn"]
-astro = ["astropy", "scipy"]
-dev = ["pytest", "pytest-cov"]
+libstempo = ["libstempo"]
+plot = ["matplotlib>=3.6"]
+dev = ["pytest"]
 
 [project.scripts]
-data-combination-pipeline = "data_combination_pipeline.cli:main"
+pta-qc = "pta_qc.cli:main"
 
-[tool.setuptools]
-packages = ["data_combination_pipeline"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pta_qc*"]
 
 [tool.pytest.ini_options]
-minversion = "7.0"
-addopts = "-ra"
+addopts = "-q"
 testpaths = ["tests"]

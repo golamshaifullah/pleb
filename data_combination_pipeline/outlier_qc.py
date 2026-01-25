@@ -1,8 +1,13 @@
+"""Optional pta_qc integration for outlier detection."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional, Dict, Any
+import json
+import subprocess
+import sys
 import os
 from contextlib import contextmanager
 
@@ -17,7 +22,8 @@ logger = get_logger("data_combination_pipeline.qc")
 class PTAQCConfig:
     """Configuration for the optional pta_qc outlier detection stage.
 
-    This stage is intentionally optional: the pipeline will run without pta_qc installed.
+    This stage is intentionally optional: the pipeline runs without pta_qc
+    installed and will skip QC if dependencies are missing.
     """
 
     backend_col: str = "group"
@@ -41,6 +47,7 @@ class PTAQCConfig:
 
 @contextmanager
 def _pushd(path: Path):
+    """Temporarily change the working directory."""
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
     old = Path.cwd()
@@ -54,19 +61,16 @@ def _pushd(path: Path):
 def run_pta_qc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.DataFrame:
     """Run pta_qc on a pulsar parfile and write a CSV.
 
-    Parameters
-    ----------
-    parfile:
-        Path to <PSR>.par. Expects sibling <PSR>_all.tim.
-    out_csv:
-        Where to write the CSV output.
-    cfg:
-        PTAQCConfig options.
+    Args:
+        parfile: Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
+        out_csv: Output CSV path.
+        cfg: pta_qc configuration.
 
-    Returns
-    -------
-    pd.DataFrame
+    Returns:
         The QC table produced by pta_qc.
+
+    Raises:
+        RuntimeError: If pta_qc cannot be imported.
     """
     parfile = Path(parfile)
     out_csv = Path(out_csv)
@@ -110,8 +114,69 @@ def run_pta_qc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd
     return df
 
 
+def run_pta_qc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None) -> pd.DataFrame:
+    """Run pta_qc in a subprocess to isolate segfaults from libstempo.
+
+    If the subprocess fails, raise RuntimeError with stderr for logging.
+    """
+    parfile = Path(parfile)
+    out_csv = Path(out_csv)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "parfile": str(parfile),
+        "out_csv": str(out_csv),
+        "cfg": asdict(cfg),
+    }
+    payload_path = out_csv.parent / f".pta_qc_{parfile.stem}.json"
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    code = (
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "from data_combination_pipeline.outlier_qc import PTAQCConfig, run_pta_qc_for_parfile\n"
+        "payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\n"
+        "cfg = PTAQCConfig(**payload['cfg'])\n"
+        "run_pta_qc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg)\n"
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code, str(payload_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    finally:
+        try:
+            payload_path.unlink()
+        except Exception:
+            pass
+
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        msg = f"pta_qc subprocess failed with code {proc.returncode}"
+        if stderr:
+            msg += f"; stderr: {stderr}"
+        if stdout:
+            msg += f"; stdout: {stdout}"
+        raise RuntimeError(msg)
+
+    if not out_csv.exists():
+        raise RuntimeError("pta_qc subprocess completed but output CSV was not created.")
+
+    return pd.read_csv(out_csv)
+
+
 def summarize_pta_qc(df: pd.DataFrame) -> Dict[str, Any]:
-    """Return a tiny summary dict from a pta_qc output dataframe."""
+    """Return a compact summary of a pta_qc output dataframe.
+
+    Args:
+        df: QC output dataframe.
+
+    Returns:
+        Summary dictionary with counts of TOAs and flagged items.
+    """
     out: Dict[str, Any] = {"n_toas": int(len(df))}
     if "bad" in df.columns:
         out["n_bad"] = int(df["bad"].fillna(False).sum())

@@ -1,161 +1,47 @@
-# data-combination-pipeline
+# pta_qc
 
-This is the notebook refactored into a Python module + CLI.
+PTA residual quality-control toolkit.
 
-It also includes two optional add-ons (ported from the notebooks you supplied):
-- **Dataset fixing/reporting** (from `FixDataset.ipynb`)
-- **Binary/orbital parameter analysis** (from `AnalysePulsars.ipynb`)
+## What it does
 
-## Install (editable)
+1. Parses tempo2 timfiles (supports `_all.tim` with `INCLUDE` and `TIME` blocks).
+2. Loads residuals / TOA errors / frequencies from `libstempo`.
+3. Matches TOAs to tim metadata by nearest MJD (tunable tolerance).
+4. Ensures `sys` and `group` exist everywhere using timfile naming conventions.
+5. Detects:
+   - **bad measurements** (day-level FDR using OU innovations),
+   - **transients** (jump + exponential recovery scan).
 
-```bash
-cd data_combination_pipeline_module
-python -m pip install -e .
-```
+## Quickstart
 
-## Run
-
-Create a config file (JSON or TOML). Example:
-
-```toml
-[pipeline]
-home_dir = "/path/to/data-repo"
-singularity_image = "/path/to/EPTAsolotiming.sif"
-results_dir = "."
-branches = ["master", "EPTA+InPTA"]
-reference_branch = "master"
-pulsars = "ALL"
-epoch = "55000"
-```
-
-Then run:
+Run QC:
 
 ```bash
-data-combination-pipeline --config config.toml
+python scripts/run_qc.py --par DR3full/J1909-3744/J1909-3744.par --out qc.csv
 ```
 
-Or:
+Summarize results:
 
 ```bash
-python -m data_combination_pipeline --config config.toml
+python scripts/diagnose_qc.py --csv qc.csv --backend-col group
 ```
 
-The command prints the output folder (the report tag directory).
-
-## Extras
-
-### Dataset fix/report stage
-
-This is **report-only by default** (it will not edit files) and writes outputs to `fix_dataset/` in the report tree.
-
-Enable it via:
+Plot detected transients:
 
 ```bash
-data-combination-pipeline --config config.toml --fix-dataset
+python scripts/plot_transients.py --csv qc.csv --backend-col group --outdir plots
 ```
 
-Key config knobs (all optional):
+## Notes
 
-```toml
-[pipeline]
-run_fix_dataset = true
-fix_update_alltim_includes = true
-fix_min_toas_per_backend_tim = 10
-fix_required_tim_flags = { "-pta" = "EPTA" }
-fix_insert_missing_jumps = true
-fix_jump_flag = "-sys"
-fix_ensure_ephem = "DE440"
-fix_ensure_clk = "TT(BIPM2021)"
-fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
-# fix_coord_convert = "equatorial_to_ecliptic"  # requires astropy
-```
+- `sys` and `group` are forced to exist even if the original timfile omitted them.
+- Default match tolerance is 2 seconds. If you see many unmatched rows, raise `--tol-seconds`.
 
-⚠️ `fix_apply=true` is intentionally **not** supported inside `run_pipeline` yet, because it would dirty the repo and break branch switching. If you want an apply+commit workflow, the building blocks are in `data_combination_pipeline.dataset_fix`.
 
-### Binary/orbital analysis
+## Tests
 
-Writes `binary_analysis/binary_analysis.tsv` in the report tree.
+Run:
 
 ```bash
-data-combination-pipeline --config config.toml --binary-analysis
-```
-
-Optional config filter:
-
-```toml
-[pipeline]
-binary_only_models = ["ELL1", "BT", "BTX"]
-```
-
-### Param scan (rapid nested-model tests)
-
-If you want to quickly test whether adding/enabling one or more parameters is statistically supported,
-use `--param-scan`. This runs *fit-only* tempo2 jobs (no matrix/general2/plots), computing:
-
-* **Δχ² nested-model test** (likelihood-ratio test), with p-value vs Δk
-* **Wald z = |value|/σ** for the scanned parameters (when tempo2 reports uncertainties)
-
-Examples:
-
-```bash
-# Scan a single parameter
-data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan F2
-
-# Scan a group (adds both together)
-data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan "F2+F3"
-
-# Supply complex params via a raw par line
-data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan "raw:JUMP -sys P200 0 1"
-
-# Limit to a pulsar and run in parallel across pulsars
-data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan F2 --scan-pulsar J1234+5678 --jobs 8
-
-# Use the built-in profile you described (Parallax; binary derivatives by model; or DM derivatives if no BINARY and redχ² is high)
-data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan-typical --jobs 8
-
-# Tune the DM trigger / depth (only used when no BINARY is present)
-data-combination-pipeline --config config.toml --param-scan --scan-branch master --scan-typical --scan-dm-threshold 2.5 --scan-dm-max-order 3
-```
-
-Outputs are written under a `PARAM_SCAN_*` directory in `results_dir` and include:
-
-* `param_scan/param_scan_<branch>.tsv` (combined)
-* `param_scan/<PSR>/param_scan_<PSR>.tsv` (per pulsar)
-
-## Optional dependencies
-
-Some coordinate conversion and orbital utilities need extra packages:
-- `astropy` (coordinate transforms)
-- `scipy` (some solvers)
-
-You can add them via your environment manager, or extend `pyproject.toml`'s optional extras.
-
-## Unit tests
-
-```bash
-python -m pip install -e ".[dev]"
-pytest
-```
-
-Notes:
-- The tests are written to run without requiring a tempo2 installation.
-- Git-related tests are skipped automatically if GitPython isn't installed.
-
-
-## Optional outlier detection via pta_qc
-
-If you have the external `pta_qc` package installed (and its dependency `libstempo`), you can run QC/outlier detection from inside the pipeline.
-
-Enable it via config:
-
-```toml
-[pipeline]
-run_pta_qc = true
-pta_qc_backend_col = "group"
-```
-
-Or via CLI:
-
-```bash
-data-combination-pipeline --config config.toml --qc
+pytest -q
 ```
