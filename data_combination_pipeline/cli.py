@@ -194,7 +194,8 @@ def main(argv=None) -> int:
         cfg = PipelineConfig.load(tmp_path)
     finally:
         if tmp_path and os.path.exists(tmp_path):
-    
+            os.unlink(tmp_path)
+            
     if args.results_dir is not None:
         cfg.results_dir = args.results_dir
     if args.outdir_name is not None:
