@@ -1,6 +1,6 @@
-# pta_qc
+# pleb
 
-PTA residual quality-control toolkit.
+PTA data-combination pipeline with optional outlier QC.
 
 ## What it does
 
@@ -14,7 +14,7 @@ PTA residual quality-control toolkit.
 
 ## Quickstart
 
-Run QC:
+Run QC (requires installed `pqc` + `libstempo`):
 
 ```bash
 python scripts/run_qc.py --par DR3full/J1909-3744/J1909-3744.par --out qc.csv

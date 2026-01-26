@@ -18,14 +18,14 @@ dependencies = [
 libstempo = ["libstempo"]
 plot = ["matplotlib>=3.6"]
 dev = ["pytest"]
+qc = ["pqc", "libstempo"]
 
 [project.scripts]
-pta-qc = "pqc.cli:main"
 pleb = "pleb.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["pqc*", "pleb*"]
+include = ["pleb*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

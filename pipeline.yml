@@ -12,5 +12,5 @@ dependencies:
   - scipy
   - pip:
       - ./pleb_module_with_pta_qc_hook.zip
-      - ./pta_qc_packaged.zip
+      - pqc
       - libstempo
