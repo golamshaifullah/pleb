@@ -20,12 +20,12 @@ plot = ["matplotlib>=3.6"]
 dev = ["pytest"]
 
 [project.scripts]
-pta-qc = "pta_qc.cli:main"
+pta-qc = "pqc.cli:main"
 pleb = "pleb.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["pta_qc*", "pleb*"]
+include = ["pqc*", "pleb*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

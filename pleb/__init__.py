@@ -5,7 +5,7 @@ It exposes a small public API for running the full pipeline, running parameter
 scans, and applying FixDataset operations programmatically.
 
 The package is intentionally light to import. Heavy dependencies (for example
-GitPython or libstempo/pta_qc) are imported lazily by the entry points.
+GitPython or libstempo/pqc) are imported lazily by the entry points.
 
 See Also:
     pleb.pipeline.run_pipeline: Full pipeline implementation.

@@ -1,4 +1,4 @@
-"""Optional pta_qc integration for outlier detection."""
+"""Optional pqc integration for outlier detection."""
 
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ logger = get_logger("pleb.qc")
 
 @dataclass(slots=True)
 class PTAQCConfig:
-    """Configuration for the optional pta_qc outlier detection stage.
+    """Configuration for the optional pqc outlier detection stage.
 
-    This stage is intentionally optional: the pipeline runs without pta_qc
+    This stage is intentionally optional: the pipeline runs without pqc
     installed and will skip QC if dependencies are missing.
     """
 
@@ -58,31 +58,31 @@ def _pushd(path: Path):
         os.chdir(old)
 
 
-def run_pta_qc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.DataFrame:
-    """Run pta_qc on a pulsar parfile and write a CSV.
+def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.DataFrame:
+    """Run pqc on a pulsar parfile and write a CSV.
 
     Args:
         parfile: Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
         out_csv: Output CSV path.
-        cfg: pta_qc configuration.
+        cfg: pqc configuration.
 
     Returns:
-        The QC table produced by pta_qc.
+        The QC table produced by pqc.
 
     Raises:
-        RuntimeError: If pta_qc cannot be imported.
+        RuntimeError: If pqc cannot be imported.
     """
     parfile = Path(parfile)
     out_csv = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        from pta_qc.pipeline import run_pipeline as qc_run  # type: ignore
-        from pta_qc.config import BadMeasConfig, TransientConfig, MergeConfig  # type: ignore
+        from pqc.pipeline import run_pipeline as qc_run  # type: ignore
+        from pqc.config import BadMeasConfig, TransientConfig, MergeConfig  # type: ignore
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
-            "pta_qc is not installed (or failed to import). Install your outlier package first, then rerun with run_pta_qc=true. "
-            "If you're installing from a local zip/folder: pip install <path-to-pta_qc>."
+            "pqc is not installed (or failed to import). Install your outlier package first, then rerun with run_pqc=true. "
+            "If you're installing from a local zip/folder: pip install <path-to-pqc>."
         ) from e
 
     merge_cfg = MergeConfig(tol_days=float(cfg.merge_tol_seconds) / 86400.0)
@@ -114,8 +114,8 @@ def run_pta_qc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd
     return df
 
 
-def run_pta_qc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None) -> pd.DataFrame:
-    """Run pta_qc in a subprocess to isolate segfaults from libstempo.
+def run_pqc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None) -> pd.DataFrame:
+    """Run pqc in a subprocess to isolate segfaults from libstempo.
 
     If the subprocess fails, raise RuntimeError with stderr for logging.
     """
@@ -128,16 +128,16 @@ def run_pta_qc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCCo
         "out_csv": str(out_csv),
         "cfg": asdict(cfg),
     }
-    payload_path = out_csv.parent / f".pta_qc_{parfile.stem}.json"
+    payload_path = out_csv.parent / f".pqc_{parfile.stem}.json"
     payload_path.write_text(json.dumps(payload), encoding="utf-8")
 
     code = (
         "import json, sys\n"
         "from pathlib import Path\n"
-        "from pleb.outlier_qc import PTAQCConfig, run_pta_qc_for_parfile\n"
+        "from pleb.outlier_qc import PTAQCConfig, run_pqc_for_parfile\n"
         "payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\n"
         "cfg = PTAQCConfig(**payload['cfg'])\n"
-        "run_pta_qc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg)\n"
+        "run_pqc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg)\n"
     )
     try:
         proc = subprocess.run(
@@ -155,7 +155,7 @@ def run_pta_qc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCCo
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
         stdout = (proc.stdout or "").strip()
-        msg = f"pta_qc subprocess failed with code {proc.returncode}"
+        msg = f"pqc subprocess failed with code {proc.returncode}"
         if stderr:
             msg += f"; stderr: {stderr}"
         if stdout:
@@ -163,13 +163,13 @@ def run_pta_qc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCCo
         raise RuntimeError(msg)
 
     if not out_csv.exists():
-        raise RuntimeError("pta_qc subprocess completed but output CSV was not created.")
+        raise RuntimeError("pqc subprocess completed but output CSV was not created.")
 
     return pd.read_csv(out_csv)
 
 
-def summarize_pta_qc(df: pd.DataFrame) -> Dict[str, Any]:
-    """Return a compact summary of a pta_qc output dataframe.
+def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
+    """Return a compact summary of a pqc output dataframe.
 
     Args:
         df: QC output dataframe.

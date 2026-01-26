@@ -1,7 +1,7 @@
 """Tests for time/metadata merging logic."""
 
 import pandas as pd
-from pta_qc.io.merge import merge_time_and_meta
+from pqc.io.merge import merge_time_and_meta
 
 def test_merge_asof_with_tolerance():
     df_time = pd.DataFrame({

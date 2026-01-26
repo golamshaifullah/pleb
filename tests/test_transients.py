@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from pta_qc.detect.transients import scan_transients
+from pqc.detect.transients import scan_transients
 
 def test_transient_detection_simple():
     rng = np.random.default_rng(1)

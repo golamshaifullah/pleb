@@ -46,17 +46,17 @@ class PipelineConfig:
         make_residual_plots: Generate residual plots.
         make_outlier_reports: Generate outlier tables.
         testing_mode: If True, skip change reports (useful for CI).
-        run_pta_qc: Enable optional pta_qc stage.
-        pta_qc_backend_col: Backend grouping column for pta_qc.
-        pta_qc_drop_unmatched: Drop unmatched TOAs in pta_qc.
-        pta_qc_merge_tol_seconds: Merge tolerance in seconds for pta_qc.
-        pta_qc_tau_corr_minutes: OU correlation time for pta_qc.
-        pta_qc_fdr_q: False discovery rate for pta_qc.
-        pta_qc_mark_only_worst_per_day: Mark only worst TOA per day.
-        pta_qc_tau_rec_days: Recovery time for transient scan.
-        pta_qc_window_mult: Window multiplier for transient scan.
-        pta_qc_min_points: Minimum points for transient scan.
-        pta_qc_delta_chi2_thresh: Delta-chi2 threshold for transients.
+        run_pqc: Enable optional pqc stage.
+        pqc_backend_col: Backend grouping column for pqc.
+        pqc_drop_unmatched: Drop unmatched TOAs in pqc.
+        pqc_merge_tol_seconds: Merge tolerance in seconds for pqc.
+        pqc_tau_corr_minutes: OU correlation time for pqc.
+        pqc_fdr_q: False discovery rate for pqc.
+        pqc_mark_only_worst_per_day: Mark only worst TOA per day.
+        pqc_tau_rec_days: Recovery time for transient scan.
+        pqc_window_mult: Window multiplier for transient scan.
+        pqc_min_points: Minimum points for transient scan.
+        pqc_delta_chi2_thresh: Delta-chi2 threshold for transients.
         run_fix_dataset: Enable FixDataset stage.
         make_binary_analysis: Enable binary analysis table.
         param_scan_typical: Enable typical param-scan profile.
@@ -126,19 +126,19 @@ class PipelineConfig:
     make_outlier_reports: bool = True
     testing_mode: bool = False
 
-    # Optional outlier/QC stage using the external `pta_qc` package (libstempo-based).
+    # Optional outlier/QC stage using the external `pqc` package (libstempo-based).
     # This is separate from the existing general2-based outlier summaries.
-    run_pta_qc: bool = False
-    pta_qc_backend_col: str = "group"
-    pta_qc_drop_unmatched: bool = False
-    pta_qc_merge_tol_seconds: float = 2.0
-    pta_qc_tau_corr_minutes: float = 30.0
-    pta_qc_fdr_q: float = 0.01
-    pta_qc_mark_only_worst_per_day: bool = True
-    pta_qc_tau_rec_days: float = 7.0
-    pta_qc_window_mult: float = 5.0
-    pta_qc_min_points: int = 6
-    pta_qc_delta_chi2_thresh: float = 25.0
+    run_pqc: bool = False
+    pqc_backend_col: str = "group"
+    pqc_drop_unmatched: bool = False
+    pqc_merge_tol_seconds: float = 2.0
+    pqc_tau_corr_minutes: float = 30.0
+    pqc_fdr_q: float = 0.01
+    pqc_mark_only_worst_per_day: bool = True
+    pqc_tau_rec_days: float = 7.0
+    pqc_window_mult: float = 5.0
+    pqc_min_points: int = 6
+    pqc_delta_chi2_thresh: float = 25.0
 
     # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
     run_fix_dataset: bool = False
@@ -279,17 +279,17 @@ class PipelineConfig:
             make_outlier_reports=bool(d.get("make_outlier_reports", True)),
             testing_mode=bool(d.get("testing_mode", False)),
 
-            run_pta_qc=bool(d.get("run_pta_qc", False)),
-            pta_qc_backend_col=str(d.get("pta_qc_backend_col", "group")),
-            pta_qc_drop_unmatched=bool(d.get("pta_qc_drop_unmatched", False)),
-            pta_qc_merge_tol_seconds=float(d.get("pta_qc_merge_tol_seconds", 2.0)),
-            pta_qc_tau_corr_minutes=float(d.get("pta_qc_tau_corr_minutes", 30.0)),
-            pta_qc_fdr_q=float(d.get("pta_qc_fdr_q", 0.01)),
-            pta_qc_mark_only_worst_per_day=bool(d.get("pta_qc_mark_only_worst_per_day", True)),
-            pta_qc_tau_rec_days=float(d.get("pta_qc_tau_rec_days", 7.0)),
-            pta_qc_window_mult=float(d.get("pta_qc_window_mult", 5.0)),
-            pta_qc_min_points=int(d.get("pta_qc_min_points", 6)),
-            pta_qc_delta_chi2_thresh=float(d.get("pta_qc_delta_chi2_thresh", 25.0)),
+            run_pqc=bool(d.get("run_pqc", False)),
+            pqc_backend_col=str(d.get("pqc_backend_col", "group")),
+            pqc_drop_unmatched=bool(d.get("pqc_drop_unmatched", False)),
+            pqc_merge_tol_seconds=float(d.get("pqc_merge_tol_seconds", 2.0)),
+            pqc_tau_corr_minutes=float(d.get("pqc_tau_corr_minutes", 30.0)),
+            pqc_fdr_q=float(d.get("pqc_fdr_q", 0.01)),
+            pqc_mark_only_worst_per_day=bool(d.get("pqc_mark_only_worst_per_day", True)),
+            pqc_tau_rec_days=float(d.get("pqc_tau_rec_days", 7.0)),
+            pqc_window_mult=float(d.get("pqc_window_mult", 5.0)),
+            pqc_min_points=int(d.get("pqc_min_points", 6)),
+            pqc_delta_chi2_thresh=float(d.get("pqc_delta_chi2_thresh", 25.0)),
 
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),

@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from pta_qc.detect.bad_measurements import detect_bad
+from pqc.detect.bad_measurements import detect_bad
 
 def test_bad_measurement_day_flagging():
     rng = np.random.default_rng(0)

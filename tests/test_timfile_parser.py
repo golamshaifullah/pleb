@@ -2,7 +2,7 @@
 
 import pandas as pd
 from pathlib import Path
-from pta_qc.io.timfile import parse_all_timfiles
+from pqc.io.timfile import parse_all_timfiles
 
 def _write(p: Path, txt: str):
     p.write_text(txt, encoding="utf-8")

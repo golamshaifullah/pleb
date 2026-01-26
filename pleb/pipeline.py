@@ -44,7 +44,7 @@ from .utils import discover_pulsars, make_output_tree, which_or_raise
 
 # Add-ons from FixDataset.ipynb / AnalysePulsars.ipynb
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
-from .outlier_qc import PTAQCConfig, run_pta_qc_for_parfile_subprocess, summarize_pta_qc
+from .outlier_qc import PTAQCConfig, run_pqc_for_parfile_subprocess, summarize_pqc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
 
 logger = get_logger("pleb")
@@ -219,10 +219,10 @@ def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
     return FixDatasetConfig(**filtered)
 
 
-def _pta_qc_available() -> bool:
-    """Return True if the optional ``pta_qc`` package is importable."""
+def _pqc_available() -> bool:
+    """Return True if the optional ``pqc`` package is importable."""
     try:
-        return importlib.util.find_spec("pta_qc") is not None
+        return importlib.util.find_spec("pqc") is not None
     except Exception:
         return False
 
@@ -319,13 +319,13 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     run_fix_dataset = _cfg_get_bool(cfg, "run_fix_dataset", False)
     fix_apply = _cfg_get_bool(cfg, "fix_apply", False)
-    run_pta_qc = bool(getattr(cfg, "run_pta_qc", False))
+    run_pqc = bool(getattr(cfg, "run_pqc", False))
 
     logger.info(
-        "Config flags: run_fix_dataset=%s fix_apply=%s run_pta_qc=%s",
+        "Config flags: run_fix_dataset=%s fix_apply=%s run_pqc=%s",
         run_fix_dataset,
         fix_apply,
-        run_pta_qc,
+        run_pqc,
     )
     if fix_apply:
         logger.info(
@@ -334,7 +334,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             str(_cfg_get(cfg, "fix_base_branch", "") or "").strip() or "<auto>",
             str(_cfg_get(cfg, "fix_commit_message", "") or "").strip() or "<default>",
         )
-    logger.info("pta_qc available: %s", _pta_qc_available())
+    logger.info("pqc available: %s", _pqc_available())
 
     if not cfg.home_dir.exists():
         raise FileNotFoundError(f"home_dir does not exist: {cfg.home_dir}")
@@ -389,11 +389,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     binary_rows: List[Dict[str, object]] = []
     qc_rows: List[Dict[str, object]] = []
-    qc_enabled = run_pta_qc
-    if run_pta_qc and not _pta_qc_available():
+    qc_enabled = run_pqc
+    if run_pqc and not _pqc_available():
         logger.error(
-            "run_pta_qc=true but pta_qc is not importable. QC stage will be skipped. "
-            "Install pta_qc (and libstempo) to enable QC."
+            "run_pqc=true but pqc is not importable. QC stage will be skipped. "
+            "Install pqc (and libstempo) to enable QC."
         )
         qc_enabled = False
 
@@ -492,30 +492,30 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
             if qc_enabled:
                 qc_cfg = PTAQCConfig(
-                    backend_col=str(getattr(cfg, "pta_qc_backend_col", "group")),
-                    drop_unmatched=bool(getattr(cfg, "pta_qc_drop_unmatched", False)),
-                    merge_tol_seconds=float(getattr(cfg, "pta_qc_merge_tol_seconds", 2.0)),
-                    tau_corr_minutes=float(getattr(cfg, "pta_qc_tau_corr_minutes", 30.0)),
-                    fdr_q=float(getattr(cfg, "pta_qc_fdr_q", 0.01)),
-                    mark_only_worst_per_day=bool(getattr(cfg, "pta_qc_mark_only_worst_per_day", True)),
-                    tau_rec_days=float(getattr(cfg, "pta_qc_tau_rec_days", 7.0)),
-                    window_mult=float(getattr(cfg, "pta_qc_window_mult", 5.0)),
-                    min_points=int(getattr(cfg, "pta_qc_min_points", 6)),
-                    delta_chi2_thresh=float(getattr(cfg, "pta_qc_delta_chi2_thresh", 25.0)),
+                    backend_col=str(getattr(cfg, "pqc_backend_col", "group")),
+                    drop_unmatched=bool(getattr(cfg, "pqc_drop_unmatched", False)),
+                    merge_tol_seconds=float(getattr(cfg, "pqc_merge_tol_seconds", 2.0)),
+                    tau_corr_minutes=float(getattr(cfg, "pqc_tau_corr_minutes", 30.0)),
+                    fdr_q=float(getattr(cfg, "pqc_fdr_q", 0.01)),
+                    mark_only_worst_per_day=bool(getattr(cfg, "pqc_mark_only_worst_per_day", True)),
+                    tau_rec_days=float(getattr(cfg, "pqc_tau_rec_days", 7.0)),
+                    window_mult=float(getattr(cfg, "pqc_window_mult", 5.0)),
+                    min_points=int(getattr(cfg, "pqc_min_points", 6)),
+                    delta_chi2_thresh=float(getattr(cfg, "pqc_delta_chi2_thresh", 25.0)),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
-                for pulsar in tqdm(pulsars, desc=f"pta_qc ({branch})"):
+                for pulsar in tqdm(pulsars, desc=f"pqc ({branch})"):
                     parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
                     out_csv = qc_out_dir / f"{pulsar}_qc.csv"
                     try:
-                        df = run_pta_qc_for_parfile_subprocess(parfile, out_csv, qc_cfg)
+                        df = run_pqc_for_parfile_subprocess(parfile, out_csv, qc_cfg)
                     except Exception as e:
-                        logger.warning("pta_qc failed for %s (%s); skipping QC for this pulsar: %s", pulsar, branch, e)
+                        logger.warning("pqc failed for %s (%s); skipping QC for this pulsar: %s", pulsar, branch, e)
                         qc_rows.append({"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv), "qc_error": str(e)})
                         continue
                     row = {"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv)}
-                    row.update(summarize_pta_qc(df))
+                    row.update(summarize_pqc(df))
                     qc_rows.append(row)
 
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
@@ -564,7 +564,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             df = pd.DataFrame(binary_rows)
             df.to_csv(out_paths["binary_analysis"] / "binary_analysis.tsv", sep="\t", index=False)
 
-        if getattr(cfg, "run_pta_qc", False) and qc_rows:
+        if getattr(cfg, "run_pqc", False) and qc_rows:
             dfq = pd.DataFrame(qc_rows)
             dfq.to_csv(out_paths["qc"] / "qc_summary.tsv", sep="\t", index=False)
 

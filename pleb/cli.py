@@ -43,9 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-change-reports", action="store_true", help="Skip change report generation.")
     p.add_argument("--testing", action="store_true", help="Enable testing mode (skips change reports).")
     p.add_argument("--jobs", type=int, default=None, help="Number of parallel workers to run pulsars concurrently (per branch).")
-    p.add_argument("--qc", action="store_true", help="Run optional pta_qc outlier detection (requires pta_qc + libstempo).")
-    p.add_argument("--qc-backend-col", default=None, help="Backend grouping column for pta_qc (default from config: group).")
-    p.add_argument("--qc-drop-unmatched", action="store_true", help="Drop TOAs unmatched to tim metadata in pta_qc.")
+    p.add_argument("--qc", action="store_true", help="Run optional pqc outlier detection (requires pqc + libstempo).")
+    p.add_argument("--qc-backend-col", default=None, help="Backend grouping column for pqc (default from config: group).")
+    p.add_argument("--qc-drop-unmatched", action="store_true", help="Drop TOAs unmatched to tim metadata in pqc.")
 
     # Param scan (fit-only): run baseline + candidate .par variants and compare via Δχ² / Wald z.
     p.add_argument("--param-scan", action="store_true", help="Run a parameter scan (fit-only) instead of the full pipeline.")
@@ -261,11 +261,11 @@ def main(argv=None) -> int:
     if args.jobs is not None:
         cfg.jobs = int(args.jobs)
     if getattr(args, 'qc', False):
-        cfg.run_pta_qc = True
+        cfg.run_pqc = True
     if getattr(args, 'qc_backend_col', None):
-        cfg.pta_qc_backend_col = str(args.qc_backend_col)
+        cfg.pqc_backend_col = str(args.qc_backend_col)
     if getattr(args, 'qc_drop_unmatched', False):
-        cfg.pta_qc_drop_unmatched = True
+        cfg.pqc_drop_unmatched = True
 
     if args.fix_dataset:
         cfg.run_fix_dataset = True

@@ -1,7 +1,7 @@
 """Tests for backend key normalization utilities."""
 
 import pandas as pd
-from pta_qc.features.backend_keys import ensure_sys_group
+from pqc.features.backend_keys import ensure_sys_group
 
 def test_sys_group_from_timfile_name_and_freq():
     df = pd.DataFrame({
