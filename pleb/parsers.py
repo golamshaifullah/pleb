@@ -129,6 +129,14 @@ GENERAL2_FORMAT = (
 )
 GENERAL2_COLUMNS = re.findall(r"\{([^}]+)\}", GENERAL2_FORMAT)
 
+def _is_number(tok: str) -> bool:
+    """Return True if token can be parsed as a float."""
+    try:
+        float(tok)
+        return True
+    except Exception:
+        return False
+
 def read_general2(file: Path) -> pd.DataFrame:
     """Parse tempo2 general2 plugin output embedded in a log file.
 
@@ -157,16 +165,25 @@ def read_general2(file: Path) -> pd.DataFrame:
         return pd.DataFrame(columns=GENERAL2_COLUMNS)
 
     rows: list[list[float]] = []
+    columns = GENERAL2_COLUMNS
+
+    # Detect optional header line like: "sat post err"
+    header_tokens = block[0].split()
+    if header_tokens and not all(_is_number(tok) for tok in header_tokens):
+        # Accept headers that are a subset of known GENERAL2 columns
+        if all(tok in GENERAL2_COLUMNS for tok in header_tokens):
+            columns = header_tokens
+            block = block[1:]
 
     for ln in block:
         parts = ln.split()
 
-        # Must have at least N fields to match the format; skip junk lines like "-nan"
-        if len(parts) < n:
+        # Must have at least as many fields as we expect; skip junk lines like "-nan"
+        if len(parts) < len(columns):
             continue
 
-        # Take only the first N fields; ignore any trailing "ERROR: ..." etc
-        parts = parts[:n]
+        # Take only the expected fields; ignore any trailing "ERROR: ..." etc
+        parts = parts[:len(columns)]
 
         # Convert to float; if any token isn't numeric, skip the line
         try:
@@ -176,7 +193,7 @@ def read_general2(file: Path) -> pd.DataFrame:
 
         rows.append(vals)
 
-    df = pd.DataFrame(rows, columns=GENERAL2_COLUMNS).astype("float64")
+    df = pd.DataFrame(rows, columns=columns).astype("float64")
 
     # Convenience integer day bucket for joins/grouping downstream
     df["mjd_int"] = np.floor(df["sat"]).astype("Int64")

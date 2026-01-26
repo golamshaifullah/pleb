@@ -1,3 +1,5 @@
+"""Parameter-scan utilities for rapid fit diagnostics."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,7 +19,7 @@ from .utils import which_or_raise, discover_pulsars, safe_mkdir
 from .parsers import read_plklog
 import numpy as np
 
-logger = get_logger("data_combination_pipeline.param_scan")
+logger = get_logger("pleb.param_scan")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +38,7 @@ _SAFE_LABEL_RX = re.compile(r"[^A-Za-z0-9._+-]+")
 
 
 def _safe_label(s: str) -> str:
+    """Return a filesystem-safe label derived from a spec string."""
     s = s.strip()
     s = s.replace(" ", "_")
     s = _SAFE_LABEL_RX.sub("_", s)
@@ -105,6 +108,7 @@ def _parse_par_params(par_text: str) -> Dict[str, List[str]]:
 
 
 def _is_fit_flag_one(tokens: Sequence[str]) -> bool:
+    """Return True if the TEMPO2 fit-flag token is ``1``."""
     if not tokens:
         return False
     last = str(tokens[-1]).strip()
@@ -119,15 +123,23 @@ def build_typical_candidates(
     dm_max_order: int = 4,
     btx_max_fb: int = 3,
 ) -> List[Candidate]:
-    """Build a per-pulsar candidate list for the common workflow.
+    """Build a typical scan profile based on base fit statistics.
 
-    User-intent profile implemented:
-      1) Always test Parallax (PX) if missing or not fitted.
-      2) If a binary model is present, test model-appropriate binary derivatives.
-      3) If no binary model AND reduced chi-square is high, test additional DM derivatives.
+    Args:
+        par_text: Base .par file text.
+        base_stats: Fit statistics from :func:`summarize_plk_only`.
+        dm_redchisq_threshold: Reduced chi-square threshold to trigger DM scans.
+        dm_max_order: Maximum DM derivative order to include.
+        btx_max_fb: Maximum FB derivative order to include.
 
-    This intentionally does *not* do noise modelling terms.
+    Returns:
+        List of candidate model modifications.
     """
+    # User-intent profile implemented:
+    #   1) Always test Parallax (PX) if missing or not fitted.
+    #   2) If a binary model is present, test model-appropriate binary derivatives.
+    #   3) If no binary model AND reduced chi-square is high, test additional DM derivatives.
+    # This intentionally does *not* do noise modelling terms.
     params = _parse_par_params(par_text)
 
     # 1) Parallax
@@ -178,6 +190,7 @@ def build_typical_candidates(
 
 
 def _split_inline_comment(line: str) -> Tuple[str, str]:
+    """Split a line into content and inline ``#`` comment."""
     # Keep '#' style inline comments intact.
     if "#" in line:
         main, comment = line.split("#", 1)
@@ -186,17 +199,22 @@ def _split_inline_comment(line: str) -> Tuple[str, str]:
 
 
 def apply_candidate_to_par_text(par_text: str, cand: Candidate) -> str:
-    """Return a modified .par text with a candidate applied.
+    """Apply a candidate modification to a .par text block.
 
-    Heuristics:
-      * If a parameter exists as the first token of a non-comment line, we edit its value (optional)
-        and ensure the fit flag is present and set to 1.
-      * If a parameter is missing, we append a simple scalar line: "PARAM <value-or-0> 1".
-      * raw_lines are appended if not already present (exact-match check, stripped).
+    Args:
+        par_text: Original .par file contents.
+        cand: Candidate modification to apply.
 
-    This is intentionally conservative; complex multi-token params (e.g. JUMP/EFAC with flags)
-    should be supplied via raw:... lines.
+    Returns:
+        Modified .par text.
     """
+    # Heuristics:
+    #   * If a parameter exists as the first token of a non-comment line, edit its value (optional)
+    #     and ensure the fit flag is present and set to 1.
+    #   * If a parameter is missing, append a simple scalar line: "PARAM <value-or-0> 1".
+    #   * raw_lines are appended if not already present (exact-match check, stripped).
+    # This is intentionally conservative; complex multi-token params (e.g. JUMP/EFAC with flags)
+    # should be supplied via raw:... lines.
     lines = par_text.splitlines()
     wanted = {name.upper(): val for name, val in cand.params}
     seen: set[str] = set()
@@ -290,6 +308,7 @@ def _run_fit_only_plk(
 
 
 def _parse_plk_stats_text(text: str) -> Dict[str, Optional[float]]:
+    """Parse a PLK statistics text block into numeric metrics."""
     if not text:
         return {"chisq": None, "redchisq": None, "n_toas": None}
 
@@ -320,6 +339,7 @@ def _parse_plk_stats_text(text: str) -> Dict[str, Optional[float]]:
 
 
 def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
+    """Return the number of fitted parameters inferred from a PLK log table."""
     if plk_df is None or plk_df.empty or "Fit" not in plk_df.columns:
         return None
     s = plk_df["Fit"].astype(str).str.strip().str.lower()
@@ -330,7 +350,15 @@ def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
 
 
 def summarize_plk_only(plk_path: Path) -> Dict[str, Optional[float]]:
-    """Summarize a tempo2 fit from just the captured stdout (plk log)."""
+    """Summarize fit statistics from a PLK log.
+
+    Args:
+        plk_path: Path to a tempo2 ``*_plk.log`` file.
+
+    Returns:
+        Dict with ``chisq``, ``redchisq``, ``n_toas``, and ``k_fit`` where available.
+    """
+    # Summarize a tempo2 fit from just the captured stdout (plk log).
     text = plk_path.read_text(encoding="utf-8", errors="ignore") if plk_path.exists() else ""
     st = _parse_plk_stats_text(text)
     try:
@@ -401,6 +429,25 @@ def run_param_scan(
       * param_scan/param_scan_<branch>.tsv (combined)
       * param_scan/<pulsar>/param_scan_<pulsar>.tsv (per pulsar)
       * plk/ scan plk logs for baseline and each candidate
+
+    Args:
+        cfg: Pipeline configuration.
+        branch: Branch to scan (defaults to ``cfg.reference_branch``).
+        pulsars: Optional list of pulsars to scan.
+        candidate_specs: Candidate specifications (see :func:`parse_candidate_specs`).
+        scan_typical: If True, include the typical scan profile.
+        dm_redchisq_threshold: Override for DM scan trigger threshold.
+        dm_max_order: Override for maximum DM derivative order.
+        btx_max_fb: Override for maximum FB derivative order.
+        outdir_name: Optional output directory name.
+
+    Returns:
+        Mapping of output path labels to their filesystem paths.
+
+    Raises:
+        FileNotFoundError: If required paths are missing.
+        RuntimeError: If no pulsars are selected or dependencies are missing.
+        ValueError: If no candidates are specified.
     """
     cfg = cfg.resolved()
     if not cfg.home_dir.exists():

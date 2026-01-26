@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple
 
 from .logging_utils import get_logger
 
-logger = get_logger("data_combination_pipeline.tempo2")
+logger = get_logger("pleb.tempo2")
 
 
 def build_singularity_prefix(

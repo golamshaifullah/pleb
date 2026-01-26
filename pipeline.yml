@@ -11,6 +11,6 @@ dependencies:
   - gitpython
   - scipy
   - pip:
-      - ./data_combination_pipeline_module_with_pta_qc_hook.zip
+      - ./pleb_module_with_pta_qc_hook.zip
       - ./pta_qc_packaged.zip
       - libstempo

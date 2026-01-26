@@ -1,6 +1,8 @@
+"""Tests for parameter scan utilities."""
+
 from __future__ import annotations
 
-from data_combination_pipeline.param_scan import (
+from pleb.param_scan import (
     parse_candidate_specs,
     apply_candidate_to_par_text,
     build_typical_candidates,

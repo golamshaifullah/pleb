@@ -8,9 +8,9 @@ The package is intentionally light to import. Heavy dependencies (for example
 GitPython or libstempo/pta_qc) are imported lazily by the entry points.
 
 See Also:
-    data_combination_pipeline.pipeline.run_pipeline: Full pipeline implementation.
-    data_combination_pipeline.param_scan.run_param_scan: Parameter scan runner.
-    data_combination_pipeline.dataset_fix: FixDataset helpers.
+    pleb.pipeline.run_pipeline: Full pipeline implementation.
+    pleb.param_scan.run_param_scan: Parameter scan runner.
+    pleb.dataset_fix: FixDataset helpers.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def run_pipeline(cfg: PipelineConfig):
 
     Returns:
         A dictionary of output paths as returned by
-        :func:`data_combination_pipeline.pipeline.run_pipeline`.
+        :func:`pleb.pipeline.run_pipeline`.
     """
     from .pipeline import run_pipeline as _run
 
@@ -45,7 +45,7 @@ def run_param_scan(cfg: PipelineConfig, **kwargs):
     Args:
         cfg: Pipeline configuration.
         **kwargs: Forwarded to
-            :func:`data_combination_pipeline.param_scan.run_param_scan`.
+            :func:`pleb.param_scan.run_param_scan`.
 
     Returns:
         A dictionary of output paths produced by the scan.

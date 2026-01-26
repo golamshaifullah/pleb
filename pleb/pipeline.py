@@ -47,7 +47,7 @@ from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
 from .outlier_qc import PTAQCConfig, run_pta_qc_for_parfile_subprocess, summarize_pta_qc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
 
-logger = get_logger("data_combination_pipeline")
+logger = get_logger("pleb")
 
 
 def _cfg_get(cfg, name: str, default=None):
@@ -220,6 +220,7 @@ def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
 
 
 def _pta_qc_available() -> bool:
+    """Return True if the optional ``pta_qc`` package is importable."""
     try:
         return importlib.util.find_spec("pta_qc") is not None
     except Exception:

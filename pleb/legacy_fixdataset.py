@@ -76,30 +76,30 @@ backend_bw = {'EFF.EBPP.1360.tim': 128.,
             'EFF.P200.1380.tim': 400.,
             'EFF.P217.1380.tim': 400.,
             'EFF.S110.2487.tim': 400.,
-            'JBO.DFB.1400.tim': 128., 
-            'JBO.DFB.1520.tim': 128., 
+            'JBO.DFB.1400.tim': 128.,
+            'JBO.DFB.1520.tim': 128.,
             'JBO.ROACH.1520.tim': 512.,
             'LEAP.1396.tim': 128.,
             'NRT.BON.1400.tim': 128.,
             'NRT.BON.1600.tim': 128.,
             'NRT.NUPPI.1484.tim': 512.,
             'NRT.NUPPI.1854.tim': 512.,
-            'SRT.DFB.1400': 128.,      
-            'SRT.DFB.330': 64.,       
+            'SRT.DFB.1400': 128.,
+            'SRT.DFB.330': 64.,
             'SRT.ROACH.1400': 256.,
-            'SRT.ROACH.330': 128., 
+            'SRT.ROACH.330': 128.,
             'WSRT.P1.1380.2.tim': 64.,
             'WSRT.P1.1380.C.tim': 64.,
-            'WSRT.P1.1380.tim': 64.,  
+            'WSRT.P1.1380.tim': 64.,
             'WSRT.P1.2273.2.tim': 64.,
             'WSRT.P1.2273.C.tim': 64.,
-            'WSRT.P1.2273.tim': 64.,  
-            'WSRT.P1.323.tim': 32.,   
-            'WSRT.P1.328.tim': 32.,   
-            'WSRT.P1.367.tim': 32.,   
-            'WSRT.P1.382.tim': 32.,   
-            'WSRT.P2.1380.tim': 128.,  
-            'WSRT.P2.2273.tim': 128.,  
+            'WSRT.P1.2273.tim': 64.,
+            'WSRT.P1.323.tim': 32.,
+            'WSRT.P1.328.tim': 32.,
+            'WSRT.P1.367.tim': 32.,
+            'WSRT.P1.382.tim': 32.,
+            'WSRT.P2.1380.tim': 128.,
+            'WSRT.P2.2273.tim': 128.,
             'WSRT.P2.350.tim': 64.,
             'MK.LBAND.1420.tim': 778.}
 
@@ -113,10 +113,10 @@ overlapped_timfiles = {'EFF.P200.1380.tim': ['EFF.EBPP.1360.tim', 'EFF.EBPP.1410
                        'WSRT.P2.350.tim': ['WSRT.P1.323.tim', 'WSRT.P1.328.tim', 'WSRT.P1.367.tim', 'WSRT.P1.382.tim'],
                        'WSRT.P2.1380.tim': ['WSRT.P1.1380.tim', 'WSRT.P1.1380.C.tim', 'WSRT.P1.1380.2.tim'],
                        'WSRT.P2.2273.tim': ['WSRT.P1.2273.tim', 'WSRT.P1.2273.C.tim', 'WSRT.P1.2273.2.tim'],
-                       'LEAP.1396.tim': ['EFF.P200.1380.tim', 'EFF.P217.1380.tim', 'EFF.S110.2487.tim', 
-                                         'JBO.ROACH.1520.tim', 
-                                         'NRT.NUPPI.1484.tim', 'NRT.NUPPI.1854.tim', 
-                                         'SRT.DFB.1400', 'SRT.ROACH.1400', 
+                       'LEAP.1396.tim': ['EFF.P200.1380.tim', 'EFF.P217.1380.tim', 'EFF.S110.2487.tim',
+                                         'JBO.ROACH.1520.tim',
+                                         'NRT.NUPPI.1484.tim', 'NRT.NUPPI.1854.tim',
+                                         'SRT.DFB.1400', 'SRT.ROACH.1400',
                                          'WSRT.P2.1380.tim']}
 
 # pta_systems mapping extracted from the notebook
@@ -126,30 +126,30 @@ pta_systems = {'EFF.EBPP.1360.tim': 'EPTA',
 		'EFF.P200.1380.tim': 'EPTA',
 		'EFF.P217.1380.tim': 'EPTA',
 		'EFF.S110.2487.tim': 'EPTA',
-		'JBO.DFB.1400.tim': 'EPTA', 
-		'JBO.DFB.1520.tim': 'EPTA', 
+		'JBO.DFB.1400.tim': 'EPTA',
+		'JBO.DFB.1520.tim': 'EPTA',
 		'JBO.ROACH.1520.tim': 'EPTA',
 		'LEAP.1396.tim': 'EPTA',
 		'NRT.BON.1400.tim': 'EPTA',
 		'NRT.BON.1600.tim': 'EPTA',
 		'NRT.NUPPI.1484.tim': 'EPTA',
 		'NRT.NUPPI.1854.tim': 'EPTA',
-		'SRT.DFB.1400':  'EPTA',      
-		'SRT.DFB.330':  'EPTA',       
+		'SRT.DFB.1400':  'EPTA',
+		'SRT.DFB.330':  'EPTA',
 		'SRT.ROACH.1400': 'EPTA',
-		'SRT.ROACH.330': 'EPTA', 
+		'SRT.ROACH.330': 'EPTA',
 		'WSRT.P1.1380.2.tim': 'EPTA',
 		'WSRT.P1.1380.C.tim': 'EPTA',
-		'WSRT.P1.1380.tim': 'EPTA',  
+		'WSRT.P1.1380.tim': 'EPTA',
 		'WSRT.P1.2273.2.tim': 'EPTA',
 		'WSRT.P1.2273.C.tim': 'EPTA',
-		'WSRT.P1.2273.tim': 'EPTA',  
-		'WSRT.P1.323.tim': 'EPTA',   
-		'WSRT.P1.328.tim': 'EPTA',   
-		'WSRT.P1.367.tim': 'EPTA',   
-		'WSRT.P1.382.tim': 'EPTA',   
-		'WSRT.P2.1380.tim': 'EPTA',  
-		'WSRT.P2.2273.tim': 'EPTA',  
+		'WSRT.P1.2273.tim': 'EPTA',
+		'WSRT.P1.323.tim': 'EPTA',
+		'WSRT.P1.328.tim': 'EPTA',
+		'WSRT.P1.367.tim': 'EPTA',
+		'WSRT.P1.382.tim': 'EPTA',
+		'WSRT.P2.1380.tim': 'EPTA',
+		'WSRT.P2.2273.tim': 'EPTA',
 		'WSRT.P2.350.tim': 'EPTA',
 		'GM_GWB_1460_100_b1_pre36.tim': 'InPTA',
 		'GM_GWB_1460_200_b0_post36.tim': 'InPTA',
@@ -174,15 +174,41 @@ def _backup_and_replace_tim(tim_path: Path) -> None:
     shutil.move(str(new), str(tim_path))
 
 def get_psrs(homepath):
+    """Return pulsar directory names under the dataset root.
+
+    Args:
+        homepath: Dataset root containing JXXXX+XXXX directories.
+
+    Returns:
+        Sorted list of pulsar directory names.
+    """
     return sorted([x.split('/')[-1] for x in glob(os.path.join(homepath,'J?????????'))])
 
 def get_timfiles(homepath, psrs):
+    """Return per-pulsar timfile basenames.
+
+    Args:
+        homepath: Dataset root containing pulsar directories.
+        psrs: Iterable of pulsar names.
+
+    Returns:
+        List of lists of timfile basenames for each pulsar.
+    """
     timfiles=[]
     for psr in psrs:
         timfiles.append(sorted([x.split('/')[-1] for x in glob(os.path.join(homepath,psr,'tims/*.tim')) if "NRT.NUXPI" not in x]))
     return timfiles
 
 def fix_bad_padd_lines(timfilepath, repo):
+    """Fix malformed '-padd' line breaks in a tim file.
+
+    Args:
+        timfilepath: Path to a .tim file.
+        repo: GitPython repository used for commits.
+
+    Returns:
+        None.
+    """
     with open(timfilepath, 'r') as readfile:
         with open(timfilepath.replace('.tim', '.paddfixed'), 'w') as writefile:
             for i, line in enumerate(readfile):
@@ -197,7 +223,7 @@ def fix_bad_padd_lines(timfilepath, repo):
                     print(line, file=writefile)
                 else:
                     oldline = line
-                
+
     print("mv {} {}".format(timfilepath.replace('.tim', '.paddfixed'), timfilepath))
     os.system("mv {} {}".format(timfilepath.replace('.tim', '.paddfixed'), timfilepath))
     repo.index.add(timfilepath)
@@ -205,6 +231,16 @@ def fix_bad_padd_lines(timfilepath, repo):
     return None
 
 def fix_timfiles(homepath, psr, repo):
+    """Apply all timfile cleanup steps for a pulsar.
+
+    Args:
+        homepath: Dataset root for pulsar directories.
+        psr: Pulsar name (e.g., JXXXX+XXXX).
+        repo: GitPython repository used for commits.
+
+    Returns:
+        None.
+    """
     for timfilepath in glob(os.path.join(homepath, psr, 'tims', "*.tim")):
         with open(timfilepath, 'r') as readfile:
             with open(timfilepath.replace('.tim', '.tabfixed'), 'w') as writefile:
@@ -219,7 +255,7 @@ def fix_timfiles(homepath, psr, repo):
         if len(foundpaddlines)>0:
             print("{} has bad padd lines. Fixing.".format(filepath))
             fix_bad_padd_lines(timfilepath, repo)
-       
+
         print("mv {} {}".format(timfilepath.replace('.tim', '.tabfixed'), timfilepath))
         os.system("mv {} {}".format(timfilepath.replace('.tim', '.tabfixed'), timfilepath))
         repo.index.add(timfilepath)
@@ -227,33 +263,76 @@ def fix_timfiles(homepath, psr, repo):
     return None
 
 def _make_gen(reader):
+    """Yield raw file chunks from a binary reader.
+
+    Args:
+        reader: Callable that returns bytes when called.
+
+    Yields:
+        Raw byte chunks from the reader.
+    """
     b = reader(1024 * 1024)
     while b:
         yield b
         b = reader(1024*1024)
 
 def rawgencount(filename):
+    """Count newline characters in a binary file.
+
+    Args:
+        filename: Path to the file.
+
+    Returns:
+        Number of newline bytes found.
+    """
     f = open(filename, 'rb')
     f_gen = _make_gen(f.raw.read)
     return sum( buf.count(b'\n') for buf in f_gen )
 
 def findlines(searchstring, filename):
+    """Find line numbers containing a substring.
+
+    Args:
+        searchstring: Substring to match.
+        filename: Path to the file.
+
+    Returns:
+        List of 1-based line numbers containing the substring.
+    """
     lines = []
     with open(filename) as f:
         for i, line in enumerate(f, 1):
-            if searchstring in line: 
+            if searchstring in line:
                 lines.append(i)
     return lines
 
 def findblanklines(filename):
+    """Return zero-based indices of blank lines.
+
+    Args:
+        filename: Path to the file.
+
+    Returns:
+        List of zero-based indices for blank lines.
+    """
     lines = []
     with open(filename) as f:
         for i, line in enumerate(f, 1):
-            if not line.strip(): 
+            if not line.strip():
                 lines.append(i - 1)
     return lines
 
 def findlinesstartingwith(searchstring, filename, ret_arr=False):
+    """Find line numbers that start with a prefix.
+
+    Args:
+        searchstring: Prefix to match at line start.
+        filename: Path to the file.
+        ret_arr: If True, include the first two tokens of each matched line.
+
+    Returns:
+        List of line numbers (1-based), or a list of [lineno, token1, token2] rows when ``ret_arr`` is True.
+    """
     lines = []
     with open(filename) as f:
         for i, line in enumerate(f, 1):
@@ -269,12 +348,23 @@ def skiptimlines(timfilename,
                  my_string="FORMAT",
                  only_once=False,
                  ret_arr=False):
+    """Compute zero-based row indices to skip based on a prefix match.
+
+    Args:
+        timfilename: Path to the tim file.
+        my_string: Line prefix to match.
+        only_once: If True, limit to the first match.
+        ret_arr: If True, return both skip rows and the matched line array.
+
+    Returns:
+        List of zero-based row indices, or ``(skiprows, lines)`` when ``ret_arr`` is True.
+    """
     lines = np.array(findlinesstartingwith(searchstring=my_string, filename=timfilename, ret_arr=ret_arr))
     if len(lines.shape) > 1:
         foundlines = list(lines[:,0])
     if len(lines.shape) == 1:
         foundlines = list(lines)
-    try:    
+    try:
         foundlines = [int(x) - 1 for x in foundlines]
     except TypeError as e:
         print(f"{e} because {foundlines}")
@@ -289,10 +379,22 @@ def skiptimlines(timfilename,
         return skiprows
 
 def skiplines(filename,
-              offset=0, 
+              offset=0,
               my_string="---------------------------------------------------------------------------------------------------",
               only_once=False,
              quiet=True):
+    """Compute row indices to skip after a delimiter line.
+
+    Args:
+        filename: Path to the file.
+        offset: Index offset applied to matched lines.
+        my_string: Delimiter string to search for.
+        only_once: If True, only consider the first delimiter.
+        quiet: If False, print warnings when delimiters are missing.
+
+    Returns:
+        List of zero-based row indices to skip.
+    """
     foundlines = findlines(searchstring=my_string, filename=filename)
     try:
         skiprows = [] #list(np.arange(0,foundlines[0]+offset,1))
@@ -311,6 +413,14 @@ def skiplines(filename,
     return skiprows
 
 def skip_blank_lines(timfilename):
+    """Return zero-based indices for blank lines in a tim file.
+
+    Args:
+        timfilename: Path to the tim file.
+
+    Returns:
+        List of zero-based row indices.
+    """
     try:
         foundlines = findlinesstartingwith(searchstring="\n", timfilename=timfilename)
         foundlines = [int(x) - 1 for x in foundlines]
@@ -321,6 +431,15 @@ def skip_blank_lines(timfilename):
     return skiprows
 
 def convert_numeric_cols(dmf, start=1):
+    """Coerce TOA columns to float and prune implausible rows.
+
+    Args:
+        dmf: DataFrame parsed from a tim file.
+        start: Column index for the first numeric column (freq).
+
+    Returns:
+        DataFrame with numeric columns converted and rows filtered.
+    """
     dmf[start] = dmf[start].astype(np.float64)
     dmf[start+1] = dmf[start+1].astype(np.float64)
     dmf[start+2] = dmf[start+2].astype(np.float64)
@@ -328,28 +447,55 @@ def convert_numeric_cols(dmf, start=1):
     return dmf
 
 def fix_my_df(dmf, bad_tim_lines):
+    """Normalize a parsed timfile DataFrame after read errors.
+
+    Args:
+        dmf: DataFrame parsed from a tim file.
+        bad_tim_lines: Mapping of malformed line keys to replacement values.
+
+    Returns:
+        Fixed DataFrame with numeric columns coerced.
+    """
     while len(dmf.columns) == 2:
         if dmf.keys().values[0] in bad_tim_lines.keys():
-            dmf = two_column_fix(dmf, 
-                                 keyword=dmf.keys().values[0], 
+            dmf = two_column_fix(dmf,
+                                 keyword=dmf.keys().values[0],
                                  value=str(bad_tim_lines.get(dmf.keys().values[0])))
     if len(dmf.columns) > 5:
         dmf.dropna(inplace=True, how='all')
         dmf.columns = list(map(lambda x: x, range(len(dmf.columns))))
         try:
             dmf = convert_numeric_cols(dmf, start=1)
-        except ValueError as e: 
+        except ValueError as e:
             print(dmf[1])
             dmf = convert_numeric_cols(dmf, start=2)
     return dmf
 
 def drop_my_cols(df, string):
+    """Drop a column that contains a specific sentinel string.
+
+    Args:
+        df: DataFrame to mutate in place.
+        string: Sentinel value identifying the column.
+
+    Returns:
+        None.
+    """
     n = (df.stack() == string).idxmax()[1]
     df.columns.get_loc(n)
     df.drop([n], axis=1, inplace=True)
     return None
 
 def find_flag_column(df, flag_key="-sys"):
+    """Locate the column index for a given timfile flag.
+
+    Args:
+        df: Parsed timfile DataFrame.
+        flag_key: Flag token to search for (e.g., ``-sys``).
+
+    Returns:
+        Column index if found, otherwise None.
+    """
     try:
         col_num = np.unique(np.where(df.to_numpy()==flag_key)[1])[0]
         return col_num
@@ -358,10 +504,30 @@ def find_flag_column(df, flag_key="-sys"):
         return None
 
 def strip_leading_whitespace(timfile):
+    """Legacy stub for stripping leading whitespace via ``sed``.
+
+    Args:
+        timfile: Path to the tim file.
+
+    Returns:
+        None.
+
+    Notes:
+        The current implementation invokes ``sed`` without a target file and does
+        not modify the input.
+    """
     os.system("sed -i\".orig\" ")
     return None
 
 def skipper(timfilepath):
+    """Compute a consolidated skip-row list for tim parsing.
+
+    Args:
+        timfilepath: Path to the tim file.
+
+    Returns:
+        Sorted list of zero-based row indices to skip.
+    """
     rowstoskip=[0]
     badstarts=["TIME", "MODE", "FORMAT", "-padd", "Er", "C\ ", "C ", "CC", "end", "#", "c\ ", "c "]
     badstarts=badstarts.extend([" "+x for x in badstarts])
@@ -372,13 +538,27 @@ def skipper(timfilepath):
     for otherstring in other_skip_keys:
         rowstoskip.extend(skiplines(timfilepath, my_string=otherstring))
     rowstoskip.extend(findblanklines(timfilepath))
-    time_statements_rowidx,time_skip_array = skiptimlines(timfilepath, 
-                                                           my_string="TIME", 
+    time_statements_rowidx,time_skip_array = skiptimlines(timfilepath,
+                                                           my_string="TIME",
                                                            ret_arr=True)
     rowstoskip.extend(time_statements_rowidx)
     return sorted(rowstoskip)
 
 def read_tamfile(timfile, separator=r'\s+', rowstoskip=1, time_skip_array=None, error=False, warning=False, **kwargs):
+    """Read a tim file into a DataFrame with legacy skip/repair rules.
+
+    Args:
+        timfile: Path to the tim file.
+        separator: Regex separator passed to ``pandas.read_csv``.
+        rowstoskip: Row indices to skip or an integer count.
+        time_skip_array: Array of TIME statements for offset handling.
+        error: If True, raise on failure.
+        warning: If True, print a warning on failure.
+        **kwargs: Extra keyword arguments forwarded to ``read_csv``.
+
+    Returns:
+        DataFrame of parsed rows (may be empty on failure).
+    """
     if type(rowstoskip) == int:
         rowstoskip=list(range(rowstoskip))
     badstarts=["MODE", "FORMAT", "-padd", "Er", "C\ ", "C ", "CC", "end", "#", "c\ ", "c "]
@@ -395,8 +575,8 @@ def read_tamfile(timfile, separator=r'\s+', rowstoskip=1, time_skip_array=None, 
     for otherstring in other_skip_keys:
         rowstoskip.extend(skiplines(timfile, my_string=otherstring))
     rowstoskip.extend(findblanklines(timfile))
-    time_statements_rowidx,time_skip_array = skiptimlines(timfile, 
-                                                       my_string="TIME", 
+    time_statements_rowidx,time_skip_array = skiptimlines(timfile,
+                                                       my_string="TIME",
                                                        ret_arr=True)
     rowstoskip.extend(time_statements_rowidx)
     rowstoskip = sorted(rowstoskip)
@@ -404,14 +584,14 @@ def read_tamfile(timfile, separator=r'\s+', rowstoskip=1, time_skip_array=None, 
     for searchstring in ["c{}".format(x) for x in range(9)]:
         keepcrows = list(set(skiptimlines(timfile, my_string=searchstring)))
         rowstoskip = [x for x in rowstoskip if x not in keepcrows]
-    
+
     try:
         dmf = pd.read_csv(timfile,engine='python',sep=separator,header=None,
                           skiprows=rowstoskip,warn_bad_lines=False,
                           error_bad_lines=False,skip_blank_lines=True,
                           converters={0: str.strip}
              )
-        
+
         if "-padd" in list(dmf[0]):
             print("Ugh. Found padds on newlines.")
             rowstoskip = list(set(rowstoskip +[x+1 for x in rowstoskip]))
@@ -424,7 +604,7 @@ def read_tamfile(timfile, separator=r'\s+', rowstoskip=1, time_skip_array=None, 
             rest = dmf[~dmf[0].isin(["-padd"])]
             dmf = pd.concat([rest,padds.set_index(rest.index)], axis=1)
             dmf.dropna(axis=1,inplace=True, how='all')
-            
+
         # for false_flag in ["-flag", "-pn"]:
         #     if false_flag in dmf:
         #         print("Found false flag")
@@ -446,6 +626,17 @@ def read_tamfile(timfile, separator=r'\s+', rowstoskip=1, time_skip_array=None, 
         return pd.DataFrame()
 
 def get_psr_info(homepath, psrs=None, timfiles=None, repo=None):
+    """Collect per-pulsar flag metadata from tim files.
+
+    Args:
+        homepath: Dataset root directory.
+        psrs: Optional list of pulsar names.
+        timfiles: Optional list of timfile lists per pulsar.
+        repo: GitPython repository handle (required).
+
+    Returns:
+        Nested dict mapping pulsar -> timfile -> flag metadata.
+    """
     if not repo:
         print("Repo must be supplied!")
         raise GitCommandError
@@ -458,8 +649,8 @@ def get_psr_info(homepath, psrs=None, timfiles=None, repo=None):
         print("Procesing timfiles for {}".format(psr))
         for timfile in timfileset:
             filepath=os.path.join(homepath, psr, 'tims', timfile)
-            time_statements_rowidx,time_skip_array = skiptimlines(filepath, 
-                                                                   my_string="TIME", 
+            time_statements_rowidx,time_skip_array = skiptimlines(filepath,
+                                                                   my_string="TIME",
                                                                    ret_arr=True)
             try:
                 df = read_tamfile(filepath, time_skip_array=time_skip_array)
@@ -489,12 +680,29 @@ def get_psr_info(homepath, psrs=None, timfiles=None, repo=None):
     return psr_info
 
 def show_psr_info(psr_info, psr=None):
+    """Print pulsar info as formatted JSON.
+
+    Args:
+        psr_info: Nested dict from :func:`get_psr_info`.
+        psr: Optional pulsar name to print.
+
+    Returns:
+        None.
+    """
     if psr:
         print(json.dumps(psr_info[psr], indent=4, default=str))
     else:
         print(json.dumps(psr_info, indent=4, default=str))
 
-def isfloat(my_object):        
+def isfloat(my_object):
+    """Return True if the object can be converted to float.
+
+    Args:
+        my_object: Value to test.
+
+    Returns:
+        True if float conversion succeeds.
+    """
     try:
         float(my_object)
         return True
@@ -502,10 +710,23 @@ def isfloat(my_object):
         return False
 
 def ismatched(freq, sat, keep_freq, keep_mjd, time_window, freq_range):
+    """Check whether a TOA matches a reference frequency/time window.
+
+    Args:
+        freq: Candidate frequency.
+        sat: Candidate MJD.
+        keep_freq: Reference frequency.
+        keep_mjd: Reference MJD.
+        time_window: Allowed time window (days).
+        freq_range: Allowed frequency range (MHz).
+
+    Returns:
+        True if the candidate is within both windows.
+    """
     try:
-        if (isfloat(freq) and (freq >= keep_freq - freq_range and 
+        if (isfloat(freq) and (freq >= keep_freq - freq_range and
                                freq <= keep_freq + freq_range) and
-            isfloat(sat) and (sat >= keep_mjd - time_window and 
+            isfloat(sat) and (sat >= keep_mjd - time_window and
                               sat <= keep_mjd + time_window)):
             return True
         else:
@@ -515,12 +736,28 @@ def ismatched(freq, sat, keep_freq, keep_mjd, time_window, freq_range):
         return False
 
 def cleanline(line):
+    """Strip newline and surrounding whitespace from a line.
+
+    Args:
+        line: Input line string.
+
+    Returns:
+        Cleaned line string.
+    """
     line = line.rstrip("\n")
     line = line.rstrip(" ")
     line = line.lstrip(" ")
     return line
 
 def freqsat(line):
+    """Extract frequency and MJD from a timfile line.
+
+    Args:
+        line: Timfile line string.
+
+    Returns:
+        Tuple ``(freq, mjd)`` as floats, or ``(None, None)`` on failure.
+    """
     try:
         line = line.split()
         if isfloat(line[1]) and isfloat(line[2]):
@@ -532,6 +769,16 @@ def freqsat(line):
         return None, None
 
 def selectfreqsat(_line, _timfile, freqfrom):
+    """Select frequency/MJD based on timfile naming or TOA line.
+
+    Args:
+        _line: Timfile line string.
+        _timfile: Timfile basename.
+        freqfrom: Either ``'group'`` or ``'toa'``.
+
+    Returns:
+        Tuple ``(freq, mjd)`` as floats.
+    """
     _freq, _sat = freqsat(_line)
     if freqfrom == 'group':
         if 'LEAP'  in _timfile:
@@ -545,6 +792,19 @@ def selectfreqsat(_line, _timfile, freqfrom):
     return _freq, _sat
 
 def comment_overlapped_toa(homepath, psr, retain_backend, drop_backends, time_window, freqfrom='toa'):
+    """Comment out TOAs that overlap a retained backend.
+
+    Args:
+        homepath: Dataset root directory.
+        psr: Pulsar name.
+        retain_backend: Timfile basename to retain.
+        drop_backends: Iterable of timfile basenames to modify.
+        time_window: Matching time window (days).
+        freqfrom: Source for frequency comparison (``'group'`` or ``'toa'``).
+
+    Returns:
+        None.
+    """
     freq_range = backend_bw.get(retain_backend)
     #print("Keeping TOAs {}".format(retain_backend))
     with open(os.path.join(homepath,psr,'tims/',retain_backend), 'r') as keeptim:
@@ -570,7 +830,7 @@ def comment_overlapped_toa(homepath, psr, retain_backend, drop_backends, time_wi
                                                 myline = ""
 
                                                 if j not in modtimskiprows and len(modline.split()) > 2 and isfloat(mod_freq) and ismatched(mod_freq, mod_sat,
-                                                                                                                                            keep_freq, keep_sat, 
+                                                                                                                                            keep_freq, keep_sat,
                                                                                                                                             time_window, freq_range+mbw):
                                                     #print("Found match {}:{} PSR {} on {}:{}".format(retain_backend, timfile, psr, keep_sat, mod_sat))
                                                     myline="C {}{}".format(modline,os.linesep)
@@ -584,17 +844,37 @@ def comment_overlapped_toa(homepath, psr, retain_backend, drop_backends, time_wi
     return None
 
 def remove_overlap(psr_info, homepath, overlapped_timfiles, time_window):
+    """Remove overlapping TOAs for known overlapping backend pairs.
+
+    Args:
+        psr_info: Pulsar info dict.
+        homepath: Dataset root directory.
+        overlapped_timfiles: Mapping of retained backend to overlapped backends.
+        time_window: Matching time window (days).
+
+    Returns:
+        None.
+    """
     for psr in tqdm(psr_info.keys()):
         for retain_backend in overlapped_timfiles.keys():
             if retain_backend in sorted(psr_info[psr].keys()):
                 drop_backends = overlapped_timfiles.get(retain_backend)
                 #if any([x in sorted(psr_info[psr].keys()) for x in drop_backends]):
                 comment_overlapped_toa(homepath, psr, retain_backend, drop_backends, time_window, freqfrom='group')
-                        
-        
+
+
     return None
 
 def remove_nuppi_big(parfile, timfile):
+    """Remove NRT.NUPPI/NUXPI entries from par and tim files.
+
+    Args:
+        parfile: Path to the .par file.
+        timfile: Path to the *_all.tim file.
+
+    Returns:
+        None.
+    """
     with open(parfile, 'r') as nuppioldpar, open(timfile, 'r') as nuppioldtim:
         with open(parfile.replace('.par', '.new'), 'w') as nuppinewpar, open(timfile.replace('_all.tim', '_all.new'), 'w') as nuppinewtim:
 
@@ -604,16 +884,26 @@ def remove_nuppi_big(parfile, timfile):
                 if "NRT.NUPPI." in parline or "NRT.NUXPI." in parline:
                     print("Removing old NUPPI lines from {}".format(parfile))
                 else:
-                    print(parline, file=nuppinewpar)            
+                    print(parline, file=nuppinewpar)
 
             for timline in nuppioldtim:
                 if "NRT.NUPPI." in timline or "NRT.NUXPI." in timline:
                     print("Removing old NUPPI lines from {}".format(timfile))
                 else:
-                    print(timline, file=nuppinewtim)            
+                    print(timline, file=nuppinewtim)
     return None
 
 def remove_nuppi_fromParTimfiles(homepath, psr_info, use_newfile=False):
+    """Apply NUPPI removal across all pulsars.
+
+    Args:
+        homepath: Dataset root directory.
+        psr_info: Pulsar info dict.
+        use_newfile: If True, replace originals with .new outputs.
+
+    Returns:
+        None.
+    """
     for psr in psr_info.keys():
         parfile = psr+".par"
         timfile = psr+"_all.tim"
@@ -624,12 +914,24 @@ def remove_nuppi_fromParTimfiles(homepath, psr_info, use_newfile=False):
                 os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, parfile.replace(".par", ".new"), homepath, psr, parfile))
         except Exception as e:
             print(e)
-            pass                
+            pass
 
 
     return None
 
 def split_on_date(timfilepath, mjd_cut=57500.):
+    """Split a NUPPI timfile into two files around an MJD cutoff.
+
+    Args:
+        timfilepath: Path to the NUPPI timfile.
+        mjd_cut: MJD cutoff separating NUPPI1 and NUPPI2.
+
+    Returns:
+        None.
+
+    Notes:
+        This function also commits the change using the global ``repo`` handle.
+    """
     rowstoskip=[0]
     for searchstring in ["TIME", "MODE", "FORMAT", "-padd"]:
         rowstoskip.extend(skiptimlines(timfilepath, my_string=searchstring))
@@ -637,8 +939,8 @@ def split_on_date(timfilepath, mjd_cut=57500.):
     for otherstring in other_skip_keys:
         rowstoskip.extend(skiplines(timfilepath, my_string=otherstring))
     rowstoskip.extend(findblanklines(timfilepath))
-    time_statements_rowidx, time_skip_array = skiptimlines(timfilepath, 
-                                                       my_string="TIME", 
+    time_statements_rowidx, time_skip_array = skiptimlines(timfilepath,
+                                                       my_string="TIME",
                                                        ret_arr=True)
 
     rowstoskip.extend(time_statements_rowidx)
@@ -653,14 +955,14 @@ def split_on_date(timfilepath, mjd_cut=57500.):
                     if "\n -padd" in line:
                         line = line.replace("\n -padd", " -padd")
                     elif "FORMAT" in line or 'MODE' in line:
-                        print(line, file=nuppiold)            
-                        print(line, file=nuppinew)            
+                        print(line, file=nuppiold)
+                        print(line, file=nuppinew)
                     else:
                         pass
                 elif mjd_cut > float(line.split()[2]):
-                    print(line.replace('NUPPI', 'NUPPI1'), file=nuppiold)            
+                    print(line.replace('NUPPI', 'NUPPI1'), file=nuppiold)
                 elif mjd_cut <= float(line.split()[2]):
-                    print(line.replace('NUPPI', 'NUPPI2'), file=nuppinew)            
+                    print(line.replace('NUPPI', 'NUPPI2'), file=nuppinew)
                 else:
                     print(line.split())
                     pass
@@ -670,6 +972,15 @@ def split_on_date(timfilepath, mjd_cut=57500.):
     return None
 
 def split_nuppi(psr_info, homepath):
+    """Split NUPPI timfiles for pulsars with NUPPI group flags.
+
+    Args:
+        psr_info: Pulsar info dict.
+        homepath: Dataset root directory.
+
+    Returns:
+        None.
+    """
     for psr, timfile in psr_info.items():
         print("Working on {}".format(psr))
         for timfile, flags in timfile.items():
@@ -679,6 +990,16 @@ def split_nuppi(psr_info, homepath):
                     split_on_date(os.path.join(homepath, psr, 'tims', timfile), mjd_cut=57600)
 
 def insert_missing_flags(timfilepath, flag, value, ):
+    """Append a flag/value pair to each TOA line in a timfile.
+
+    Args:
+        timfilepath: Path to the timfile.
+        flag: Flag token to insert (e.g., ``-be``).
+        value: Flag value to insert.
+
+    Returns:
+        None.
+    """
     print("Adding {} {} to {}".format(flag, value, timfilepath))
     rowstoskip=[0]
     for searchstring in ["TIME", "MODE", "FORMAT", "-padd"]:
@@ -687,8 +1008,8 @@ def insert_missing_flags(timfilepath, flag, value, ):
     for otherstring in other_skip_keys:
         rowstoskip.extend(skiplines(timfilepath, my_string=otherstring))
     rowstoskip.extend(findblanklines(timfilepath))
-    time_statements_rowidx, time_skip_array = skiptimlines(timfilepath, 
-                                                       my_string="TIME", 
+    time_statements_rowidx, time_skip_array = skiptimlines(timfilepath,
+                                                       my_string="TIME",
                                                        ret_arr=True)
 
     rowstoskip.extend(time_statements_rowidx)
@@ -706,10 +1027,20 @@ def insert_missing_flags(timfilepath, flag, value, ):
                         pass
                 else:
                     line += " {} {}".format(flag, value)
-                print(line, file=newfile)            
+                print(line, file=newfile)
     return None
 
 def insert_system_flags(timfilepath, flag, value, ):
+    """Append system flags inferred from frequency to each TOA line.
+
+    Args:
+        timfilepath: Path to the timfile.
+        flag: Flag token to insert (typically ``-sys``).
+        value: Unused placeholder; computed per line.
+
+    Returns:
+        None.
+    """
     print("Adding {} {} to {}".format(flag, value, timfilepath))
     rowstoskip=[0]
     for searchstring in ["TIME", "MODE", "FORMAT", "-padd"]:
@@ -718,8 +1049,8 @@ def insert_system_flags(timfilepath, flag, value, ):
     for otherstring in other_skip_keys:
         rowstoskip.extend(skiplines(timfilepath, my_string=otherstring))
     rowstoskip.extend(findblanklines(timfilepath))
-    time_statements_rowidx, time_skip_array = skiptimlines(timfilepath, 
-                                                       my_string="TIME", 
+    time_statements_rowidx, time_skip_array = skiptimlines(timfilepath,
+                                                       my_string="TIME",
                                                        ret_arr=True)
 
     rowstoskip.extend(time_statements_rowidx)
@@ -745,8 +1076,8 @@ def insert_system_flags(timfilepath, flag, value, ):
                     _flabel = int(_temp[np.abs(_temp - _wfreq).argmin()])
                     value = "{}.{}".format(timfilepath.split('/')[-1].rstrip('.tim').rsplit('.',1)[0], _flabel)
                     line += " {} {}".format(flag, value)
-                    
-                print(line, file=newfile)            
+
+                print(line, file=newfile)
 #             print("\n----------------\n", max(freqs), min(freqs), "\n----------------\n")
 #             #fig, ax = plt.subplots(figsize=(10, 20))
 #             #ax.hist(freqs, bins=16)#801, orientation='horizontal')
@@ -761,6 +1092,16 @@ def savenewfile(homepath, psr, timfile):
 
 
 def update_timfiles(psr_info, homepath, magic_add_sysflag=None):
+    """Update timfiles by inserting missing flags.
+
+    Args:
+        psr_info: Pulsar info dict from :func:`get_psr_info`.
+        homepath: Dataset root directory.
+        magic_add_sysflag: If True, attempt per-TOA system flags.
+
+    Returns:
+        None.
+    """
     for psr, timfile in psr_info.items():
         for timfile, flags in timfile.items():
             newfile = False
@@ -768,27 +1109,37 @@ def update_timfiles(psr_info, homepath, magic_add_sysflag=None):
                 if value == 'missing' and flag == '-sys':
                     print("WARNING: For PSR {} {} has missing system flags! Check that file is proper.".format(psr, timfile))
                     if magic_add_sysflag:
-                        insert_system_flags(os.path.join(homepath, psr, 'tims', timfile), 
+                        insert_system_flags(os.path.join(homepath, psr, 'tims', timfile),
                                              flag, timfile.rstrip(".tim"))
                         savenewfile(homepath, psr, timfile)
-                        
+
                 if value == 'missing' and flag == '-be':
-                    insert_missing_flags(os.path.join(homepath, psr, 'tims', timfile), 
+                    insert_missing_flags(os.path.join(homepath, psr, 'tims', timfile),
                                          flag, timfile.split(".")[1])
                     savenewfile(homepath, psr, timfile)
 
                 if value == 'missing' and flag == '-pta':
                     insert_missing_flags(os.path.join(homepath, psr, 'tims', timfile), flag, pta_systems.get(timfile))
                     savenewfile(homepath, psr, timfile)
-            
+
                 if value == 'missing' and flag == '-group':
-                    insert_missing_flags(os.path.join(homepath, psr, 'tims', timfile), 
+                    insert_missing_flags(os.path.join(homepath, psr, 'tims', timfile),
                                          flag, timfile.rstrip(".tim"))
                     savenewfile(homepath, psr, timfile)
 
     return None
 
 def insert_missing_timfiles(psr, alltimfilepath, psr_info):
+    """Append missing INCLUDE lines to a pulsar's *_all.tim file.
+
+    Args:
+        psr: Pulsar name.
+        alltimfilepath: Path to *_all.tim.
+        psr_info: Pulsar info dict.
+
+    Returns:
+        None.
+    """
     addtimfiles = [x for x in psr_info.get(psr)]
     with open(alltimfilepath, 'r') as workingfile:
         with open(alltimfilepath.replace("_all.tim","_all.new"), 'w') as newfile:
@@ -812,6 +1163,16 @@ def insert_missing_timfiles(psr, alltimfilepath, psr_info):
     return None
 
 def update_alltims(homepath, psr_info, use_newfile=False):
+    """Update all *_all.tim files with missing INCLUDE lines.
+
+    Args:
+        homepath: Dataset root directory.
+        psr_info: Pulsar info dict.
+        use_newfile: If True, replace originals with .new outputs.
+
+    Returns:
+        None.
+    """
     for psr in psr_info.keys():
         alltim = psr+"_all.tim"
         try:
@@ -826,6 +1187,14 @@ def update_alltims(homepath, psr_info, use_newfile=False):
     return None
 
 def flatten(xss):
+    """Flatten a list of iterables into a single list.
+
+    Args:
+        xss: Iterable of iterables.
+
+    Returns:
+        Flattened list of items.
+    """
     flat_list = []
     for xs in xss:
         if xs:
@@ -834,6 +1203,16 @@ def flatten(xss):
     return flat_list
 
 def insert_missing_jumps(psr, parfilepath, psr_info):
+    """Normalize EPHEM/CLK/NE_SW lines in a .par file.
+
+    Args:
+        psr: Pulsar name (unused).
+        parfilepath: Path to the .par file.
+        psr_info: Pulsar info dict (unused).
+
+    Returns:
+        None.
+    """
     with open(parfilepath, 'r') as workingfile:
         with open(parfilepath.replace(".par",".new"), 'w') as newfile:
             for line in workingfile:
@@ -847,10 +1226,20 @@ def insert_missing_jumps(psr, parfilepath, psr_info):
                 if "NE_SW" in line_contents and not(line_contents[1] == nesw_value):
                     line = line.replace(line_contents[1], nesw_value)
                 print(line, file=newfile)
-            
+
     return None
 
 def update_parfiles(homepath, psr_info, use_newfile=False):
+    """Apply parfile normalization across all pulsars.
+
+    Args:
+        homepath: Dataset root directory.
+        psr_info: Pulsar info dict.
+        use_newfile: If True, replace originals with .new outputs.
+
+    Returns:
+        None.
+    """
     for psr in psr_info.keys():
         parfile = psr+".par"
         try:
@@ -860,12 +1249,22 @@ def update_parfiles(homepath, psr_info, use_newfile=False):
                 os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, parfile.replace(".par", ".new"), homepath, psr, parfile))
         except Exception as e:
             print(e)
-            pass                
+            pass
 
 
     return None
 
 def edit_parfiles(homepath, psr_info, use_newfile=False):
+    """Normalize parfiles without exception handling.
+
+    Args:
+        homepath: Dataset root directory.
+        psr_info: Pulsar info dict.
+        use_newfile: If True, replace originals with .new outputs.
+
+    Returns:
+        None.
+    """
     for psr in psr_info.keys():
         parfile = psr+".par"
         insert_missing_jumps(psr, parfilepath=os.path.join(homepath, psr, parfile), psr_info=psr_info)
@@ -877,6 +1276,14 @@ def edit_parfiles(homepath, psr_info, use_newfile=False):
     return None
 
 def equatorial_to_ecliptic_par(parfile):
+    """Extract ecliptic coordinates from an equatorial parfile.
+
+    Args:
+        parfile: Path to the .par file.
+
+    Returns:
+        Tuple ``(elong, elat, pmelong, pmelat, lines, drop_lines)`` or None on failure.
+    """
     with open(parfile, 'r') as orig:
         lines = orig.readlines()
     try:
@@ -898,6 +1305,15 @@ def equatorial_to_ecliptic_par(parfile):
         return None
 
 def create_ecliptic_par(parfile, use_newfile):
+    """Create an equatorial parfile from ecliptic coordinates.
+
+    Args:
+        parfile: Path to the .par file.
+        use_newfile: If True, replace the original with the converted file.
+
+    Returns:
+        None.
+    """
     try:
         raj, decj, pmra, pmdec, lines, drop_lines = ecliptic_to_equatorial_par(parfile)
         with open(parfile.replace(".par", "_eq.par"), 'w') as eqpar:
@@ -916,13 +1332,21 @@ def create_ecliptic_par(parfile, use_newfile):
         if use_newfile:
             os.system("\cp -f {} {}".format(parfile, parfile.replace(".par", "_dr1eqecl.par")))
             os.system("mv {} {}".format(parfile.replace(".par", "_eq.par"), parfile))
-                
+
     except Exception as e:
         print("Warning: {}".format(e))
-        
+
     return None
 
 def ecliptic_to_equatorial_par(parfile):
+    """Convert ecliptic coordinates in a parfile to equatorial values.
+
+    Args:
+        parfile: Path to the .par file.
+
+    Returns:
+        Tuple ``(raj, decj, pmra, pmdec, lines, drop_lines)`` or None on failure.
+    """
     with open(parfile, 'r') as orig:
         lines = orig.readlines()
     try:
@@ -931,9 +1355,9 @@ def ecliptic_to_equatorial_par(parfile):
         pmelong = [line.rstrip("\n").split() for line in lines if "PMELONG" in line]
         pmelat = [line.rstrip("\n").split() for line in lines if "PMELAT" in line]
         posepoch = [line.rstrip("\n").split() for line in lines if "POSEPOCH" in line]
-        elongelat = SkyCoord(lon=elong[0][1], lat=elat[0][1], unit=(units.hourangle,units.deg), 
-                             pm_lon_coslat=float(pmelong[0][1])*units.mas/units.yr, 
-                             pm_lat=float(pmelat[0][1])*units.mas/units.yr, 
+        elongelat = SkyCoord(lon=elong[0][1], lat=elat[0][1], unit=(units.hourangle,units.deg),
+                             pm_lon_coslat=float(pmelong[0][1])*units.mas/units.yr,
+                             pm_lat=float(pmelat[0][1])*units.mas/units.yr,
                              frame=BarycentricTrueEcliptic,
                              equinox='J2000', obstime=Time(float(posepoch[0][1]), format='mjd'))
         raj = elongelat.icrs.ra.to_string(unit='hourangle', sep=":")
@@ -948,12 +1372,30 @@ def ecliptic_to_equatorial_par(parfile):
         return None
 
 def check_all_binary(parfile_lines):
+    """Return True if a parfile contains a full binary parameter set.
+
+    Args:
+        parfile_lines: Parfile contents as a string.
+
+    Returns:
+        True if required binary parameters are present.
+    """
     if 'PB' in parfile_lines and 'A1' in parfile_lines and 'PBDOT' in parfile_lines and ('XDOT' in parfile_lines or 'A1DOT' in parfile_lines):
         return True
-    else: 
+    else:
         return False
 
 def check_drop_pkpars(params, parfile_lines, pkpars=['H3', 'STIG']):
+    """Remove PK parameters from a list when already present in a parfile.
+
+    Args:
+        params: List of parameter names to modify.
+        parfile_lines: Parfile contents as a string.
+        pkpars: List of PK parameters to drop when present.
+
+    Returns:
+        Updated parameter list.
+    """
     for pkpar in pkpars:
         try:
             if pkpar in parfile_lines:
@@ -964,13 +1406,25 @@ def check_drop_pkpars(params, parfile_lines, pkpars=['H3', 'STIG']):
     return params
 
 def add_params(psr, parfilepath, psr_info, params, start_line):
+    """Insert missing parameters into a parfile at a given line.
+
+    Args:
+        psr: Pulsar name (unused).
+        parfilepath: Path to the .par file.
+        psr_info: Pulsar info dict (unused).
+        params: List of parameter names to add.
+        start_line: Line number at which to insert parameters.
+
+    Returns:
+        List of parameters actually written.
+    """
     with open(parfilepath, 'r') as workingfile:
         parfile_lines = workingfile.read()
         pkpars=['H3', 'STIG']
         if 'EPS1' in parfile_lines and 'ECCDOT' in params:
             params.remove('ECCDOT')
             params.extend(['EPS1DOT', 'EPS2DOT'])
-            
+
         if ('{}M2'.format(os.linesep) in parfile_lines or 'SINI' in parfile_lines) and 'H3' in params:
             params.remove('H3')
             params.remove('STIG')
@@ -979,7 +1433,7 @@ def add_params(psr, parfilepath, psr_info, params, start_line):
 
         if check_all_binary(parfile_lines):
             check_drop_pkpars(params, parfile_lines, pkpars=pkpars)
-            
+
         for param in params:
             if param in parfile_lines:
                 params.remove(param)
@@ -993,17 +1447,29 @@ def add_params(psr, parfilepath, psr_info, params, start_line):
 
     with open(parfilepath, 'r') as workingfile:
         with open(parfilepath.replace(".par","_addpar.par"), 'w') as newfile:
-            line_no = 0 
+            line_no = 0
             for line in workingfile:
                 if line_no == start_line:
                     for newparam in params:
                         newfile.write("{:<15}0    1    0{}".format(newparam, os.linesep))
                 newfile.write(line)
                 line_no += 1
-            
+
     return params
 
 def add_params_to_parfile(homepath, psr_info, newpars, use_newfile=False, branch_message="Auto commit"):
+    """Add parameter templates to parfiles for all pulsars.
+
+    Args:
+        homepath: Dataset root directory.
+        psr_info: Pulsar info dict.
+        newpars: Iterable of parameter names to add.
+        use_newfile: If True, replace originals with modified files.
+        branch_message: Commit message prefix for git commits.
+
+    Returns:
+        None.
+    """
     for psr in psr_info.keys():
         parfile = psr+".par"
         start_line = findlinesstartingwith(searchstring="TZRFRQ", filename=os.path.join(homepath, psr, parfile))[0]

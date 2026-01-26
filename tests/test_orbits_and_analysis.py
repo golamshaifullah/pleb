@@ -1,3 +1,5 @@
+"""Tests for orbital utilities and binary analysis."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,15 +7,15 @@ import math
 
 import numpy as np
 
-from data_combination_pipeline.kepler_orbits import (
+from pleb.kepler_orbits import (
     eccentric_from_mean,
     true_from_eccentric,
     btx_parameters,
     kepler_2d,
     Kepler2DParameters,
 )
-from data_combination_pipeline.pulsar_analysis import read_parfile, analyse_binary_from_par
-from data_combination_pipeline.tempo2 import build_singularity_prefix, tempo2_paths_in_container
+from pleb.pulsar_analysis import read_parfile, analyse_binary_from_par
+from pleb.tempo2 import build_singularity_prefix, tempo2_paths_in_container
 
 
 def _write(path: Path, text: str) -> None:

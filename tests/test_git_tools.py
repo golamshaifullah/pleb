@@ -1,3 +1,5 @@
+"""Tests for git helper utilities."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -6,7 +8,7 @@ import pytest
 
 pytest.importorskip("git")  # provided by GitPython
 
-from data_combination_pipeline.git_tools import require_clean_repo
+from pleb.git_tools import require_clean_repo
 
 
 def test_require_clean_repo_does_not_raise_on_dirty() -> None:

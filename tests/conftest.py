@@ -1,3 +1,5 @@
+"""Pytest fixtures and shared helpers for pipeline tests."""
+
 from __future__ import annotations
 
 import sys

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Kepler/orbit helper functions.
 
 This module is adapted from the AnalysePulsars.ipynb notebook you provided.
@@ -12,6 +10,7 @@ Notes
 - Functions raise clear errors if optional dependencies are required but missing.
 """
 
+from __future__ import annotations
 from typing import NamedTuple, Tuple
 import math
 
@@ -21,7 +20,12 @@ import numpy as np
 def true_from_eccentric(e: float, eccentric_anomaly: float) -> Tuple[float, float, float]:
     """Compute the true anomaly from the eccentric anomaly.
 
-    Returns (true_anomaly, d(true)/d(e), d(true)/d(E)).
+    Args:
+        e: Orbital eccentricity.
+        eccentric_anomaly: Eccentric anomaly ``E``.
+
+    Returns:
+        Tuple ``(true_anomaly, d(true)/d(e), d(true)/d(E))``.
     """
     E = eccentric_anomaly
     beta = math.sqrt(1 - e * e)
@@ -48,7 +52,12 @@ def true_from_eccentric(e: float, eccentric_anomaly: float) -> Tuple[float, floa
 def eccentric_from_mean(e: float, mean_anomaly: float) -> Tuple[float, float, float]:
     """Solve Kepler's equation for eccentric anomaly.
 
-    Returns (E, dE/de, dE/dM).
+    Args:
+        e: Orbital eccentricity.
+        mean_anomaly: Mean anomaly ``M``.
+
+    Returns:
+        Tuple ``(E, dE/de, dE/dM)``.
     """
     # Lazy import SciPy if available; otherwise use a simple Newton loop.
     try:
@@ -81,20 +90,17 @@ def eccentric_from_mean(e: float, mean_anomaly: float) -> Tuple[float, float, fl
 
 
 def btx_parameters(asini: float, pb: float, eps1: float, eps2: float, tasc: float) -> Tuple[float, float, float, float, float]:
-    """Attempt to convert parameters from ELL1 to BTX-like (a1, pb, e, om, t0).
+    """Convert ELL1 parameters to BTX-like values (a1, pb, e, om, t0).
 
-    This is directly adapted from AnalysePulsars.ipynb.
+    Args:
+        asini: Projected semi-major axis (A1) in light-seconds.
+        pb: Binary period.
+        eps1: ELL1 eccentricity parameter ``e*sin(om)``.
+        eps2: ELL1 eccentricity parameter ``e*cos(om)``.
+        tasc: Time of ascending node.
 
-    Parameters
-    ----------
-    asini : float
-        A1 (projected semi-major axis) in light-seconds.
-    pb : float
-        Binary period.
-    eps1, eps2 : float
-        ELL1 eccentricity parameters: eps1 = e*sin(om), eps2 = e*cos(om).
-    tasc : float
-        Time of ascending node.
+    Returns:
+        Tuple ``(a1, pb, e, om, t0)``.
     """
     e = float(np.hypot(eps1, eps2))
     om = float(np.arctan2(eps1, eps2))
@@ -108,6 +114,7 @@ def btx_parameters(asini: float, pb: float, eps1: float, eps2: float, tasc: floa
 
 
 class Kepler2DParameters(NamedTuple):
+    """Parameter bundle for :func:`kepler_2d`."""
     a: float
     pb: float
     eps1: float
@@ -121,6 +128,13 @@ def kepler_2d(params: Kepler2DParameters, t: float) -> np.ndarray:
     Returns a length-4 array [x, y, vx, vy].
 
     This is a simplified version of the notebook implementation.
+
+    Args:
+        params: Keplerian parameters.
+        t: Time value for evaluation.
+
+    Returns:
+        Array ``[x, y, vx, vy]`` in orbital-plane coordinates.
     """
     a, pb, eps1, eps2, t0 = params
     e = float(np.hypot(eps1, eps2))

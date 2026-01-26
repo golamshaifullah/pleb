@@ -1,8 +1,10 @@
+"""Tests for pipeline configuration serialization and parsing."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from data_combination_pipeline.config import PipelineConfig
+from pleb.config import PipelineConfig
 
 
 def test_config_json_roundtrip(tmp_path: Path) -> None:

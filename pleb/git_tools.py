@@ -8,7 +8,7 @@ except Exception:  # pragma: no cover
     Repo = object  # type: ignore
 from .logging_utils import get_logger
 
-logger = get_logger("data_combination_pipeline.git")
+logger = get_logger("pleb.git")
 
 def checkout(repo: Repo, branch: str) -> None:
     """Check out a git branch.

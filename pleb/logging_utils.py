@@ -2,7 +2,7 @@
 
 import logging
 
-def get_logger(name: str = "data_combination_pipeline", level: int = logging.INFO) -> logging.Logger:
+def get_logger(name: str = "pleb", level: int = logging.INFO) -> logging.Logger:
     """Return a configured logger for pipeline modules.
 
     The logger uses a simple stream handler with a timestamped format and avoids

@@ -1,4 +1,4 @@
-"""Robust .tim file parsing utilities."""
+"""Legacy robust .tim parsing utilities (kept for compatibility)."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ _c_digit = re.compile(r"^c\d\b", re.IGNORECASE)
 
 
 def _is_skippable_tim_line(line: str) -> bool:
+    """Return True if a .tim line should be skipped (comments/directives)."""
     s = line.strip()
     if not s:
         return True
@@ -74,6 +75,7 @@ def _is_skippable_tim_line(line: str) -> bool:
 
 
 def _normalize_tim_line(line: str) -> str:
+    """Normalize whitespace and trailing characters in a .tim line."""
     # strip newline + trailing spaces
     line = line.rstrip("\n").rstrip(" ")
 

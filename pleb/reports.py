@@ -12,7 +12,7 @@ import pandas as pd
 from .parsers import PlkParseError, read_plklog, read_general2, read_tim_file
 from .logging_utils import get_logger
 
-logger = get_logger("data_combination_pipeline.reports")
+logger = get_logger("pleb.reports")
 
 def _chi2_sf(x: float, df: float) -> float:
     """Compute the chi-square survival function.

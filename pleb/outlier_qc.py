@@ -15,7 +15,7 @@ import pandas as pd
 
 from .logging_utils import get_logger
 
-logger = get_logger("data_combination_pipeline.qc")
+logger = get_logger("pleb.qc")
 
 
 @dataclass(slots=True)
@@ -134,7 +134,7 @@ def run_pta_qc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCCo
     code = (
         "import json, sys\n"
         "from pathlib import Path\n"
-        "from data_combination_pipeline.outlier_qc import PTAQCConfig, run_pta_qc_for_parfile\n"
+        "from pleb.outlier_qc import PTAQCConfig, run_pta_qc_for_parfile\n"
         "payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\n"
         "cfg = PTAQCConfig(**payload['cfg'])\n"
         "run_pta_qc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg)\n"

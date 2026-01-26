@@ -1,3 +1,5 @@
+"""Binary/orbital analysis helpers for pulsar .par files."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,12 +13,17 @@ import pandas as pd
 from .logging_utils import get_logger
 from .kepler_orbits import btx_parameters
 
-logger = get_logger("data_combination_pipeline.pulsar_analysis")
+logger = get_logger("pleb.pulsar_analysis")
 
 
 @dataclass(slots=True)
 class BinaryAnalysisConfig:
-    """Controls for binary/orbital diagnostics derived from .par files."""
+    """Configuration for binary/orbital diagnostics derived from .par files.
+
+    Attributes:
+        only_models: If set, only report pulsars whose ``BINARY`` parameter
+            matches one of these model names.
+    """
 
     # If set, only write rows for pulsars with these BINARY models
     only_models: Optional[List[str]] = None
@@ -46,6 +53,7 @@ def read_parfile(parfile: Path) -> Dict[str, str]:
 
 
 def _to_float(x: Optional[str]) -> Optional[float]:
+    """Convert a string to float, returning None on failure."""
     if x is None:
         return None
     try:
@@ -103,6 +111,16 @@ def write_binary_analysis(
     """Write a per-branch, per-pulsar binary analysis TSV.
 
     Looks for <home_dir>/<pulsar>/<pulsar>.par on each branch.
+
+    Args:
+        home_dir: Root data repository.
+        out_dir: Output directory for the TSV.
+        pulsars: Pulsar names to include.
+        branches: Branch names (used for labeling).
+        config: Optional binary analysis configuration.
+
+    Returns:
+        Path to the written TSV file.
     """
     cfg = config or BinaryAnalysisConfig()
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -1,3 +1,5 @@
+"""Plotting helpers for pipeline outputs."""
+
 from __future__ import annotations
 
 import math
@@ -13,7 +15,7 @@ from matplotlib.ticker import ScalarFormatter
 from .parsers import read_covmat, read_general2, read_tim_file
 from .logging_utils import get_logger
 
-logger = get_logger("data_combination_pipeline.plotting")
+logger = get_logger("pleb.plotting")
 
 try:
     import seaborn as sns  # type: ignore
@@ -22,6 +24,15 @@ except Exception:
     HAVE_SEABORN = False
 
 def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
+    """Compute histogram bin count using the Freedman–Diaconis rule.
+
+    Args:
+        x: Input data array.
+        max_bins: Maximum number of bins to return.
+
+    Returns:
+        Suggested number of bins.
+    """
     x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x)]
     if x.size < 2:
@@ -38,6 +49,7 @@ def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
 
 class MathTextSciFormatter(ScalarFormatter):
     def __init__(self, fmt: str = "%1.1e"):
+        """Create a scalar formatter using MathText scientific notation."""
         super().__init__(useMathText=True)
         self.fmt = fmt
 
@@ -45,11 +57,28 @@ class MathTextSciFormatter(ScalarFormatter):
         self.format = self.fmt
 
 def savefig(fig: plt.Figure, path: Path, dpi: int) -> None:
+    """Save a Matplotlib figure to disk and close it.
+
+    Args:
+        fig: Matplotlib figure.
+        path: Output file path.
+        dpi: Resolution in dots-per-inch.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
 def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
+    """Plot per-pulsar system timelines and write summary tables.
+
+    Args:
+        home_dir: Root data repository.
+        dataset_name: Dataset name or path.
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branch: Branch name for labeling.
+        dpi: Output resolution.
+    """
     fig, axes = plt.subplots(nrows=len(pulsars), ncols=1, sharex=True, figsize=(12, max(2, 3*len(pulsars))))
     if len(pulsars) == 1:
         axes = [axes]
@@ -108,6 +137,16 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
     savefig(fig, out_paths["png"] / f"SystemsPerPulsar_{branch}.png", dpi=dpi)
 
 def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
+    """Plot per-system timelines across pulsars.
+
+    Args:
+        home_dir: Root data repository.
+        dataset_name: Dataset name or path.
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branch: Branch name for labeling.
+        dpi: Output resolution.
+    """
     system_to_data = {}  # system -> list of (pulsar_index, mjd_array)
     for p_idx, pulsar in enumerate(pulsars):
         tim_dir = home_dir / dataset_name / pulsar / "tims"
@@ -148,6 +187,15 @@ def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[
     savefig(fig, out_paths["png"] / f"PulsarsPerSystem_{branch}.png", dpi=dpi)
 
 def plot_covmat_heatmaps(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], dpi: int, max_params: Optional[int] = None) -> None:
+    """Plot covariance matrix heatmaps per pulsar/branch.
+
+    Args:
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branches: Branches to include.
+        dpi: Output resolution.
+        max_params: Optional maximum number of parameters to display.
+    """
     for pulsar in pulsars:
         for branch in branches:
             cov_file = out_paths["covmat"] / f"{pulsar}_{branch}.covmat"
@@ -180,6 +228,14 @@ def plot_covmat_heatmaps(out_paths: Dict[str, Path], pulsars: List[str], branche
             savefig(fig, out_paths["png"] / f"CovMat_{pulsar}_{branch}.png", dpi=dpi)
 
 def plot_residuals(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], dpi: int) -> None:
+    """Plot timing residuals per pulsar/branch.
+
+    Args:
+        out_paths: Output directory mapping from :func:`make_output_tree`.
+        pulsars: Pulsar names to include.
+        branches: Branches to include.
+        dpi: Output resolution.
+    """
     summary_path = out_paths["tag"] / "residual_summary.tsv"
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write("branch\tpulsar\twrms_post\tq32_post\tq68_post\tn\n")

@@ -1,3 +1,5 @@
+"""Tests for parsers and report helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,8 +7,8 @@ import math
 
 import numpy as np
 
-from data_combination_pipeline.parsers import read_plklog, read_general2
-from data_combination_pipeline.reports import compare_plk, summarize_run
+from pleb.parsers import read_plklog, read_general2
+from pleb.reports import compare_plk, summarize_run
 
 
 def _write(path: Path, text: str) -> None:

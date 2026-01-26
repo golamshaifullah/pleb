@@ -1,7 +1,9 @@
+"""Integration tests for the QC pipeline."""
+
 import importlib.util
 import pytest
 
-from data_combination_pipeline.outlier_qc import PTAQCConfig, run_pta_qc_for_parfile
+from pleb.outlier_qc import PTAQCConfig, run_pta_qc_for_parfile
 
 def test_pta_qc_missing_dependency_errors(tmp_path):
     # If pta_qc is installed in this environment, skip (we can't run it without libstempo + real par/tim).

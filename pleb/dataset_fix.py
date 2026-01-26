@@ -1,3 +1,5 @@
+"""FixDataset utilities for cleaning and normalizing EPTA datasets."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,7 +14,7 @@ import pandas as pd
 
 from .logging_utils import get_logger
 
-logger = get_logger("data_combination_pipeline.dataset_fix")
+logger = get_logger("pleb.dataset_fix")
 
 
 # A pragmatic set of header/directive prefixes commonly seen in tempo2 .tim files.
@@ -87,15 +89,18 @@ class FixDatasetConfig:
 # -----------------------------
 
 def _cleanline(line: str) -> str:
+    """Normalize line endings and trailing spaces."""
     return line.rstrip("\n").rstrip(" ")
 
 
 def _is_comment_or_blank(line: str) -> bool:
+    """Return True if a line is blank or a comment."""
     s = line.strip()
     return (not s) or s.startswith(("C", "#"))
 
 
 def _is_directive(line: str) -> bool:
+    """Return True if a line is a tempo2 directive."""
     s = line.strip()
     if not s:
         return False
@@ -104,7 +109,14 @@ def _is_directive(line: str) -> bool:
 
 
 def is_toa_line(line: str) -> bool:
-    """Heuristic: a data line (TOA) in a .tim file."""
+    """Return True if a line appears to be a TOA data line.
+
+    Args:
+        line: Raw line from a .tim file.
+
+    Returns:
+        True if the line looks like a TOA record.
+    """
     if _is_comment_or_blank(line):
         return False
     if _is_directive(line):
@@ -114,6 +126,14 @@ def is_toa_line(line: str) -> bool:
 
 
 def count_toa_lines(timfile: Path) -> int:
+    """Count TOA lines in a .tim file.
+
+    Args:
+        timfile: Path to the .tim file.
+
+    Returns:
+        Number of lines that look like TOA records.
+    """
     n = 0
     if not timfile.exists():
         return 0
@@ -124,7 +144,14 @@ def count_toa_lines(timfile: Path) -> int:
 
 
 def parse_include_lines(alltim: Path) -> Set[str]:
-    """Return set of included relative paths (e.g., 'tims/foo.tim')"""
+    """Parse INCLUDE lines from an all.tim file.
+
+    Args:
+        alltim: Path to the ``<psr>_all.tim`` file.
+
+    Returns:
+        Set of included relative paths (e.g., ``"tims/foo.tim"``).
+    """
     inc: Set[str] = set()
     if not alltim.exists():
         return inc
@@ -140,7 +167,14 @@ def parse_include_lines(alltim: Path) -> Set[str]:
 
 
 def list_backend_timfiles(psr_dir: Path) -> List[Path]:
-    """List per-backend tim files under <psr>/tims/*.tim (excluding <psr>_all.tim)."""
+    """List per-backend tim files for a pulsar.
+
+    Args:
+        psr_dir: Pulsar directory containing ``tims/``.
+
+    Returns:
+        List of backend tim files under ``tims/``.
+    """
     tims_dir = psr_dir / "tims"
     if not tims_dir.exists():
         return []
@@ -155,6 +189,7 @@ def list_backend_timfiles(psr_dir: Path) -> List[Path]:
 
 
 def _backup_file(path: Path) -> None:
+    """Create a one-time backup of a file."""
     if not path.exists():
         return
     b = path.with_suffix(path.suffix + ".orig")
@@ -167,6 +202,16 @@ def update_alltim_includes(psr_dir: Path, min_toas: int = 10, apply: bool = Fals
     """Ensure <psr>_all.tim contains INCLUDE lines for each backend tim file.
 
     This is a refactor of insert_missing_timfiles/update_alltims from FixDataset.ipynb.
+
+    Args:
+        psr_dir: Pulsar directory.
+        min_toas: Minimum TOA count required to include a backend tim file.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary summarizing added/dropped includes.
     """
     psr = psr_dir.name
     alltim = psr_dir / f"{psr}_all.tim"
@@ -211,7 +256,15 @@ def update_alltim_includes(psr_dir: Path, min_toas: int = 10, apply: bool = Fals
 
 
 def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
-    """Collect unique values for a flag from TOA lines (e.g. flag='-sys')."""
+    """Collect unique values for a flag from TOA lines.
+
+    Args:
+        timfile: Path to the .tim file.
+        flag: Flag key (e.g., ``"-sys"``).
+
+    Returns:
+        Set of unique flag values seen in TOA lines.
+    """
     vals: Set[str] = set()
     if not timfile.exists():
         return vals
@@ -229,6 +282,16 @@ def ensure_timfile_flags(timfile: Path, required: Dict[str, str], apply: bool = 
     """Insert missing flags into TOA lines.
 
     Conservative behavior: only adds a flag if it is missing in that TOA line.
+
+    Args:
+        timfile: Path to the .tim file.
+        required: Mapping of flag keys to required values.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary summarizing changes.
     """
     if not timfile.exists():
         raise FileNotFoundError(str(timfile))
@@ -290,6 +353,20 @@ def update_parfile_jumps(
     """Ensure EPHEM/CLK/NE_SW values and append missing JUMP lines.
 
     Adapted from insert_missing_jumps/update_parfiles in FixDataset.ipynb.
+
+    Args:
+        parfile: Path to the .par file.
+        jump_flag: Flag used for JUMP insertion (e.g., ``"-sys"``).
+        jump_values: Sequence of jump flag values to ensure.
+        ensure_ephem: Optional EPHEM value to enforce.
+        ensure_clk: Optional CLK value to enforce.
+        ensure_ne_sw: Optional NE_SW value to enforce.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary summarizing changes.
     """
     if not parfile.exists():
         raise FileNotFoundError(str(parfile))
@@ -382,6 +459,17 @@ def remove_patterns_from_par_tim(
     """Remove lines containing any of the patterns from parfile and timfile.
 
     Adapted from remove_nuppi_big in FixDataset.ipynb.
+
+    Args:
+        parfile: Path to the .par file.
+        timfile: Path to the .tim file.
+        patterns: Sequence of substrings to remove.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary with counts of removed lines.
     """
     patterns = [p for p in patterns if p]
     if not patterns:
@@ -423,6 +511,7 @@ def remove_patterns_from_par_tim(
 # -----------------------------
 
 def _require_astropy():
+    """Import astropy or raise a helpful error."""
     try:
         from astropy.coordinates import SkyCoord  # noqa
         from astropy import units  # noqa
@@ -435,7 +524,18 @@ def _require_astropy():
 
 
 def equatorial_to_ecliptic_par(parfile: Path) -> Tuple[str, str, str, str, List[str]]:
-    """Return (ELONG, ELAT, PMELONG, PMELAT, original_lines)."""
+    """Convert equatorial coordinates in a .par file to ecliptic values.
+
+    Args:
+        parfile: Path to the .par file.
+
+    Returns:
+        Tuple ``(ELONG, ELAT, PMELONG, PMELAT, original_lines)``.
+
+    Raises:
+        RuntimeError: If astropy is not available.
+        ValueError: If required keys are missing.
+    """
     _require_astropy()
     from astropy.coordinates import SkyCoord
     from astropy import units
@@ -485,7 +585,18 @@ def equatorial_to_ecliptic_par(parfile: Path) -> Tuple[str, str, str, str, List[
 
 
 def ecliptic_to_equatorial_par(parfile: Path) -> Tuple[str, str, str, str, List[str]]:
-    """Return (RAJ, DECJ, PMRA, PMDEC, original_lines)."""
+    """Convert ecliptic coordinates in a .par file to equatorial values.
+
+    Args:
+        parfile: Path to the .par file.
+
+    Returns:
+        Tuple ``(RAJ, DECJ, PMRA, PMDEC, original_lines)``.
+
+    Raises:
+        RuntimeError: If astropy is not available.
+        ValueError: If required keys are missing.
+    """
     _require_astropy()
     from astropy.coordinates import SkyCoord
     from astropy import units
@@ -534,6 +645,16 @@ def convert_par_coordinates(parfile: Path, mode: str, apply: bool = False, backu
     """Convert a par file between equatorial (RAJ/DECJ) and ecliptic (ELONG/ELAT).
 
     mode: 'equ2ecl' or 'ecl2equ'
+
+    Args:
+        parfile: Path to the .par file.
+        mode: Conversion mode (``"equ2ecl"`` or ``"ecl2equ"``).
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary summarizing the conversion.
     """
     if mode not in {"equ2ecl", "ecl2equ"}:
         raise ValueError("mode must be 'equ2ecl' or 'ecl2equ'")
@@ -587,7 +708,15 @@ def convert_par_coordinates(parfile: Path, mode: str, apply: bool = False, backu
 # -----------------------------
 
 def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
-    """Apply (or report) dataset fixes for a single pulsar directory."""
+    """Apply or report dataset fixes for a single pulsar directory.
+
+    Args:
+        psr_dir: Pulsar directory containing .par/.tim files.
+        cfg: FixDataset configuration.
+
+    Returns:
+        Report dictionary with per-step results.
+    """
     psr = psr_dir.name
     parfile = psr_dir / f"{psr}.par"
     alltim = psr_dir / f"{psr}_all.tim"
@@ -707,7 +836,15 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
 
 
 def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
-    """Write a JSON-ish TSV summary and a detailed JSON file."""
+    """Write FixDataset reports to disk.
+
+    Args:
+        reports: List of per-pulsar report dictionaries.
+        out_dir: Output directory.
+
+    Returns:
+        Path to the detailed JSON report file.
+    """
     import json
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -778,6 +915,15 @@ def dedupe_timfile_toas(
 
     This is intentionally conservative: only exact duplicates on first 4 columns are removed.
     Directives/comments are preserved in place.
+
+    Args:
+        timfile: Path to the .tim file.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary summarizing removed duplicates.
     """
     if not timfile.exists():
         return {"timfile": str(timfile), "changed": False, "removed": 0}
@@ -825,6 +971,13 @@ def infer_and_apply_system_flags(
     """Infer -sys/-group/-pta using system_flag_inference and apply to the timfile.
 
     If backend cannot be inferred and no override exists, this records an error (and optionally raises).
+
+    Args:
+        timfile: Path to the .tim file.
+        cfg: FixDataset configuration.
+
+    Returns:
+        Stats dictionary summarizing applied flags and mapping table updates.
     """
     try:
         from .system_flag_inference import (
@@ -884,7 +1037,14 @@ def _timfile_signature(timfile: Path) -> str:
 
 
 def find_duplicate_backend_timfiles(timfiles: Sequence[Path]) -> List[List[Path]]:
-    """Find backend timfiles that contain exactly the same set of TOAs."""
+    """Find backend timfiles that contain exactly the same set of TOAs.
+
+    Args:
+        timfiles: Sequence of backend tim files.
+
+    Returns:
+        List of groups, each containing duplicate tim file paths.
+    """
     by_sig: Dict[str, List[Path]] = {}
     for t in timfiles:
         try:
@@ -905,6 +1065,16 @@ def remove_overlaps_exact(
     """Cheap overlap remover: for known overlapping backend pairs, comment out exact duplicate TOAs in 'drop' files.
 
     This will NOT attempt fuzzy time/freq matching; it only removes exact duplicates based on first 4 columns.
+
+    Args:
+        psr_dir: Pulsar directory.
+        overlap_map: Mapping of keep -> drop backend tim basenames.
+        apply: If True, write changes to disk.
+        backup: If True, create a backup before writing.
+        dry_run: If True, do not write but return planned changes.
+
+    Returns:
+        Stats dictionary summarizing commented duplicates.
     """
     tims_by_name = {t.name: t for t in list_backend_timfiles(psr_dir)}
     changed_files = []
@@ -954,6 +1124,3 @@ def remove_overlaps_exact(
                     drop.write_text("\\n".join(new_lines) + "\\n", encoding="utf-8")
 
     return {"changed_files": changed_files, "commented": int(total_commented)}
-
-
-
