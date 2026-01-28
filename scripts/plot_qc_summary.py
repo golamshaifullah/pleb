@@ -3,6 +3,7 @@
 
 Usage:
   python scripts/plot_qc_summary.py --csv out.csv --out summary.png
+  python scripts/plot_qc_summary.py --csv out.csv --out summary.png --feature-plots --feature-outdir summary_feats
 """
 
 from __future__ import annotations
@@ -72,6 +73,8 @@ def main() -> None:
     ap.add_argument("--alpha", type=float, default=0.3, help="Point alpha")
     ap.add_argument("--feature-ci", action="store_true", help="Plot confidence bands around feature splines")
     ap.add_argument("--ci-window", type=int, default=25, help="Rolling window for CI bands")
+    ap.add_argument("--feature-plots", action="store_true", help="Write residual-vs-feature summary plots")
+    ap.add_argument("--feature-outdir", default=None, help="Output directory for feature summary plots")
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)
@@ -170,6 +173,43 @@ def main() -> None:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(args.out, dpi=150)
     plt.close()
+
+    if args.feature_plots:
+        outdir = Path(args.feature_outdir) if args.feature_outdir else Path(args.out).parent
+        outdir.mkdir(parents=True, exist_ok=True)
+        feature_list = [
+            "orbital_phase",
+            "solar_elongation_deg",
+            "elevation_deg",
+            "parallactic_angle_deg",
+        ]
+        for feat in feature_list:
+            if feat not in df.columns:
+                continue
+            x = pd.to_numeric(df[feat], errors="coerce").to_numpy(dtype=float)
+            y = pd.to_numeric(df[resid_col], errors="coerce").to_numpy(dtype=float)
+            valid = np.isfinite(x) & np.isfinite(y)
+            if not np.any(valid):
+                continue
+            plt.figure(figsize=(7, 5))
+            for s in dict.fromkeys(systems):
+                mask = (systems == s) & (~outlier) & valid
+                if not mask.any():
+                    continue
+                marker, color = sys_map.get(s, ("o", "C0"))
+                plt.scatter(x[mask], y[mask], s=14, marker=marker, color=color, alpha=args.alpha, label=str(s))
+            if outlier.any():
+                mask = outlier & valid
+                if mask.any():
+                    plt.scatter(x[mask], y[mask], s=22, marker="x", color="grey", alpha=0.9, label="outliers")
+            plt.xlabel(feat)
+            plt.ylabel(resid_col)
+            plt.title(f"{Path(args.csv).name} | {feat}")
+            plt.legend(fontsize=7, ncol=2, frameon=False)
+            plt.tight_layout()
+            out_path = outdir / f"{Path(args.out).stem}_{feat}.png"
+            plt.savefig(out_path, dpi=150)
+            plt.close()
 
     print(f"Wrote summary plot to {args.out}")
 

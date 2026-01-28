@@ -38,14 +38,14 @@ pqc_add_elevation = true
 pqc_add_airmass = true
 pqc_add_parallactic_angle = true
 pqc_add_freq_bin = true
-pqc_freq_bins = 12
+pqc_freq_bins = 20
 
 pqc_structure_mode = "both"
 pqc_structure_detrend_features = ["solar_elongation_deg", "orbital_phase", "freq_bin"]
 pqc_structure_test_features = ["orbital_phase", "solar_elongation_deg", "freq_bin"]
 pqc_structure_nbins = 20
 pqc_structure_min_per_bin = 2
-pqc_structure_p_thresh = 0.05
+pqc_structure_p_thresh = 0.01
 pqc_structure_circular_features = ["orbital_phase"]
 pqc_structure_group_cols = ["sys"]
 
@@ -95,7 +95,7 @@ make_binary_analysis = true
 
 dpi = 150
 
-pqc_delta_chi2_thresh = 50.0
+pqc_delta_chi2_thresh = 500.0
 pqc_step_enabled = false
 pqc_step_min_points = 20
 pqc_step_delta_chi2_thresh = 25.0

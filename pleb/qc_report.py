@@ -155,9 +155,18 @@ def generate_qc_report(
 
         # Summary residual plot per pulsar
         summary_out = summary_root / f"{stem}_summary.png"
+        summary_feat_dir = summary_root / stem
         proc = _run_script(
             summary_script,
-            ["--csv", str(csv_path), "--out", str(summary_out), "--backend-col", str(backend_col)],
+            [
+                "--csv",
+                str(csv_path),
+                "--out",
+                str(summary_out),
+                "--backend-col",
+                str(backend_col),
+            ]
+            + ([] if no_feature_plots else ["--feature-plots", "--feature-outdir", str(summary_feat_dir)]),
             capture=True,
         )
         if proc.returncode != 0:
