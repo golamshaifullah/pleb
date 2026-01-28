@@ -57,6 +57,29 @@ class PipelineConfig:
         pqc_window_mult: Window multiplier for transient scan.
         pqc_min_points: Minimum points for transient scan.
         pqc_delta_chi2_thresh: Delta-chi2 threshold for transients.
+        pqc_add_orbital_phase: Add orbital-phase feature.
+        pqc_add_solar_elongation: Add solar elongation feature.
+        pqc_add_elevation: Add elevation feature.
+        pqc_add_airmass: Add airmass feature.
+        pqc_add_parallactic_angle: Add parallactic-angle feature.
+        pqc_add_freq_bin: Add frequency-bin feature.
+        pqc_freq_bins: Number of frequency bins if enabled.
+        pqc_observatory_path: Optional observatory file path.
+        pqc_structure_mode: Feature-structure mode (none/detrend/test/both).
+        pqc_structure_detrend_features: Features to detrend against.
+        pqc_structure_test_features: Features to test for structure.
+        pqc_structure_nbins: Bin count for structure tests.
+        pqc_structure_min_per_bin: Minimum points per bin.
+        pqc_structure_p_thresh: p-value threshold for structure detection.
+        pqc_structure_circular_features: Circular features in [0,1).
+        pqc_structure_group_cols: Grouping columns for structure tests.
+        qc_report: Generate pqc report artifacts after the run.
+        qc_report_backend_col: Backend column name for reports (optional).
+        qc_report_backend: Optional backend key to plot.
+        qc_report_dir: Output directory for reports (optional).
+        qc_report_no_plots: Skip transient plots in reports.
+        qc_report_structure_group_cols: Structure grouping override for reports.
+        qc_report_no_feature_plots: Skip feature plots in reports.
         run_fix_dataset: Enable FixDataset stage.
         make_binary_analysis: Enable binary analysis table.
         param_scan_typical: Enable typical param-scan profile.
@@ -79,6 +102,15 @@ class PipelineConfig:
         fix_ensure_ne_sw: Ensure NE_SW parameter exists.
         fix_remove_patterns: Patterns to remove from .par/.tim.
         fix_coord_convert: Optional coordinate conversion.
+        fix_qc_remove_outliers: Comment/delete TOAs flagged by pqc outputs.
+        fix_qc_action: Action for pqc outliers (comment/delete).
+        fix_qc_comment_prefix: Prefix for commented TOA lines.
+        fix_qc_backend_col: Backend column for pqc matching (if needed).
+        fix_qc_remove_bad: Act on bad/bad_day flags.
+        fix_qc_remove_transients: Act on transient flags.
+        fix_qc_merge_tol_days: MJD tolerance when matching TOAs.
+        fix_qc_results_dir: Directory containing pqc CSV outputs.
+        fix_qc_branch: Branch subdir for pqc CSV outputs.
         binary_only_models: Limit binary analysis to model names.
         dpi: Plot resolution.
         max_covmat_params: Max params in covariance heatmaps.
@@ -140,6 +172,41 @@ class PipelineConfig:
     pqc_min_points: int = 6
     pqc_delta_chi2_thresh: float = 25.0
 
+    pqc_step_enabled: bool = True
+    pqc_step_min_points: int = 20
+    pqc_step_delta_chi2_thresh: float = 25.0
+    pqc_step_scope: str = "both"
+
+    pqc_dm_step_enabled: bool = True
+    pqc_dm_step_min_points: int = 20
+    pqc_dm_step_delta_chi2_thresh: float = 25.0
+    pqc_dm_step_scope: str = "both"
+    pqc_add_orbital_phase: bool = True
+    pqc_add_solar_elongation: bool = True
+    pqc_add_elevation: bool = False
+    pqc_add_airmass: bool = False
+    pqc_add_parallactic_angle: bool = False
+    pqc_add_freq_bin: bool = False
+    pqc_freq_bins: int = 8
+    pqc_observatory_path: Optional[str] = None
+    pqc_structure_mode: str = "none"
+    pqc_structure_detrend_features: Optional[List[str]] = field(default_factory=lambda: ["solar_elongation_deg", "orbital_phase"])
+    pqc_structure_test_features: Optional[List[str]] = field(default_factory=lambda: ["solar_elongation_deg", "orbital_phase"])
+    pqc_structure_nbins: int = 12
+    pqc_structure_min_per_bin: int = 3
+    pqc_structure_p_thresh: float = 0.01
+    pqc_structure_circular_features: Optional[List[str]] = field(default_factory=lambda: ["orbital_phase"])
+    pqc_structure_group_cols: Optional[List[str]] = None
+
+    # Optional reporting for pqc outputs
+    qc_report: bool = False
+    qc_report_backend_col: Optional[str] = None
+    qc_report_backend: Optional[str] = None
+    qc_report_dir: Optional[Path] = None
+    qc_report_no_plots: bool = False
+    qc_report_structure_group_cols: Optional[str] = None
+    qc_report_no_feature_plots: bool = False
+
     # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
     run_fix_dataset: bool = False
     make_binary_analysis: bool = False
@@ -172,6 +239,17 @@ class PipelineConfig:
     fix_remove_patterns: List[str] = field(default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."])
     # "equatorial_to_ecliptic" or "ecliptic_to_equatorial"
     fix_coord_convert: Optional[str] = None
+
+    # ---- PQC outlier application (optional) ----
+    fix_qc_remove_outliers: bool = False
+    fix_qc_action: str = "comment"
+    fix_qc_comment_prefix: str = "C QC_OUTLIER"
+    fix_qc_backend_col: str = "sys"
+    fix_qc_remove_bad: bool = True
+    fix_qc_remove_transients: bool = False
+    fix_qc_merge_tol_days: float = 2.0 / 86400.0
+    fix_qc_results_dir: Optional[Path] = None
+    fix_qc_branch: Optional[str] = None
 
     # ---- Binary analysis settings ----
     binary_only_models: Optional[List[str]] = None
@@ -219,6 +297,10 @@ class PipelineConfig:
 
         c.singularity_image = c.singularity_image.expanduser().resolve()
         c.results_dir = c.results_dir.expanduser().resolve()
+        if c.qc_report_dir is not None:
+            c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
+        if c.fix_qc_results_dir is not None:
+            c.fix_qc_results_dir = Path(c.fix_qc_results_dir).expanduser().resolve()
         return c
 
     def to_dict(self) -> Dict[str, Any]:
@@ -232,6 +314,10 @@ class PipelineConfig:
         # serialize Paths
         for k in ("home_dir", "dataset_name", "singularity_image", "results_dir"):
             d[k] = str(d[k])
+        if d.get("qc_report_dir") is not None:
+            d["qc_report_dir"] = str(d["qc_report_dir"])
+        if d.get("fix_qc_results_dir") is not None:
+            d["fix_qc_results_dir"] = str(d["fix_qc_results_dir"])
         return d
 
     @staticmethod
@@ -257,6 +343,12 @@ class PipelineConfig:
             v = d.get(key)
             if v in (None, ""):
                 return None
+            return list(v)
+
+        def list_default(key: str, default: List[str]) -> List[str]:
+            v = d.get(key)
+            if v in (None, ""):
+                return list(default)
             return list(v)
 
         return PipelineConfig(
@@ -290,6 +382,38 @@ class PipelineConfig:
             pqc_window_mult=float(d.get("pqc_window_mult", 5.0)),
             pqc_min_points=int(d.get("pqc_min_points", 6)),
             pqc_delta_chi2_thresh=float(d.get("pqc_delta_chi2_thresh", 25.0)),
+            pqc_step_enabled=bool(d.get("pqc_step_enabled", True)),
+            pqc_step_min_points=int(d.get("pqc_step_min_points", 20)),
+            pqc_step_delta_chi2_thresh=float(d.get("pqc_step_delta_chi2_thresh", 25.0)),
+            pqc_step_scope=str(d.get("pqc_step_scope", "both")),
+            pqc_dm_step_enabled=bool(d.get("pqc_dm_step_enabled", True)),
+            pqc_dm_step_min_points=int(d.get("pqc_dm_step_min_points", 20)),
+            pqc_dm_step_delta_chi2_thresh=float(d.get("pqc_dm_step_delta_chi2_thresh", 25.0)),
+            pqc_dm_step_scope=str(d.get("pqc_dm_step_scope", "both")),
+            pqc_add_orbital_phase=bool(d.get("pqc_add_orbital_phase", True)),
+            pqc_add_solar_elongation=bool(d.get("pqc_add_solar_elongation", True)),
+            pqc_add_elevation=bool(d.get("pqc_add_elevation", False)),
+            pqc_add_airmass=bool(d.get("pqc_add_airmass", False)),
+            pqc_add_parallactic_angle=bool(d.get("pqc_add_parallactic_angle", False)),
+            pqc_add_freq_bin=bool(d.get("pqc_add_freq_bin", False)),
+            pqc_freq_bins=int(d.get("pqc_freq_bins", 8)),
+            pqc_observatory_path=opt_str("pqc_observatory_path"),
+            pqc_structure_mode=str(d.get("pqc_structure_mode", "none")),
+            pqc_structure_detrend_features=list_default("pqc_structure_detrend_features", ["solar_elongation_deg", "orbital_phase"]),
+            pqc_structure_test_features=list_default("pqc_structure_test_features", ["solar_elongation_deg", "orbital_phase"]),
+            pqc_structure_nbins=int(d.get("pqc_structure_nbins", 12)),
+            pqc_structure_min_per_bin=int(d.get("pqc_structure_min_per_bin", 3)),
+            pqc_structure_p_thresh=float(d.get("pqc_structure_p_thresh", 0.01)),
+            pqc_structure_circular_features=list_default("pqc_structure_circular_features", ["orbital_phase"]),
+            pqc_structure_group_cols=opt_list_str("pqc_structure_group_cols"),
+
+            qc_report=bool(d.get("qc_report", False)),
+            qc_report_backend_col=opt_str("qc_report_backend_col"),
+            qc_report_backend=opt_str("qc_report_backend"),
+            qc_report_dir=(Path(d["qc_report_dir"]) if d.get("qc_report_dir") else None),
+            qc_report_no_plots=bool(d.get("qc_report_no_plots", False)),
+            qc_report_structure_group_cols=opt_str("qc_report_structure_group_cols"),
+            qc_report_no_feature_plots=bool(d.get("qc_report_no_feature_plots", False)),
 
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),
@@ -315,6 +439,16 @@ class PipelineConfig:
             fix_ensure_ne_sw=opt_str("fix_ensure_ne_sw"),
             fix_remove_patterns=list(d.get("fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."])),
             fix_coord_convert=opt_str("fix_coord_convert"),
+
+            fix_qc_remove_outliers=bool(d.get("fix_qc_remove_outliers", False)),
+            fix_qc_action=str(d.get("fix_qc_action", "comment")),
+            fix_qc_comment_prefix=str(d.get("fix_qc_comment_prefix", "C QC_OUTLIER")),
+            fix_qc_backend_col=str(d.get("fix_qc_backend_col", "sys")),
+            fix_qc_remove_bad=bool(d.get("fix_qc_remove_bad", True)),
+            fix_qc_remove_transients=bool(d.get("fix_qc_remove_transients", False)),
+            fix_qc_merge_tol_days=float(d.get("fix_qc_merge_tol_days", 2.0 / 86400.0)),
+            fix_qc_results_dir=(Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None),
+            fix_qc_branch=opt_str("fix_qc_branch"),
 
             binary_only_models=opt_list_str("binary_only_models"),
 

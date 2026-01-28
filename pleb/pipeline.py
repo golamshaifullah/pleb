@@ -46,6 +46,7 @@ from .utils import discover_pulsars, make_output_tree, which_or_raise
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
 from .outlier_qc import PTAQCConfig, run_pqc_for_parfile_subprocess, summarize_pqc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
+from .qc_report import generate_qc_report
 
 logger = get_logger("pleb")
 
@@ -137,7 +138,7 @@ def _fix_cfg_fields() -> set[str]:
         return set(getattr(FixDatasetConfig, "__annotations__", {}).keys())
 
 
-def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
+def _build_fixdataset_config(cfg, *, apply: bool, qc_results_dir: Path | None = None, qc_branch: str | None = None) -> FixDatasetConfig:
     """Create a :class:`FixDatasetConfig` from a :class:`PipelineConfig`.
 
     Args:
@@ -198,6 +199,7 @@ def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
             prune_small_system_toas=bool(_cfg_get(cfg, "fix_prune_small_system_toas", False)),
             prune_small_system_flag=str(_cfg_get(cfg, "fix_prune_small_system_flag", "-sys") or "-sys"),
             qc_remove_outliers=bool(_cfg_get(cfg, "fix_qc_remove_outliers", False)),
+            qc_action=str(_cfg_get(cfg, "fix_qc_action", "comment") or "comment"),
             qc_backend_col=str(_cfg_get(cfg, "fix_qc_backend_col", "sys") or "sys"),
             qc_comment_prefix=str(_cfg_get(cfg, "fix_qc_comment_prefix", "C QC_OUTLIER") or "C QC_OUTLIER"),
             qc_remove_bad=bool(_cfg_get(cfg, "fix_qc_remove_bad", True)),
@@ -211,6 +213,8 @@ def _build_fixdataset_config(cfg, *, apply: bool) -> FixDatasetConfig:
             qc_tr_delta_chi2_thresh=float(_cfg_get(cfg, "fix_qc_tr_delta_chi2_thresh", 25.0) or 25.0),
             qc_tr_suppress_overlap=bool(_cfg_get(cfg, "fix_qc_tr_suppress_overlap", True)),
             qc_merge_tol_days=float(_cfg_get(cfg, "fix_qc_merge_tol_days", 2.0 / 86400.0) or (2.0 / 86400.0)),
+            qc_results_dir=(qc_results_dir if qc_results_dir is not None else _cfg_get(cfg, "fix_qc_results_dir", None)),
+            qc_branch=(qc_branch if qc_branch is not None else _cfg_get(cfg, "fix_qc_branch", None)),
         )
     )
 
@@ -247,7 +251,7 @@ def _apply_fixdataset_and_commit(
 
     repo.git.checkout("-b", new_branch)
 
-    fcfg = _build_fixdataset_config(cfg, apply=True)
+    fcfg = _build_fixdataset_config(cfg, apply=True, qc_results_dir=out_paths.get("qc"), qc_branch=new_branch)
 
     reports = []
     for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
@@ -434,7 +438,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             checkout(repo, branch)
 
             # Forced fix_dataset reporting per branch (report-only; never modifies the repo in this loop)
-            fcfg = _build_fixdataset_config(cfg, apply=False)
+            fcfg = _build_fixdataset_config(cfg, apply=False, qc_results_dir=out_paths.get("qc"), qc_branch=branch)
             reports = []
             if run_fix_dataset:
                 for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
@@ -502,6 +506,30 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     window_mult=float(getattr(cfg, "pqc_window_mult", 5.0)),
                     min_points=int(getattr(cfg, "pqc_min_points", 6)),
                     delta_chi2_thresh=float(getattr(cfg, "pqc_delta_chi2_thresh", 25.0)),
+                    step_enabled=bool(getattr(cfg, "pqc_step_enabled", True)),
+                    step_min_points=int(getattr(cfg, "pqc_step_min_points", 20)),
+                    step_delta_chi2_thresh=float(getattr(cfg, "pqc_step_delta_chi2_thresh", 25.0)),
+                    step_scope=str(getattr(cfg, "pqc_step_scope", "both")),
+                    dm_step_enabled=bool(getattr(cfg, "pqc_dm_step_enabled", True)),
+                    dm_step_min_points=int(getattr(cfg, "pqc_dm_step_min_points", 20)),
+                    dm_step_delta_chi2_thresh=float(getattr(cfg, "pqc_dm_step_delta_chi2_thresh", 25.0)),
+                    dm_step_scope=str(getattr(cfg, "pqc_dm_step_scope", "both")),
+                    add_orbital_phase=bool(getattr(cfg, "pqc_add_orbital_phase", True)),
+                    add_solar_elongation=bool(getattr(cfg, "pqc_add_solar_elongation", True)),
+                    add_elevation=bool(getattr(cfg, "pqc_add_elevation", False)),
+                    add_airmass=bool(getattr(cfg, "pqc_add_airmass", False)),
+                    add_parallactic_angle=bool(getattr(cfg, "pqc_add_parallactic_angle", False)),
+                    add_freq_bin=bool(getattr(cfg, "pqc_add_freq_bin", False)),
+                    freq_bins=int(getattr(cfg, "pqc_freq_bins", 8)),
+                    observatory_path=getattr(cfg, "pqc_observatory_path", None),
+                    structure_mode=str(getattr(cfg, "pqc_structure_mode", "none")),
+                    structure_detrend_features=getattr(cfg, "pqc_structure_detrend_features", None),
+                    structure_test_features=getattr(cfg, "pqc_structure_test_features", None),
+                    structure_nbins=int(getattr(cfg, "pqc_structure_nbins", 12)),
+                    structure_min_per_bin=int(getattr(cfg, "pqc_structure_min_per_bin", 3)),
+                    structure_p_thresh=float(getattr(cfg, "pqc_structure_p_thresh", 0.01)),
+                    structure_circular_features=getattr(cfg, "pqc_structure_circular_features", None),
+                    structure_group_cols=getattr(cfg, "pqc_structure_group_cols", None),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
@@ -567,6 +595,31 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         if getattr(cfg, "run_pqc", False) and qc_rows:
             dfq = pd.DataFrame(qc_rows)
             dfq.to_csv(out_paths["qc"] / "qc_summary.tsv", sep="\t", index=False)
+
+        if getattr(cfg, "qc_report", False):
+            try:
+                backend_col = str(
+                    getattr(cfg, "qc_report_backend_col", None)
+                    or getattr(cfg, "pqc_backend_col", "group")
+                    or "group"
+                )
+                report_dir = None
+                if getattr(cfg, "qc_report_dir", None):
+                    report_dir = Path(cfg.qc_report_dir)
+                    if not report_dir.is_absolute():
+                        report_dir = out_paths["tag"] / report_dir
+                report_dir = generate_qc_report(
+                    run_dir=out_paths["tag"],
+                    backend_col=backend_col,
+                    backend=(str(cfg.qc_report_backend) if getattr(cfg, "qc_report_backend", None) else None),
+                    report_dir=report_dir,
+                    no_plots=bool(getattr(cfg, "qc_report_no_plots", False)),
+                    structure_group_cols=(str(cfg.qc_report_structure_group_cols) if getattr(cfg, "qc_report_structure_group_cols", None) else None),
+                    no_feature_plots=bool(getattr(cfg, "qc_report_no_feature_plots", False)),
+                )
+                logger.info("QC report written to: %s", report_dir)
+            except Exception as e:
+                logger.warning("QC report generation failed: %s", e)
 
         logger.info("Pipeline complete.")
         return out_paths

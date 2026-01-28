@@ -13,7 +13,6 @@ import os
 import sys
 import json
 import tempfile
-from pathlib import Path
 
 try:
     import tomllib  # py3.11+
@@ -25,6 +24,7 @@ from tomlkit import document, table, dumps as toml_dumps
 from .config import PipelineConfig
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
+from .qc_report import generate_qc_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,6 +46,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--qc", action="store_true", help="Run optional pqc outlier detection (requires pqc + libstempo).")
     p.add_argument("--qc-backend-col", default=None, help="Backend grouping column for pqc (default from config: group).")
     p.add_argument("--qc-drop-unmatched", action="store_true", help="Drop TOAs unmatched to tim metadata in pqc.")
+    p.add_argument("--qc-add-orbital-phase", action="store_true", help="Enable pqc orbital-phase feature extraction.")
+    p.add_argument("--qc-no-orbital-phase", action="store_true", help="Disable pqc orbital-phase feature extraction.")
+    p.add_argument("--qc-add-solar-elongation", action="store_true", help="Enable pqc solar-elongation feature extraction.")
+    p.add_argument("--qc-no-solar-elongation", action="store_true", help="Disable pqc solar-elongation feature extraction.")
+    p.add_argument("--qc-add-elevation", action="store_true", help="Enable pqc elevation feature extraction.")
+    p.add_argument("--qc-add-airmass", action="store_true", help="Enable pqc airmass feature extraction.")
+    p.add_argument("--qc-add-parallactic-angle", action="store_true", help="Enable pqc parallactic-angle feature extraction.")
+    p.add_argument("--qc-add-freq-bin", action="store_true", help="Enable pqc frequency-bin feature extraction.")
+    p.add_argument("--qc-freq-bins", type=int, default=None, help="Number of pqc frequency bins if enabled.")
+    p.add_argument("--qc-observatory-path", type=Path, default=None, help="Observatory file path for pqc alt/az features.")
+    p.add_argument("--qc-structure-mode", default=None, help="pqc structure mode: none/detrend/test/both.")
+    p.add_argument("--qc-structure-detrend-features", default=None, help="Comma-separated feature columns to detrend against.")
+    p.add_argument("--qc-structure-test-features", default=None, help="Comma-separated feature columns to test for structure.")
+    p.add_argument("--qc-structure-circular-features", default=None, help="Comma-separated circular feature columns.")
+    p.add_argument("--qc-structure-nbins", type=int, default=None, help="Number of bins for pqc structure tests.")
+    p.add_argument("--qc-structure-min-per-bin", type=int, default=None, help="Minimum points per bin for structure tests.")
+    p.add_argument("--qc-structure-p-thresh", type=float, default=None, help="p-value threshold for structure detection.")
+    p.add_argument("--qc-structure-group-cols", default=None, help="Comma-separated grouping columns for structure tests.")
 
     # Param scan (fit-only): run baseline + candidate .par variants and compare via Δχ² / Wald z.
     p.add_argument("--param-scan", action="store_true", help="Run a parameter scan (fit-only) instead of the full pipeline.")
@@ -109,6 +127,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     return p
 
+
+def build_qc_report_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for qc-report."""
+    p = argparse.ArgumentParser(description="Generate PQC report summaries and plots from a run directory.")
+    p.add_argument("qc_report", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument("--run-dir", type=Path, required=True, help="Run directory containing qc outputs.")
+    p.add_argument("--backend-col", default="group", help="Backend column name (default: group).")
+    p.add_argument("--backend", default=None, help="Optional: filter plots to a single backend key.")
+    p.add_argument("--structure-group-cols", default=None, help="Comma-separated group columns; use ; for multiple groupings.")
+    p.add_argument("--no-feature-plots", action="store_true", help="Skip feature (e.g., orbital phase/solar) plots.")
+    p.add_argument("--report-dir", type=Path, default=None, help="Output directory for report artifacts (default: <run-dir>/qc_report).")
+    p.add_argument("--no-plots", action="store_true", help="Skip transient plot generation.")
+    return p
+
+
+def run_qc_report(argv: list[str] | None) -> int:
+    """Generate QC diagnostics and plots for all pqc CSVs in a run directory."""
+    args = build_qc_report_parser().parse_args(argv)
+    report_dir = generate_qc_report(
+        run_dir=Path(args.run_dir),
+        backend_col=str(args.backend_col),
+        backend=(str(args.backend) if args.backend is not None else None),
+        report_dir=(Path(args.report_dir) if args.report_dir else None),
+        no_plots=bool(args.no_plots),
+        structure_group_cols=(str(args.structure_group_cols) if args.structure_group_cols else None),
+        no_feature_plots=bool(args.no_feature_plots),
+    )
+    print(str(report_dir))
+    return 0
+
 def _parse_value_as_toml_literal(raw: str):
     """Parse a TOML literal from a CLI override.
 
@@ -128,6 +176,14 @@ def _parse_value_as_toml_literal(raw: str):
     except Exception:
         # fallback string (strip surrounding quotes if user provided them badly)
         return raw
+
+
+def _parse_csv_list(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    items = [p.strip() for p in str(raw).split(",")]
+    items = [p for p in items if p]
+    return items or None
 
 def _set_dotted_key(d: dict, key: str, value):
     """Set a nested value in a dict using dotted-key notation.
@@ -220,6 +276,10 @@ def main(argv=None) -> int:
     Returns:
         Process exit code.
     """
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "qc-report":
+        return run_qc_report(argv)
     args = build_parser().parse_args(argv)
 
     cfg = PipelineConfig.load(args.config)
@@ -266,6 +326,42 @@ def main(argv=None) -> int:
         cfg.pqc_backend_col = str(args.qc_backend_col)
     if getattr(args, 'qc_drop_unmatched', False):
         cfg.pqc_drop_unmatched = True
+    if getattr(args, 'qc_add_orbital_phase', False):
+        cfg.pqc_add_orbital_phase = True
+    if getattr(args, 'qc_no_orbital_phase', False):
+        cfg.pqc_add_orbital_phase = False
+    if getattr(args, 'qc_add_solar_elongation', False):
+        cfg.pqc_add_solar_elongation = True
+    if getattr(args, 'qc_no_solar_elongation', False):
+        cfg.pqc_add_solar_elongation = False
+    if getattr(args, 'qc_add_elevation', False):
+        cfg.pqc_add_elevation = True
+    if getattr(args, 'qc_add_airmass', False):
+        cfg.pqc_add_airmass = True
+    if getattr(args, 'qc_add_parallactic_angle', False):
+        cfg.pqc_add_parallactic_angle = True
+    if getattr(args, 'qc_add_freq_bin', False):
+        cfg.pqc_add_freq_bin = True
+    if getattr(args, 'qc_freq_bins', None) is not None:
+        cfg.pqc_freq_bins = int(args.qc_freq_bins)
+    if getattr(args, 'qc_observatory_path', None) is not None:
+        cfg.pqc_observatory_path = str(args.qc_observatory_path)
+    if getattr(args, 'qc_structure_mode', None):
+        cfg.pqc_structure_mode = str(args.qc_structure_mode)
+    if getattr(args, 'qc_structure_detrend_features', None):
+        cfg.pqc_structure_detrend_features = _parse_csv_list(args.qc_structure_detrend_features)
+    if getattr(args, 'qc_structure_test_features', None):
+        cfg.pqc_structure_test_features = _parse_csv_list(args.qc_structure_test_features)
+    if getattr(args, 'qc_structure_circular_features', None):
+        cfg.pqc_structure_circular_features = _parse_csv_list(args.qc_structure_circular_features)
+    if getattr(args, 'qc_structure_nbins', None) is not None:
+        cfg.pqc_structure_nbins = int(args.qc_structure_nbins)
+    if getattr(args, 'qc_structure_min_per_bin', None) is not None:
+        cfg.pqc_structure_min_per_bin = int(args.qc_structure_min_per_bin)
+    if getattr(args, 'qc_structure_p_thresh', None) is not None:
+        cfg.pqc_structure_p_thresh = float(args.qc_structure_p_thresh)
+    if getattr(args, 'qc_structure_group_cols', None):
+        cfg.pqc_structure_group_cols = _parse_csv_list(args.qc_structure_group_cols)
 
     if args.fix_dataset:
         cfg.run_fix_dataset = True

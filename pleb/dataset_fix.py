@@ -83,6 +83,17 @@ class FixDatasetConfig:
     # None | "equ2ecl" | "ecl2equ"
     coord_convert: Optional[str] = None
 
+    # ---- Optional PQC-driven TOA removal/commenting ----
+    qc_remove_outliers: bool = False
+    qc_action: str = "comment"  # "comment" | "delete"
+    qc_comment_prefix: str = "C QC_OUTLIER"
+    qc_backend_col: str = "sys"
+    qc_remove_bad: bool = True
+    qc_remove_transients: bool = False
+    qc_merge_tol_days: float = 2.0 / 86400.0
+    qc_results_dir: Optional[Path] = None
+    qc_branch: Optional[str] = None
+
 
 # -----------------------------
 # tim file helpers
@@ -447,6 +458,159 @@ def update_parfile_jumps(
 
     return {"parfile": str(parfile), "changed": True, "missing_jumps": missing}
 
+
+
+
+# -----------------------------
+# PQC outlier application (optional)
+# -----------------------------
+
+def _mjd_from_toa_line(line: str, time_offset_sec: float = 0.0) -> Optional[float]:
+    """Parse an MJD from a TOA line, applying TIME offset (seconds)."""
+    if not is_toa_line(line):
+        return None
+    parts = line.strip().split()
+    if len(parts) < 3:
+        return None
+    try:
+        mjd = float(parts[2])
+    except Exception:
+        return None
+    return mjd + (float(time_offset_sec) / 86400.0)
+
+
+def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
+    if cfg.qc_results_dir is None:
+        return None
+    base = Path(cfg.qc_results_dir)
+    if cfg.qc_branch:
+        cand = base / str(cfg.qc_branch) / f"{psr}_qc.csv"
+        if cand.exists():
+            return cand
+    matches = sorted(base.rglob(f"{psr}_qc.csv"))
+    if not matches:
+        return None
+    return matches[0]
+
+
+def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[Optional[str], list[float]]:
+    mask = np.zeros(len(df), dtype=bool)
+    if cfg.qc_remove_bad:
+        for col in ("bad", "bad_day"):
+            if col in df.columns:
+                mask |= df[col].fillna(False).astype(bool).to_numpy()
+    if cfg.qc_remove_transients and "transient_id" in df.columns:
+        mask |= df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
+
+    if not mask.any():
+        return {}
+
+    if "_timfile" in df.columns:
+        out: Dict[Optional[str], list[float]] = {}
+        for timfile, sub in df.loc[mask, ["_timfile", "mjd"]].groupby("_timfile"):
+            out[str(timfile)] = [float(x) for x in sub["mjd"].to_numpy()]
+        return out
+
+    return {None: [float(x) for x in df.loc[mask, "mjd"].to_numpy()]}
+
+
+def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    """Comment out or delete TOAs based on pqc outputs for this pulsar."""
+    psr = psr_dir.name
+    qc_csv = _find_qc_csv(psr, cfg)
+    if qc_csv is None:
+        return {"pulsar": psr, "qc_csv": None, "matched": 0, "changed": False}
+
+    try:
+        df = pd.read_csv(qc_csv)
+    except Exception as e:
+        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": str(e)}
+
+    mjd_map = _collect_qc_mjds(df, cfg)
+    if not mjd_map:
+        return {"pulsar": psr, "qc_csv": str(qc_csv), "matched": 0, "changed": False}
+
+    action = str(cfg.qc_action or "comment").strip().lower()
+    if action not in {"comment", "delete"}:
+        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_action: {cfg.qc_action}"}
+
+    tol = float(cfg.qc_merge_tol_days or (2.0 / 86400.0))
+    comment_prefix = str(cfg.qc_comment_prefix or "C QC_OUTLIER").strip()
+
+    tims = list_backend_timfiles(psr_dir)
+    total_matched = 0
+    changed_files = 0
+    file_reports: list[Dict[str, object]] = []
+
+    for tim in tims:
+        key = tim.name
+        if (key not in mjd_map) and (None not in mjd_map):
+            continue
+        target_mjds = np.asarray(mjd_map.get(key, mjd_map.get(None, [])), dtype=float)
+        if target_mjds.size == 0:
+            continue
+
+        lines = tim.read_text(encoding="utf-8", errors="ignore").splitlines()
+        new_lines: list[str] = []
+        removed = 0
+        commented = 0
+        time_offset_sec = 0.0
+
+        for raw in lines:
+            s = raw.strip()
+            if s.startswith("TIME"):
+                parts = s.split()
+                if len(parts) >= 2:
+                    try:
+                        time_offset_sec = float(parts[1])
+                    except Exception:
+                        pass
+                new_lines.append(raw)
+                continue
+
+            mjd = _mjd_from_toa_line(raw, time_offset_sec=time_offset_sec)
+            if mjd is None:
+                new_lines.append(raw)
+                continue
+
+            if np.any(np.abs(target_mjds - mjd) <= tol):
+                total_matched += 1
+                if action == "delete":
+                    removed += 1
+                    continue
+                if comment_prefix and raw.lstrip().startswith(comment_prefix):
+                    new_lines.append(raw)
+                else:
+                    new_lines.append(f"{comment_prefix} {raw}" if comment_prefix else raw)
+                    commented += 1
+                continue
+
+            new_lines.append(raw)
+
+        changed = (removed + commented) > 0
+        file_reports.append(
+            {
+                "timfile": str(tim),
+                "removed": int(removed),
+                "commented": int(commented),
+                "changed": bool(changed),
+            }
+        )
+
+        if changed:
+            changed_files += 1
+            if cfg.apply and not cfg.dry_run:
+                if cfg.backup:
+                    _backup_file(tim)
+                tim.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+    return {
+        "pulsar": psr,
+        "qc_csv": str(qc_csv),
+        "matched": int(total_matched),
+        "changed_files": int(changed_files),
+        "files": file_reports,
+    }
 
 def remove_patterns_from_par_tim(
     parfile: Path,
@@ -831,6 +995,13 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             dry_run=cfg.dry_run,
         )
         report["steps"].append({"coord_convert": rep})
+
+    if cfg.qc_remove_outliers:
+        try:
+            rep = apply_pqc_outliers(psr_dir, cfg)
+        except Exception as e:
+            rep = {"error": str(e)}
+        report["steps"].append({"qc_outliers": rep})
 
     return report
 

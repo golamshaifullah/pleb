@@ -44,6 +44,38 @@ class PTAQCConfig:
     delta_chi2_thresh: float = 25.0
     suppress_overlap: bool = True
 
+    # Step-change detection (global + per-backend)
+    step_enabled: bool = True
+    step_min_points: int = 20
+    step_delta_chi2_thresh: float = 25.0
+    step_scope: str = "both"
+
+    # DM-like step detection (freq-scaled)
+    dm_step_enabled: bool = True
+    dm_step_min_points: int = 20
+    dm_step_delta_chi2_thresh: float = 25.0
+    dm_step_scope: str = "both"
+
+    # Feature extraction
+    add_orbital_phase: bool = True
+    add_solar_elongation: bool = True
+    add_elevation: bool = False
+    add_airmass: bool = False
+    add_parallactic_angle: bool = False
+    add_freq_bin: bool = False
+    freq_bins: int = 8
+    observatory_path: str | None = None
+
+    # Feature-structure diagnostics/detrending
+    structure_mode: str = "none"
+    structure_detrend_features: list[str] | None = None
+    structure_test_features: list[str] | None = None
+    structure_nbins: int = 12
+    structure_min_per_bin: int = 3
+    structure_p_thresh: float = 0.01
+    structure_circular_features: list[str] | None = None
+    structure_group_cols: list[str] | None = None
+
 
 @contextmanager
 def _pushd(path: Path):
@@ -78,7 +110,13 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
 
     try:
         from pqc.pipeline import run_pipeline as qc_run  # type: ignore
-        from pqc.config import BadMeasConfig, TransientConfig, MergeConfig  # type: ignore
+        from pqc.config import (  # type: ignore
+            BadMeasConfig,
+            FeatureConfig,
+            MergeConfig,
+            StructureConfig,
+            TransientConfig,
+        )
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
             "pqc is not installed (or failed to import). Install your outlier package first, then rerun with run_pqc=true. "
@@ -98,6 +136,39 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         delta_chi2_thresh=float(cfg.delta_chi2_thresh),
         suppress_overlap=bool(cfg.suppress_overlap),
     )
+    feature_cfg = FeatureConfig(
+        add_orbital_phase=bool(cfg.add_orbital_phase),
+        add_solar_elongation=bool(cfg.add_solar_elongation),
+        add_elevation=bool(cfg.add_elevation),
+        add_airmass=bool(cfg.add_airmass),
+        add_parallactic_angle=bool(cfg.add_parallactic_angle),
+        add_freq_bin=bool(cfg.add_freq_bin),
+        freq_bins=int(cfg.freq_bins),
+        observatory_path=(str(cfg.observatory_path) if cfg.observatory_path else None),
+    )
+    struct_cfg = StructureConfig(
+        mode=str(cfg.structure_mode),
+        detrend_features=tuple(cfg.structure_detrend_features) if cfg.structure_detrend_features else StructureConfig().detrend_features,
+        structure_features=tuple(cfg.structure_test_features) if cfg.structure_test_features else StructureConfig().structure_features,
+        nbins=int(cfg.structure_nbins),
+        min_per_bin=int(cfg.structure_min_per_bin),
+        p_thresh=float(cfg.structure_p_thresh),
+        circular_features=tuple(cfg.structure_circular_features) if cfg.structure_circular_features else StructureConfig().circular_features,
+        structure_group_cols=tuple(cfg.structure_group_cols) if cfg.structure_group_cols else None,
+    )
+
+    step_cfg = StepConfig(
+        enabled=bool(cfg.step_enabled),
+        min_points=int(cfg.step_min_points),
+        delta_chi2_thresh=float(cfg.step_delta_chi2_thresh),
+        scope=str(cfg.step_scope),
+    )
+    dm_cfg = StepConfig(
+        enabled=bool(cfg.dm_step_enabled),
+        min_points=int(cfg.dm_step_min_points),
+        delta_chi2_thresh=float(cfg.dm_step_delta_chi2_thresh),
+        scope=str(cfg.dm_step_scope),
+    )
 
     # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
     with _pushd(out_csv.parent):
@@ -107,6 +178,10 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             bad_cfg=bad_cfg,
             tr_cfg=tr_cfg,
             merge_cfg=merge_cfg,
+            feature_cfg=feature_cfg,
+            struct_cfg=struct_cfg,
+            step_cfg=step_cfg,
+            dm_cfg=dm_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
         )
 
@@ -165,7 +240,9 @@ def run_pqc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCConfi
     if not out_csv.exists():
         raise RuntimeError("pqc subprocess completed but output CSV was not created.")
 
-    return pd.read_csv(out_csv)
+    string_cols = ["be", "fe", "f", "tmplt", "flag", "B", "g", "h"]
+    dtype_map = {c: "string" for c in string_cols}
+    return pd.read_csv(out_csv, dtype=dtype_map)
 
 
 def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
