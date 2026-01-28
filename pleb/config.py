@@ -181,6 +181,10 @@ class PipelineConfig:
     pqc_dm_step_min_points: int = 20
     pqc_dm_step_delta_chi2_thresh: float = 25.0
     pqc_dm_step_scope: str = "both"
+
+    pqc_robust_enabled: bool = True
+    pqc_robust_z_thresh: float = 5.0
+    pqc_robust_scope: str = "both"
     pqc_add_orbital_phase: bool = True
     pqc_add_solar_elongation: bool = True
     pqc_add_elevation: bool = False

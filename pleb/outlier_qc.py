@@ -56,6 +56,11 @@ class PTAQCConfig:
     dm_step_delta_chi2_thresh: float = 25.0
     dm_step_scope: str = "both"
 
+    # Robust (MAD-based) outliers
+    robust_enabled: bool = True
+    robust_z_thresh: float = 5.0
+    robust_scope: str = "both"
+
     # Feature extraction
     add_orbital_phase: bool = True
     add_solar_elongation: bool = True
@@ -116,7 +121,11 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             MergeConfig,
             StructureConfig,
             TransientConfig,
+            StepConfig, RobustOutlierConfig,
         )
+        # Sanity check: ensure pqc config classes are importable
+        _ = (BadMeasConfig, FeatureConfig, MergeConfig, StructureConfig, TransientConfig, StepConfig, RobustOutlierConfig)
+        logger.info("pqc config classes loaded: %s", ",".join([c.__name__ for c in _]))
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
             "pqc is not installed (or failed to import). Install your outlier package first, then rerun with run_pqc=true. "
@@ -169,6 +178,11 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         delta_chi2_thresh=float(cfg.dm_step_delta_chi2_thresh),
         scope=str(cfg.dm_step_scope),
     )
+    robust_cfg = RobustOutlierConfig(
+        enabled=bool(cfg.robust_enabled),
+        z_thresh=float(cfg.robust_z_thresh),
+        scope=str(cfg.robust_scope),
+    )
 
     # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
     with _pushd(out_csv.parent):
@@ -182,6 +196,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             struct_cfg=struct_cfg,
             step_cfg=step_cfg,
             dm_cfg=dm_cfg,
+            robust_cfg=robust_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
         )
 

@@ -1,0 +1,85 @@
+# Force-everything pipeline run + apply FixDataset on a new branch and commit .par/.tim
+#
+# IMPORTANT:
+#  - Every path string MUST be quoted in TOML (otherwise tomllib will throw "Invalid value").
+#  - Edit the 4 path-ish fields below to match your checkout + container + output directory.
+
+home_dir = "/ABS/PATH/TO/EPTA_data_processing_pipeline"      # repo root (git working tree)
+dataset_name = "DATASET_DIRNAME_OR_REL_PATH"                # e.g. "datasets/EPTA_DR2" (relative to home_dir)
+singularity_image = "/ABS/PATH/TO/tempo2_container.sif"     # your tempo2 container (.sif/.simg)
+results_dir = "/ABS/PATH/TO/output_dir"                     # where plots/reports go
+
+outdir_name = "run_fixdataset_all_fixes"
+pulsars = "ALL"
+
+# Branch workflow:
+#  - base branch: where you start (usually main/master)
+#  - fix branch: created from base, fixes applied + committed, then pipeline runs on both branches
+branches = ["main", "fixdataset_all_fixes"]
+reference_branch = "main"
+make_change_reports = true
+
+# Tempo2 / pipeline execution
+run_tempo2 = true
+force_rerun = true
+jobs = 8
+epoch = "auto"   # if your PipelineConfig expects an int/MJD, replace with e.g. "58000"
+
+# ---- FixDataset: APPLY + COMMIT ----
+# This is the switch that actually creates the new branch and commits .par/.tim changes.
+fix_apply = true
+fix_branch_name = "fixdataset_all_fixes"
+fix_base_branch = "main"
+fix_commit_message = "FixDataset: apply all automated fixes"
+
+# Keep the repo clean during branch switching (no *.orig files)
+fix_backup = false
+fix_dry_run = false
+
+# ---- FixDataset options: turn on every safe fix step ----
+# 1) Remove known-bad backend strings in *.par and *_all.tim (default patterns shown)
+fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
+
+# 2) Ensure *_all.tim includes every per-backend tim under <psr>/tims/ (dropping tiny ones)
+fix_update_alltim_includes = true
+fix_min_toas_per_backend_tim = 10
+
+# 3) TIM hygiene
+fix_dedupe_toas_within_tim = true
+fix_check_duplicate_backend_tims = true
+fix_remove_overlaps_exact = true
+
+# 4) Ensure minimal required flags exist on every TOA line (adds only if missing)
+#    (Keep this conservative; -sys/-group inference handles the smart stuff.)
+fix_required_tim_flags = { "-pta" = "EPTA" }
+
+# 5) Smart system flag inference (-sys/-group/-pta), and overwrite existing values
+fix_infer_system_flags = true
+fix_system_flag_overwrite_existing = true
+fix_raise_on_backend_missing = false
+# If you have oddball tim basenames that don’t map cleanly, override them here:
+# fix_backend_overrides = { "some_backend.tim" = "BACKEND_NAME" }
+
+# 6) Parfile maintenance: ensure JUMPs exist for every unique -sys value across tims
+fix_insert_missing_jumps = true
+fix_jump_flag = "-sys"
+
+# Optional (only set these if you actually want to enforce them globally):
+# fix_ensure_ephem = "DE440"
+# fix_ensure_clk = "TT(BIPM2021)"
+# fix_ensure_ne_sw = "0"
+
+# Coordinate conversion is risky to "force" blindly; enable only if you know your parfiles' frame.
+# Allowed: "equ2ecl" or "ecl2equ"
+# fix_coord_convert = "ecl2equ"
+
+# ---- Optional reports / plots ----
+make_toa_coverage_plots = true
+make_outlier_reports = true
+make_covariance_heatmaps = true
+make_residual_plots = true
+make_binary_analysis = true
+
+dpi = 150
+max_covmat_params = 60
+binary_only_models = []  # e.g. ["ELL1","BTX"] to filter
