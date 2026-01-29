@@ -16,7 +16,7 @@ extensions = [
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 
-autosummary_generate = True
+autosummary_generate = False
 autosummary_imported_members = False
 
 autodoc_typehints = "description"
@@ -27,3 +27,5 @@ autodoc_default_options = {
     "show-inheritance": True,
     "imported-members": False,
 }
+
+exclude_patterns = ["_build", "_autosummary"]
