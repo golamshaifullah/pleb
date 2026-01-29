@@ -50,6 +50,7 @@ pqc_structure_circular_features = ["orbital_phase"]
 pqc_structure_group_cols = ["sys"]
 pqc_outlier_gate_enabled = true
 pqc_outlier_gate_sigma = 3.0
+pqc_event_instrument = true
 
 
 # QC -> FixDataset application (comment out by default)

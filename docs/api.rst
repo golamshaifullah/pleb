@@ -1,8 +1,6 @@
 API Reference
 =============
 
-.. autosummary::
-   :toctree: _autosummary
-   :recursive:
-
-   pleb
+.. automodule:: pleb
+   :members:
+   :show-inheritance:

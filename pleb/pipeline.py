@@ -537,6 +537,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     outlier_gate_sigma=float(getattr(cfg, "pqc_outlier_gate_sigma", 3.0)),
                     outlier_gate_resid_col=getattr(cfg, "pqc_outlier_gate_resid_col", None),
                     outlier_gate_sigma_col=getattr(cfg, "pqc_outlier_gate_sigma_col", None),
+                    event_instrument=bool(getattr(cfg, "pqc_event_instrument", False)),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
