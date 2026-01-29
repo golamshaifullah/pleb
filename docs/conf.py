@@ -22,9 +22,7 @@ autosummary_imported_members = False
 autodoc_typehints = "description"
 
 autodoc_default_options = {
-    "members": True,
     "undoc-members": False,
-    "show-inheritance": True,
     "imported-members": False,
 }
 
