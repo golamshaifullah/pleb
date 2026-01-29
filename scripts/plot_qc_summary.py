@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot a per-pulsar QC summary: residuals vs MJD with outliers and feature splines.
+"""Plot a per-pulsar QC summary: residuals vs MJD with bad points and event members.
 
 Usage:
   python scripts/plot_qc_summary.py --csv out.csv --out summary.png
@@ -86,14 +86,28 @@ def main() -> None:
     if resid_col not in df.columns:
         raise SystemExit("CSV missing residual column")
 
-    # Outlier mask (explicit, type-safe)
-    outlier = np.zeros(len(df), dtype=bool)
-    if "bad" in df.columns:
-        outlier |= df["bad"].fillna(False).astype(bool).to_numpy()
-    if "bad_day" in df.columns:
-        outlier |= df["bad_day"].fillna(False).astype(bool).to_numpy()
-    if "transient_id" in df.columns:
-        outlier |= pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+    # Bad points + event members (explicit, type-safe)
+    if "bad_point" in df.columns:
+        bad_point = df["bad_point"].fillna(False).astype(bool).to_numpy()
+    else:
+        bad_point = np.zeros(len(df), dtype=bool)
+        if "bad_ou" in df.columns:
+            bad_point |= df["bad_ou"].fillna(False).astype(bool).to_numpy()
+        if "bad_mad" in df.columns:
+            bad_point |= df["bad_mad"].fillna(False).astype(bool).to_numpy()
+        if "robust_outlier" in df.columns:
+            bad_point |= df["robust_outlier"].fillna(False).astype(bool).to_numpy()
+
+    if "event_member" in df.columns:
+        event_member = df["event_member"].fillna(False).astype(bool).to_numpy()
+    else:
+        event_member = np.zeros(len(df), dtype=bool)
+        if "transient_id" in df.columns:
+            event_member |= pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+        if "step_id" in df.columns:
+            event_member |= pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+        if "dm_step_id" in df.columns:
+            event_member |= pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
 
     # Color map per group
     groups = df[args.backend_col].astype(str) if args.backend_col in df.columns else pd.Series(["all"] * len(df))
@@ -117,19 +131,35 @@ def main() -> None:
     # Plot
     plt.figure(figsize=(10, 6))
 
-    # Non-outliers by system
+    # Regular points by system
     for s in dict.fromkeys(systems):
-        mask = (systems == s) & (~outlier)
+        mask = (systems == s) & (~bad_point) & (~event_member)
         if not mask.any():
             continue
         marker, color = sys_map.get(s, ("o", "C0"))
         plt.scatter(df.loc[mask, "mjd"], df.loc[mask, resid_col],
                     s=14, marker=marker, color=color, alpha=args.alpha, label=str(s))
 
-    # Outliers in grey x
-    if outlier.any():
-        plt.scatter(df.loc[outlier, "mjd"], df.loc[outlier, resid_col],
-                    s=22, marker="x", color="grey", alpha=0.9, label="outliers")
+    both = bad_point & event_member
+    bad_only = bad_point & (~event_member)
+    event_only = event_member & (~bad_point)
+
+    # Bad points: grey X
+    if bad_only.any():
+        plt.scatter(df.loc[bad_only, "mjd"], df.loc[bad_only, resid_col],
+                    s=28, marker="x", color="grey", alpha=0.9, label="bad_point")
+
+    # Event members: open red circles
+    if event_only.any():
+        plt.scatter(df.loc[event_only, "mjd"], df.loc[event_only, resid_col],
+                    s=36, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label="event_member")
+
+    # Both: layered marker
+    if both.any():
+        plt.scatter(df.loc[both, "mjd"], df.loc[both, resid_col],
+                    s=28, marker="x", color="grey", alpha=0.9, label="bad_point+event_member")
+        plt.scatter(df.loc[both, "mjd"], df.loc[both, resid_col],
+                    s=36, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label=None)
 
     # Feature splines
     for feat in FEATURE_COLUMNS:
@@ -166,8 +196,9 @@ def main() -> None:
 
     plt.xlabel("MJD")
     plt.ylabel(resid_col)
-    outlier_count = int(outlier.sum())
-    plt.title(f"{Path(args.csv).name} | outliers={outlier_count}")
+    bad_count = int(bad_point.sum())
+    event_count = int(event_member.sum())
+    plt.title(f"{Path(args.csv).name} | bad_points={bad_count} | event_members={event_count}")
     plt.legend(fontsize=7, ncol=2, frameon=False)
     plt.tight_layout()
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -193,15 +224,21 @@ def main() -> None:
                 continue
             plt.figure(figsize=(7, 5))
             for s in dict.fromkeys(systems):
-                mask = (systems == s) & (~outlier) & valid
+                mask = (systems == s) & (~bad_point) & (~event_member) & valid
                 if not mask.any():
                     continue
                 marker, color = sys_map.get(s, ("o", "C0"))
                 plt.scatter(x[mask], y[mask], s=14, marker=marker, color=color, alpha=args.alpha, label=str(s))
-            if outlier.any():
-                mask = outlier & valid
-                if mask.any():
-                    plt.scatter(x[mask], y[mask], s=22, marker="x", color="grey", alpha=0.9, label="outliers")
+            bad_only = bad_point & (~event_member) & valid
+            event_only = event_member & (~bad_point) & valid
+            both = bad_point & event_member & valid
+            if bad_only.any():
+                plt.scatter(x[bad_only], y[bad_only], s=28, marker="x", color="grey", alpha=0.9, label="bad_point")
+            if event_only.any():
+                plt.scatter(x[event_only], y[event_only], s=36, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label="event_member")
+            if both.any():
+                plt.scatter(x[both], y[both], s=28, marker="x", color="grey", alpha=0.9, label="bad_point+event_member")
+                plt.scatter(x[both], y[both], s=36, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label=None)
             plt.xlabel(feat)
             plt.ylabel(resid_col)
             plt.title(f"{Path(args.csv).name} | {feat}")

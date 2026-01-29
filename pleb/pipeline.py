@@ -533,6 +533,10 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     structure_p_thresh=float(getattr(cfg, "pqc_structure_p_thresh", 0.01)),
                     structure_circular_features=getattr(cfg, "pqc_structure_circular_features", None),
                     structure_group_cols=getattr(cfg, "pqc_structure_group_cols", None),
+                    outlier_gate_enabled=bool(getattr(cfg, "pqc_outlier_gate_enabled", False)),
+                    outlier_gate_sigma=float(getattr(cfg, "pqc_outlier_gate_sigma", 3.0)),
+                    outlier_gate_resid_col=getattr(cfg, "pqc_outlier_gate_resid_col", None),
+                    outlier_gate_sigma_col=getattr(cfg, "pqc_outlier_gate_sigma_col", None),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)

@@ -870,7 +870,7 @@ def remove_nuppi_big(parfile, timfile):
 
     Args:
         parfile: Path to the .par file.
-        timfile: Path to the *_all.tim file.
+        timfile: Path to the ``*_all.tim`` file.
 
     Returns:
         None.
@@ -1130,11 +1130,11 @@ def update_timfiles(psr_info, homepath, magic_add_sysflag=None):
     return None
 
 def insert_missing_timfiles(psr, alltimfilepath, psr_info):
-    """Append missing INCLUDE lines to a pulsar's *_all.tim file.
+    """Append missing INCLUDE lines to a pulsar's ``*_all.tim`` file.
 
     Args:
         psr: Pulsar name.
-        alltimfilepath: Path to *_all.tim.
+        alltimfilepath: Path to ``*_all.tim``.
         psr_info: Pulsar info dict.
 
     Returns:
@@ -1163,7 +1163,7 @@ def insert_missing_timfiles(psr, alltimfilepath, psr_info):
     return None
 
 def update_alltims(homepath, psr_info, use_newfile=False):
-    """Update all *_all.tim files with missing INCLUDE lines.
+    """Update all ``*_all.tim`` files with missing INCLUDE lines.
 
     Args:
         homepath: Dataset root directory.

@@ -71,7 +71,21 @@ def main() -> None:
             continue
 
         plt.figure()
-        plt.errorbar(t, y, yerr=s, fmt='o', capsize=2)
+        plt.errorbar(t, y, yerr=s, fmt='o', capsize=2, label="event_member")
+
+        if "bad_point" in sub.columns:
+            bad_point = sub["bad_point"].fillna(False).astype(bool).to_numpy()
+        else:
+            bad_point = np.zeros(len(sub), dtype=bool)
+            if "bad_ou" in sub.columns:
+                bad_point |= sub["bad_ou"].fillna(False).astype(bool).to_numpy()
+            if "bad_mad" in sub.columns:
+                bad_point |= sub["bad_mad"].fillna(False).astype(bool).to_numpy()
+            if "robust_outlier" in sub.columns:
+                bad_point |= sub["robust_outlier"].fillna(False).astype(bool).to_numpy()
+
+        if np.any(bad_point):
+            plt.plot(t[bad_point], y[bad_point], "x", color="grey", alpha=0.9, label="bad_point")
 
         # overlay exponential curve
         tt = np.linspace(t0, t0 + w_end, 200)
@@ -80,7 +94,8 @@ def main() -> None:
 
         plt.xlabel("MJD")
         plt.ylabel("Residual")
-        plt.title(f"{backend} transient {tid} (t0={t0:.6f}, A={A:.3g})")
+        plt.title(f"{backend} transient {tid} (t0={t0:.6f}, A={A:.3g}) | bad_points={int(bad_point.sum())}")
+        plt.legend(fontsize=8, frameon=False)
 
         fname = outdir / f"transient_{backend.replace('.', '_')}_id{tid}.png"
         plt.tight_layout()

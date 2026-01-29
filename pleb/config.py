@@ -73,6 +73,11 @@ class PipelineConfig:
         pqc_structure_p_thresh: p-value threshold for structure detection.
         pqc_structure_circular_features: Circular features in [0,1).
         pqc_structure_group_cols: Grouping columns for structure tests.
+        pqc_outlier_gate_enabled: Enable hard sigma gate for outlier membership.
+        pqc_outlier_gate_sigma: Sigma threshold for outlier gate.
+        pqc_outlier_gate_resid_col: Residual column to gate on (optional).
+        pqc_outlier_gate_sigma_col: Sigma column to gate on (optional).
+        pqc_event_instrument: Enable per-event membership diagnostics.
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -201,6 +206,11 @@ class PipelineConfig:
     pqc_structure_p_thresh: float = 0.01
     pqc_structure_circular_features: Optional[List[str]] = field(default_factory=lambda: ["orbital_phase"])
     pqc_structure_group_cols: Optional[List[str]] = None
+    pqc_outlier_gate_enabled: bool = False
+    pqc_outlier_gate_sigma: float = 3.0
+    pqc_outlier_gate_resid_col: Optional[str] = None
+    pqc_outlier_gate_sigma_col: Optional[str] = None
+    pqc_event_instrument: bool = False
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -410,6 +420,11 @@ class PipelineConfig:
             pqc_structure_p_thresh=float(d.get("pqc_structure_p_thresh", 0.01)),
             pqc_structure_circular_features=list_default("pqc_structure_circular_features", ["orbital_phase"]),
             pqc_structure_group_cols=opt_list_str("pqc_structure_group_cols"),
+            pqc_outlier_gate_enabled=bool(d.get("pqc_outlier_gate_enabled", False)),
+            pqc_outlier_gate_sigma=float(d.get("pqc_outlier_gate_sigma", 3.0)),
+            pqc_outlier_gate_resid_col=opt_str("pqc_outlier_gate_resid_col"),
+            pqc_outlier_gate_sigma_col=opt_str("pqc_outlier_gate_sigma_col"),
+            pqc_event_instrument=bool(d.get("pqc_event_instrument", False)),
 
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),

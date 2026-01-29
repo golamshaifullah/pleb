@@ -24,7 +24,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Summarize QC CSV outputs")
     ap.add_argument("--csv", required=True, help="Path to CSV produced by run_qc.py")
     ap.add_argument("--backend-col", default="group", help="Backend column name (default: group)")
-    ap.add_argument("--structure-group-cols", default=None, help="Comma-separated group columns; use ";" to run multiple groupings (default: backend-col)")
+    ap.add_argument(
+        "--structure-group-cols",
+        default=None,
+        help='Comma-separated group columns; use ";" to run multiple groupings (default: backend-col)',
+    )
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)

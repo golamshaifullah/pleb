@@ -69,6 +69,28 @@ def main() -> None:
     if resid_col not in df.columns:
         raise SystemExit("CSV missing residual column")
 
+    if "bad_point" in df.columns:
+        bad_point = df["bad_point"].fillna(False).astype(bool).to_numpy()
+    else:
+        bad_point = np.zeros(len(df), dtype=bool)
+        if "bad_ou" in df.columns:
+            bad_point |= df["bad_ou"].fillna(False).astype(bool).to_numpy()
+        if "bad_mad" in df.columns:
+            bad_point |= df["bad_mad"].fillna(False).astype(bool).to_numpy()
+        if "robust_outlier" in df.columns:
+            bad_point |= df["robust_outlier"].fillna(False).astype(bool).to_numpy()
+
+    if "event_member" in df.columns:
+        event_member = df["event_member"].fillna(False).astype(bool).to_numpy()
+    else:
+        event_member = np.zeros(len(df), dtype=bool)
+        if "transient_id" in df.columns:
+            event_member |= pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+        if "step_id" in df.columns:
+            event_member |= pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+        if "dm_step_id" in df.columns:
+            event_member |= pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+
     if args.features:
         features = [f.strip() for f in args.features.split(",") if f.strip()]
     else:
@@ -111,6 +133,8 @@ def main() -> None:
                 x = sub[feat].to_numpy(dtype=float)
                 y = sub[resid_col].to_numpy(dtype=float)
                 s = sub["sigma"].to_numpy(dtype=float) if "sigma" in sub.columns else None
+                bad_sub = bad_point[sub.index.to_numpy()]
+                event_sub = event_member[sub.index.to_numpy()]
 
                 # handle circular feature
                 if feat in CIRCULAR_FEATURES:
@@ -120,10 +144,24 @@ def main() -> None:
                         s = s[order]
 
                 plt.figure(figsize=(6, 4))
+                good = np.isfinite(x) & np.isfinite(y)
+                normal = good & (~bad_sub) & (~event_sub)
+                bad_only = good & bad_sub & (~event_sub)
+                event_only = good & event_sub & (~bad_sub)
+                both = good & bad_sub & event_sub
+
                 if s is not None:
-                    plt.errorbar(x, y, yerr=s, fmt=".", alpha=0.4, capsize=0)
+                    plt.errorbar(x[normal], y[normal], yerr=s[normal], fmt=".", alpha=0.4, capsize=0)
                 else:
-                    plt.plot(x, y, ".", alpha=0.5)
+                    plt.plot(x[normal], y[normal], ".", alpha=0.5)
+
+                if bad_only.any():
+                    plt.plot(x[bad_only], y[bad_only], "x", color="grey", alpha=0.9, label="bad_point")
+                if event_only.any():
+                    plt.scatter(x[event_only], y[event_only], s=30, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label="event_member")
+                if both.any():
+                    plt.plot(x[both], y[both], "x", color="grey", alpha=0.9, label="bad_point+event_member")
+                    plt.scatter(x[both], y[both], s=30, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label=None)
 
                 stats = _bin_stats(x, y, nbins=int(args.bins))
                 if stats is not None:
@@ -133,7 +171,7 @@ def main() -> None:
                 plt.xlabel(feat)
                 plt.ylabel(resid_col)
                 label = ",".join([f"{c}={row.get(c)}" for c in cols]) if cols else "all"
-                plt.title(f"{feat} ({label})")
+                plt.title(f"{feat} ({label}) | bad_points={int(bad_sub.sum())} | event_members={int(event_sub.sum())}")
 
                 fname = f"{feat}_{label.replace('=', '_').replace(',', '_').replace(' ', '')}.png"
                 plt.tight_layout()

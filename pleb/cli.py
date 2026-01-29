@@ -64,6 +64,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--qc-structure-min-per-bin", type=int, default=None, help="Minimum points per bin for structure tests.")
     p.add_argument("--qc-structure-p-thresh", type=float, default=None, help="p-value threshold for structure detection.")
     p.add_argument("--qc-structure-group-cols", default=None, help="Comma-separated grouping columns for structure tests.")
+    p.add_argument("--qc-outlier-gate", action="store_true", help="Enable hard sigma gate for pqc outliers.")
+    p.add_argument("--qc-outlier-gate-sigma", type=float, default=None, help="Sigma threshold for pqc outlier gate.")
+    p.add_argument("--qc-outlier-gate-resid-col", default=None, help="Residual column for pqc outlier gate.")
+    p.add_argument("--qc-outlier-gate-sigma-col", default=None, help="Sigma column for pqc outlier gate.")
+    p.add_argument("--qc-event-instrument", action="store_true", help="Enable per-event membership diagnostics for pqc.")
 
     # Param scan (fit-only): run baseline + candidate .par variants and compare via Δχ² / Wald z.
     p.add_argument("--param-scan", action="store_true", help="Run a parameter scan (fit-only) instead of the full pipeline.")
@@ -362,6 +367,16 @@ def main(argv=None) -> int:
         cfg.pqc_structure_p_thresh = float(args.qc_structure_p_thresh)
     if getattr(args, 'qc_structure_group_cols', None):
         cfg.pqc_structure_group_cols = _parse_csv_list(args.qc_structure_group_cols)
+    if getattr(args, 'qc_outlier_gate', False):
+        cfg.pqc_outlier_gate_enabled = True
+    if getattr(args, 'qc_outlier_gate_sigma', None) is not None:
+        cfg.pqc_outlier_gate_sigma = float(args.qc_outlier_gate_sigma)
+    if getattr(args, 'qc_outlier_gate_resid_col', None):
+        cfg.pqc_outlier_gate_resid_col = str(args.qc_outlier_gate_resid_col)
+    if getattr(args, 'qc_outlier_gate_sigma_col', None):
+        cfg.pqc_outlier_gate_sigma_col = str(args.qc_outlier_gate_sigma_col)
+    if getattr(args, 'qc_event_instrument', False):
+        cfg.pqc_event_instrument = True
 
     if args.fix_dataset:
         cfg.run_fix_dataset = True

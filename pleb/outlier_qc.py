@@ -81,6 +81,13 @@ class PTAQCConfig:
     structure_circular_features: list[str] | None = None
     structure_group_cols: list[str] | None = None
 
+    # Outlier gate (hard sigma)
+    outlier_gate_enabled: bool = False
+    outlier_gate_sigma: float = 3.0
+    outlier_gate_resid_col: str | None = None
+    outlier_gate_sigma_col: str | None = None
+    event_instrument: bool = False
+
 
 @contextmanager
 def _pushd(path: Path):
@@ -121,10 +128,10 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             MergeConfig,
             StructureConfig,
             TransientConfig,
-            StepConfig, RobustOutlierConfig,
+            StepConfig, RobustOutlierConfig, OutlierGateConfig,
         )
         # Sanity check: ensure pqc config classes are importable
-        _ = (BadMeasConfig, FeatureConfig, MergeConfig, StructureConfig, TransientConfig, StepConfig, RobustOutlierConfig)
+        _ = (BadMeasConfig, FeatureConfig, MergeConfig, StructureConfig, TransientConfig, StepConfig, RobustOutlierConfig, OutlierGateConfig)
         logger.info("pqc config classes loaded: %s", ",".join([c.__name__ for c in _]))
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
@@ -144,6 +151,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         min_points=int(cfg.min_points),
         delta_chi2_thresh=float(cfg.delta_chi2_thresh),
         suppress_overlap=bool(cfg.suppress_overlap),
+        instrument=bool(cfg.event_instrument),
     )
     feature_cfg = FeatureConfig(
         add_orbital_phase=bool(cfg.add_orbital_phase),
@@ -171,17 +179,25 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         min_points=int(cfg.step_min_points),
         delta_chi2_thresh=float(cfg.step_delta_chi2_thresh),
         scope=str(cfg.step_scope),
+        instrument=bool(cfg.event_instrument),
     )
     dm_cfg = StepConfig(
         enabled=bool(cfg.dm_step_enabled),
         min_points=int(cfg.dm_step_min_points),
         delta_chi2_thresh=float(cfg.dm_step_delta_chi2_thresh),
         scope=str(cfg.dm_step_scope),
+        instrument=bool(cfg.event_instrument),
     )
     robust_cfg = RobustOutlierConfig(
         enabled=bool(cfg.robust_enabled),
         z_thresh=float(cfg.robust_z_thresh),
         scope=str(cfg.robust_scope),
+    )
+    gate_cfg = OutlierGateConfig(
+        enabled=bool(cfg.outlier_gate_enabled),
+        sigma_thresh=float(cfg.outlier_gate_sigma),
+        resid_col=(str(cfg.outlier_gate_resid_col) if cfg.outlier_gate_resid_col else None),
+        sigma_col=(str(cfg.outlier_gate_sigma_col) if cfg.outlier_gate_sigma_col else None),
     )
 
     # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
@@ -197,6 +213,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             step_cfg=step_cfg,
             dm_cfg=dm_cfg,
             robust_cfg=robust_cfg,
+            gate_cfg=gate_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
         )
 

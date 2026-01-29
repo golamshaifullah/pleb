@@ -2,12 +2,14 @@
 System flag inference for EPTA-style tempo2 FORMAT 1 .tim files.
 
 Goal:
+
 - When -sys/-group/-pta are missing (and sometimes -be missing), infer them cheaply and consistently.
 - If bandwidth (-bw) and number-of-bands (-nchan/-nband) are available, assign sub-band systems by binning
   frequencies into equal-width sub-bands.
 - Keep system format:  <TEL>.<BACKEND>.<CENTRE_MHZ>  (used with "-sys" flag)
 
 Design choices (cheap + robust):
+
 - Only TOA lines are processed; directives/comments are preserved.
 - We never try to infer a header; we assume FORMAT 1 and use the 2nd column as frequency (MHz).
 - We drop/ignore any TOA lines whose frequency is non-numeric.

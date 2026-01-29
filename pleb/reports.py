@@ -400,7 +400,7 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
     df.to_csv(out_file, sep="	", index=False)
 
 def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str, z_threshold: float = 3.0) -> None:
-    """Summarize 'new' parameters in each branch vs reference and their Wald z = |x|/σ.
+    """Summarize 'new' parameters in each branch vs reference and their Wald z = :math:`|x|/σ`.
 
     This is a rapid way to screen whether newly-added fitted parameters look
     significant without running extra tempo2 fits.

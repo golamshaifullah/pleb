@@ -48,10 +48,12 @@ pqc_structure_min_per_bin = 2
 pqc_structure_p_thresh = 0.01
 pqc_structure_circular_features = ["orbital_phase"]
 pqc_structure_group_cols = ["sys"]
+pqc_outlier_gate_enabled = true
+pqc_outlier_gate_sigma = 3.0
 
 
 # QC -> FixDataset application (comment out by default)
-fix_qc_remove_outliers = true
+fix_qc_remove_outliers = false
 fix_qc_action = "comment"
 fix_qc_comment_prefix = "C QC_OUTLIER"
 fix_qc_remove_bad = true
@@ -95,8 +97,8 @@ make_binary_analysis = true
 
 dpi = 150
 
-pqc_delta_chi2_thresh = 500.0
-pqc_step_enabled = false
+pqc_delta_chi2_thresh = 10000.0
+pqc_step_enabled = true
 pqc_step_min_points = 20
 pqc_step_delta_chi2_thresh = 25.0
 pqc_step_scope = "both"
@@ -107,6 +109,5 @@ pqc_dm_step_delta_chi2_thresh = 25.0
 pqc_dm_step_scope = "both"
 
 pqc_robust_enabled = true
-pqc_robust_z_thresh = 5.0
+pqc_robust_z_thresh = 2.0
 pqc_robust_scope = "both"
-
