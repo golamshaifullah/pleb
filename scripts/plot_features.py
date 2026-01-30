@@ -181,6 +181,12 @@ def main() -> None:
 
                 plt.xlabel(feat)
                 plt.ylabel(resid_col)
+                if feat == "solar_elongation_deg":
+                    # Center the x-axis at zero elongation (sun direction).
+                    xmax = np.nanmax(np.abs(x)) if np.isfinite(x).any() else None
+                    if xmax is not None and np.isfinite(xmax) and xmax > 0:
+                        plt.xlim(-xmax, xmax)
+                    plt.axvline(0.0, color="black", lw=0.8, alpha=0.6)
                 label = ",".join([f"{c}={row.get(c)}" for c in cols]) if cols else "all"
                 plt.title(f"{feat} ({label}) | bad_points={int(bad_sub.sum())} | event_members={int(event_sub.sum())}")
 
