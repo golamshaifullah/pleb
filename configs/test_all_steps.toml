@@ -168,6 +168,16 @@ pqc_outlier_gate_resid_col = ""
 pqc_outlier_gate_sigma_col = ""
 # pqc_event_instrument: include per-event membership diagnostics. allowed: true/false. default: false
 pqc_event_instrument = true
+# pqc_solar_cut_enabled: enable solar-elongation cutoff flagging. allowed: true/false. default: false
+pqc_solar_cut_enabled = false
+# pqc_solar_cut_deg: fixed solar cutoff angle (deg). allowed: float or empty. default: "" -> None (auto)
+pqc_solar_cut_deg = ""
+# pqc_solar_cut_sigma: sigma threshold for auto cutoff. allowed: float. default: 3.0
+pqc_solar_cut_sigma = 3.0
+# pqc_solar_cut_nbins: bins for auto cutoff. allowed: int. default: 18
+pqc_solar_cut_nbins = 18
+# pqc_solar_cut_min_points: min points for auto cutoff. allowed: int. default: 20
+pqc_solar_cut_min_points = 20
 
 # ---- Optional QC report artifacts ----
 # qc_report: generate QC report artifacts. allowed: true/false. default: false
@@ -286,6 +296,12 @@ fix_qc_backend_col = "sys"
 fix_qc_remove_bad = true
 # fix_qc_remove_transients: act on transient flags. allowed: true/false. default: false
 fix_qc_remove_transients = false
+# fix_qc_remove_solar: act on solar-elongation flags. allowed: true/false. default: false
+fix_qc_remove_solar = false
+# fix_qc_solar_action: action for solar flags. allowed: "comment"|"delete". default: "comment"
+fix_qc_solar_action = "comment"
+# fix_qc_solar_comment_prefix: comment prefix for solar flags. allowed: string. default: "# QC_SOLAR"
+fix_qc_solar_comment_prefix = "# QC_SOLAR"
 # fix_qc_bad_tau_corr_days: OU tau (days) for bad-day detection. allowed: float. default: 0.02
 fix_qc_bad_tau_corr_days = 0.02
 # fix_qc_bad_fdr_q: FDR threshold. allowed: float. default: 0.01

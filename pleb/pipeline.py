@@ -216,6 +216,9 @@ def _build_fixdataset_config(cfg, *, apply: bool, qc_results_dir: Path | None = 
             qc_comment_prefix=str(_cfg_get(cfg, "fix_qc_comment_prefix", "C QC_OUTLIER") or "C QC_OUTLIER"),
             qc_remove_bad=bool(_cfg_get(cfg, "fix_qc_remove_bad", True)),
             qc_remove_transients=bool(_cfg_get(cfg, "fix_qc_remove_transients", False)),
+            qc_remove_solar=bool(_cfg_get(cfg, "fix_qc_remove_solar", False)),
+            qc_solar_action=str(_cfg_get(cfg, "fix_qc_solar_action", "comment") or "comment"),
+            qc_solar_comment_prefix=str(_cfg_get(cfg, "fix_qc_solar_comment_prefix", "# QC_SOLAR") or "# QC_SOLAR"),
             qc_bad_tau_corr_days=float(_cfg_get(cfg, "fix_qc_bad_tau_corr_days", 0.02) or 0.02),
             qc_bad_fdr_q=float(_cfg_get(cfg, "fix_qc_bad_fdr_q", 0.01) or 0.01),
             qc_bad_mark_only_worst_per_day=bool(_cfg_get(cfg, "fix_qc_bad_mark_only_worst_per_day", True)),
@@ -592,6 +595,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     outlier_gate_resid_col=getattr(cfg, "pqc_outlier_gate_resid_col", None),
                     outlier_gate_sigma_col=getattr(cfg, "pqc_outlier_gate_sigma_col", None),
                     event_instrument=bool(getattr(cfg, "pqc_event_instrument", False)),
+                    solar_cut_enabled=bool(getattr(cfg, "pqc_solar_cut_enabled", False)),
+                    solar_cut_deg=getattr(cfg, "pqc_solar_cut_deg", None),
+                    solar_cut_sigma=float(getattr(cfg, "pqc_solar_cut_sigma", 3.0)),
+                    solar_cut_nbins=int(getattr(cfg, "pqc_solar_cut_nbins", 18)),
+                    solar_cut_min_points=int(getattr(cfg, "pqc_solar_cut_min_points", 20)),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)

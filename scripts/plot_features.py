@@ -147,6 +147,10 @@ def main() -> None:
                 bad_sub = bad_point[sub.index.to_numpy()]
                 event_sub = event_member[sub.index.to_numpy()]
 
+                if feat == "solar_elongation_deg":
+                    # Wrap to [-180, 180] to avoid cutoff and center at 0.
+                    x = ((x + 180.0) % 360.0) - 180.0
+
                 # handle circular feature
                 if feat in CIRCULAR_FEATURES:
                     order = np.argsort(x)

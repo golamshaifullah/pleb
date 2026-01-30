@@ -102,6 +102,11 @@ class PipelineConfig:
         pqc_outlier_gate_resid_col: Residual column to gate on (optional).
         pqc_outlier_gate_sigma_col: Sigma column to gate on (optional).
         pqc_event_instrument: Enable per-event membership diagnostics.
+        pqc_solar_cut_enabled: Enable solar-elongation based flagging.
+        pqc_solar_cut_deg: Fixed solar-elongation cutoff (deg), or None for auto.
+        pqc_solar_cut_sigma: Sigma threshold for automatic cutoff estimation.
+        pqc_solar_cut_nbins: Number of bins for cutoff estimation.
+        pqc_solar_cut_min_points: Minimum points for cutoff estimation.
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -138,6 +143,9 @@ class PipelineConfig:
         fix_qc_backend_col: Backend column for pqc matching (if needed).
         fix_qc_remove_bad: Act on bad/bad_day flags.
         fix_qc_remove_transients: Act on transient flags.
+        fix_qc_remove_solar: Act on solar-elongation flags.
+        fix_qc_solar_action: Action for solar-flagged TOAs (comment/delete).
+        fix_qc_solar_comment_prefix: Prefix for solar-flagged TOA comments.
         fix_qc_merge_tol_days: MJD tolerance when matching TOAs.
         fix_qc_results_dir: Directory containing pqc CSV outputs. If unset and
             fix_apply is true, defaults to ``<results>/qc/<fix_branch_name>``.
@@ -240,6 +248,11 @@ class PipelineConfig:
     pqc_outlier_gate_resid_col: Optional[str] = None
     pqc_outlier_gate_sigma_col: Optional[str] = None
     pqc_event_instrument: bool = False
+    pqc_solar_cut_enabled: bool = False
+    pqc_solar_cut_deg: Optional[float] = None
+    pqc_solar_cut_sigma: float = 3.0
+    pqc_solar_cut_nbins: int = 18
+    pqc_solar_cut_min_points: int = 20
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -290,6 +303,9 @@ class PipelineConfig:
     fix_qc_backend_col: str = "sys"
     fix_qc_remove_bad: bool = True
     fix_qc_remove_transients: bool = False
+    fix_qc_remove_solar: bool = False
+    fix_qc_solar_action: str = "comment"
+    fix_qc_solar_comment_prefix: str = "# QC_SOLAR"
     fix_qc_merge_tol_days: float = 2.0 / 86400.0
     fix_qc_results_dir: Optional[Path] = None
     fix_qc_branch: Optional[str] = None
@@ -506,6 +522,11 @@ class PipelineConfig:
             pqc_outlier_gate_resid_col=opt_str("pqc_outlier_gate_resid_col"),
             pqc_outlier_gate_sigma_col=opt_str("pqc_outlier_gate_sigma_col"),
             pqc_event_instrument=bool(d.get("pqc_event_instrument", False)),
+            pqc_solar_cut_enabled=bool(d.get("pqc_solar_cut_enabled", False)),
+            pqc_solar_cut_deg=(None if d.get("pqc_solar_cut_deg") in (None, "") else float(d.get("pqc_solar_cut_deg"))),
+            pqc_solar_cut_sigma=float(d.get("pqc_solar_cut_sigma", 3.0)),
+            pqc_solar_cut_nbins=int(d.get("pqc_solar_cut_nbins", 18)),
+            pqc_solar_cut_min_points=int(d.get("pqc_solar_cut_min_points", 20)),
 
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
@@ -546,6 +567,9 @@ class PipelineConfig:
             fix_qc_backend_col=str(d.get("fix_qc_backend_col", "sys")),
             fix_qc_remove_bad=bool(d.get("fix_qc_remove_bad", True)),
             fix_qc_remove_transients=bool(d.get("fix_qc_remove_transients", False)),
+            fix_qc_remove_solar=bool(d.get("fix_qc_remove_solar", False)),
+            fix_qc_solar_action=str(d.get("fix_qc_solar_action", "comment")),
+            fix_qc_solar_comment_prefix=str(d.get("fix_qc_solar_comment_prefix", "# QC_SOLAR")),
             fix_qc_merge_tol_days=float(d.get("fix_qc_merge_tol_days", 2.0 / 86400.0)),
             fix_qc_results_dir=(Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None),
             fix_qc_branch=opt_str("fix_qc_branch"),

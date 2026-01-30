@@ -83,6 +83,9 @@ class FixDatasetConfig:
         qc_backend_col: Backend column for matching QC results.
         qc_remove_bad: Apply bad/bad_day flags from QC.
         qc_remove_transients: Apply transient flags from QC.
+        qc_remove_solar: Apply solar-elongation flags from QC.
+        qc_solar_action: ``comment`` or ``delete`` for solar-flagged TOAs.
+        qc_solar_comment_prefix: Prefix for solar-flagged TOA comments.
         qc_merge_tol_days: MJD tolerance for QC matching.
         qc_results_dir: Directory containing QC CSV outputs.
         qc_branch: Subdirectory for QC results (optional).
@@ -141,6 +144,9 @@ class FixDatasetConfig:
     qc_backend_col: str = "sys"
     qc_remove_bad: bool = True
     qc_remove_transients: bool = False
+    qc_remove_solar: bool = False
+    qc_solar_action: str = "comment"
+    qc_solar_comment_prefix: str = "# QC_SOLAR"
     qc_merge_tol_days: float = 2.0 / 86400.0
     qc_results_dir: Optional[Path] = None
     qc_branch: Optional[str] = None
@@ -544,25 +550,34 @@ def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
     return matches[0]
 
 
-def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[Optional[str], list[float]]:
-    mask = np.zeros(len(df), dtype=bool)
+def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[str, Dict[Optional[str], list[float]]]:
+    standard = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_bad:
         for col in ("bad", "bad_day"):
             if col in df.columns:
-                mask |= df[col].fillna(False).astype(bool).to_numpy()
+                standard |= df[col].fillna(False).astype(bool).to_numpy()
     if cfg.qc_remove_transients and "transient_id" in df.columns:
-        mask |= df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
+        standard |= df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
 
-    if not mask.any():
-        return {}
+    solar = np.zeros(len(df), dtype=bool)
+    if cfg.qc_remove_solar and "solar_bad" in df.columns:
+        solar |= df["solar_bad"].fillna(False).astype(bool).to_numpy()
 
-    if "_timfile" in df.columns:
-        out: Dict[Optional[str], list[float]] = {}
-        for timfile, sub in df.loc[mask, ["_timfile", "mjd"]].groupby("_timfile"):
-            out[str(timfile)] = [float(x) for x in sub["mjd"].to_numpy()]
-        return out
+    out: Dict[str, Dict[Optional[str], list[float]]] = {"standard": {}, "solar": {}}
 
-    return {None: [float(x) for x in df.loc[mask, "mjd"].to_numpy()]}
+    def _build(mask: np.ndarray) -> Dict[Optional[str], list[float]]:
+        if not mask.any():
+            return {}
+        if "_timfile" in df.columns:
+            mapping: Dict[Optional[str], list[float]] = {}
+            for timfile, sub in df.loc[mask, ["_timfile", "mjd"]].groupby("_timfile"):
+                mapping[str(timfile)] = [float(x) for x in sub["mjd"].to_numpy()]
+            return mapping
+        return {None: [float(x) for x in df.loc[mask, "mjd"].to_numpy()]}
+
+    out["standard"] = _build(standard)
+    out["solar"] = _build(solar)
+    return out
 
 
 def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
@@ -577,16 +592,20 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     except Exception as e:
         return {"pulsar": psr, "qc_csv": str(qc_csv), "error": str(e)}
 
-    mjd_map = _collect_qc_mjds(df, cfg)
-    if not mjd_map:
+    mjd_maps = _collect_qc_mjds(df, cfg)
+    if not mjd_maps.get("standard") and not mjd_maps.get("solar"):
         return {"pulsar": psr, "qc_csv": str(qc_csv), "matched": 0, "changed": False}
 
     action = str(cfg.qc_action or "comment").strip().lower()
     if action not in {"comment", "delete"}:
         return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_action: {cfg.qc_action}"}
+    solar_action = str(cfg.qc_solar_action or "comment").strip().lower()
+    if solar_action not in {"comment", "delete"}:
+        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}"}
 
     tol = float(cfg.qc_merge_tol_days or (2.0 / 86400.0))
     comment_prefix = str(cfg.qc_comment_prefix or "C QC_OUTLIER").strip()
+    solar_prefix = str(cfg.qc_solar_comment_prefix or "# QC_SOLAR").strip()
 
     tims = list_backend_timfiles(psr_dir)
     total_matched = 0
@@ -595,10 +614,13 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
 
     for tim in tims:
         key = tim.name
-        if (key not in mjd_map) and (None not in mjd_map):
+        std_map = mjd_maps.get("standard", {})
+        solar_map = mjd_maps.get("solar", {})
+        if (key not in std_map) and (None not in std_map) and (key not in solar_map) and (None not in solar_map):
             continue
-        target_mjds = np.asarray(mjd_map.get(key, mjd_map.get(None, [])), dtype=float)
-        if target_mjds.size == 0:
+        target_mjds = np.asarray(std_map.get(key, std_map.get(None, [])), dtype=float)
+        target_mjds_solar = np.asarray(solar_map.get(key, solar_map.get(None, [])), dtype=float)
+        if target_mjds.size == 0 and target_mjds_solar.size == 0:
             continue
 
         lines = tim.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -624,7 +646,22 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 new_lines.append(raw)
                 continue
 
-            if np.any(np.abs(target_mjds - mjd) <= tol):
+            is_solar = target_mjds_solar.size > 0 and np.any(np.abs(target_mjds_solar - mjd) <= tol)
+            is_std = target_mjds.size > 0 and np.any(np.abs(target_mjds - mjd) <= tol)
+
+            if is_solar:
+                total_matched += 1
+                if solar_action == "delete":
+                    removed += 1
+                    continue
+                if solar_prefix and raw.lstrip().startswith(solar_prefix):
+                    new_lines.append(raw)
+                else:
+                    new_lines.append(f"{solar_prefix} {raw}" if solar_prefix else raw)
+                    commented += 1
+                continue
+
+            if is_std:
                 total_matched += 1
                 if action == "delete":
                     removed += 1
