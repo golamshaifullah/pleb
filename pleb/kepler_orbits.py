@@ -16,7 +16,9 @@ import math
 import numpy as np
 
 
-def true_from_eccentric(e: float, eccentric_anomaly: float) -> Tuple[float, float, float]:
+def true_from_eccentric(
+    e: float, eccentric_anomaly: float
+) -> Tuple[float, float, float]:
     """Compute the true anomaly from the eccentric anomaly.
 
     Args:
@@ -38,7 +40,7 @@ def true_from_eccentric(e: float, eccentric_anomaly: float) -> Tuple[float, floa
 
     # derivatives
     # df/dE
-    denom = (1 - e * math.cos(E))
+    denom = 1 - e * math.cos(E)
     fprime = beta / denom
 
     # df/de
@@ -96,7 +98,9 @@ def eccentric_from_mean(e: float, mean_anomaly: float) -> Tuple[float, float, fl
     return E, dEde, dEdM
 
 
-def btx_parameters(asini: float, pb: float, eps1: float, eps2: float, tasc: float) -> Tuple[float, float, float, float, float]:
+def btx_parameters(
+    asini: float, pb: float, eps1: float, eps2: float, tasc: float
+) -> Tuple[float, float, float, float, float]:
     """Convert ELL1 parameters to BTX-like values (a1, pb, e, om, t0).
 
     Args:
@@ -135,6 +139,7 @@ class Kepler2DParameters(NamedTuple):
         eps2: ELL1 parameter ``e*cos(om)``.
         t0: Reference epoch.
     """
+
     a: float
     pb: float
     eps1: float

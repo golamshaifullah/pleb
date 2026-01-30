@@ -54,19 +54,37 @@ def _bin_stats(x: np.ndarray, y: np.ndarray, nbins: int = 20):
 
 def main() -> None:
     """Generate feature-structure plots from a PQC CSV file."""
-    ap = argparse.ArgumentParser(description="Plot feature-structure diagnostics from pqc CSV")
+    ap = argparse.ArgumentParser(
+        description="Plot feature-structure diagnostics from pqc CSV"
+    )
     ap.add_argument("--csv", required=True, help="QC output CSV")
     ap.add_argument("--outdir", default="feature_plots", help="Directory for PNGs")
-    ap.add_argument("--backend-col", default="group", help="Backend column name (default: group)")
+    ap.add_argument(
+        "--backend-col", default="group", help="Backend column name (default: group)"
+    )
     ap.add_argument(
         "--structure-group-cols",
         default=None,
         help='Comma-separated group columns; use ";" to run multiple groupings (default: backend-col)',
     )
-    ap.add_argument("--features", default=None, help="Comma-separated features to plot (default: auto)")
-    ap.add_argument("--only-present", action="store_true", help="Plot only features marked present (default).")
-    ap.add_argument("--include-all", action="store_true", help="Plot all features even if not present.")
-    ap.add_argument("--bins", type=int, default=20, help="Number of bins for median overlay.")
+    ap.add_argument(
+        "--features",
+        default=None,
+        help="Comma-separated features to plot (default: auto)",
+    )
+    ap.add_argument(
+        "--only-present",
+        action="store_true",
+        help="Plot only features marked present (default).",
+    )
+    ap.add_argument(
+        "--include-all",
+        action="store_true",
+        help="Plot all features even if not present.",
+    )
+    ap.add_argument(
+        "--bins", type=int, default=20, help="Number of bins for median overlay."
+    )
     args = ap.parse_args()
 
     outdir = Path(args.outdir)
@@ -96,11 +114,19 @@ def main() -> None:
     else:
         event_member = np.zeros(len(df), dtype=bool)
         if "transient_id" in df.columns:
-            event_member |= pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+            event_member |= (
+                pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy()
+                >= 0
+            )
         if "step_id" in df.columns:
-            event_member |= pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+            event_member |= (
+                pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+            )
         if "dm_step_id" in df.columns:
-            event_member |= pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+            event_member |= (
+                pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy()
+                >= 0
+            )
 
     if "solar_bad" in df.columns:
         solar_bad = df["solar_bad"].fillna(False).astype(bool).to_numpy()
@@ -138,7 +164,6 @@ def main() -> None:
             continue
 
         for feat in features:
-            present_col = f"structure_{feat}_present"
             for _, row in struct[struct["feature"] == feat].iterrows():
                 if only_present and not bool(row.get("present", False)):
                     continue
@@ -152,7 +177,11 @@ def main() -> None:
 
                 x = sub[feat].to_numpy(dtype=float)
                 y = sub[resid_col].to_numpy(dtype=float)
-                s = sub["sigma"].to_numpy(dtype=float) if "sigma" in sub.columns else None
+                s = (
+                    sub["sigma"].to_numpy(dtype=float)
+                    if "sigma" in sub.columns
+                    else None
+                )
                 bad_sub = bad_point[sub.index.to_numpy()]
                 event_sub = event_member[sub.index.to_numpy()]
 
@@ -178,21 +207,78 @@ def main() -> None:
                 orbital_only = good & orbital_bad[idx]
 
                 if s is not None:
-                    plt.errorbar(x[normal], y[normal], yerr=s[normal], fmt=".", alpha=0.4, capsize=0)
+                    plt.errorbar(
+                        x[normal],
+                        y[normal],
+                        yerr=s[normal],
+                        fmt=".",
+                        alpha=0.4,
+                        capsize=0,
+                    )
                 else:
                     plt.plot(x[normal], y[normal], ".", alpha=0.5)
 
                 if bad_only.any():
-                    plt.plot(x[bad_only], y[bad_only], "x", color="grey", alpha=0.9, label="bad_point")
+                    plt.plot(
+                        x[bad_only],
+                        y[bad_only],
+                        "x",
+                        color="grey",
+                        alpha=0.9,
+                        label="bad_point",
+                    )
                 if event_only.any():
-                    plt.scatter(x[event_only], y[event_only], s=30, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label="event_member")
+                    plt.scatter(
+                        x[event_only],
+                        y[event_only],
+                        s=30,
+                        marker="o",
+                        facecolors="none",
+                        edgecolors="red",
+                        alpha=0.9,
+                        label="event_member",
+                    )
                 if both.any():
-                    plt.plot(x[both], y[both], "x", color="grey", alpha=0.9, label="bad_point+event_member")
-                    plt.scatter(x[both], y[both], s=30, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label=None)
+                    plt.plot(
+                        x[both],
+                        y[both],
+                        "x",
+                        color="grey",
+                        alpha=0.9,
+                        label="bad_point+event_member",
+                    )
+                    plt.scatter(
+                        x[both],
+                        y[both],
+                        s=30,
+                        marker="o",
+                        facecolors="none",
+                        edgecolors="red",
+                        alpha=0.9,
+                        label=None,
+                    )
                 if solar_only.any():
-                    plt.scatter(x[solar_only], y[solar_only], s=30, marker="^", facecolors="none", edgecolors="orange", alpha=0.9, label="solar_bad")
+                    plt.scatter(
+                        x[solar_only],
+                        y[solar_only],
+                        s=30,
+                        marker="^",
+                        facecolors="none",
+                        edgecolors="orange",
+                        alpha=0.9,
+                        label="solar_bad",
+                    )
                 if orbital_only.any():
-                    plt.scatter(x[orbital_only], y[orbital_only], s=30, marker="s", facecolors="none", edgecolors="blue", alpha=0.9, label="orbital_phase_bad")
+                    plt.scatter(
+                        x[orbital_only],
+                        y[orbital_only],
+                        s=30,
+                        marker="s",
+                        facecolors="none",
+                        edgecolors="blue",
+                        alpha=0.9,
+                        label="orbital_phase_bad",
+                    )
 
                 stats = _bin_stats(x, y, nbins=int(args.bins))
                 if stats is not None:

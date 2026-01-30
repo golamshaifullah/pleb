@@ -245,12 +245,18 @@ class PipelineConfig:
     pqc_freq_bins: int = 8
     pqc_observatory_path: Optional[str] = None
     pqc_structure_mode: str = "none"
-    pqc_structure_detrend_features: Optional[List[str]] = field(default_factory=lambda: ["solar_elongation_deg", "orbital_phase"])
-    pqc_structure_test_features: Optional[List[str]] = field(default_factory=lambda: ["solar_elongation_deg", "orbital_phase"])
+    pqc_structure_detrend_features: Optional[List[str]] = field(
+        default_factory=lambda: ["solar_elongation_deg", "orbital_phase"]
+    )
+    pqc_structure_test_features: Optional[List[str]] = field(
+        default_factory=lambda: ["solar_elongation_deg", "orbital_phase"]
+    )
     pqc_structure_nbins: int = 12
     pqc_structure_min_per_bin: int = 3
     pqc_structure_p_thresh: float = 0.01
-    pqc_structure_circular_features: Optional[List[str]] = field(default_factory=lambda: ["orbital_phase"])
+    pqc_structure_circular_features: Optional[List[str]] = field(
+        default_factory=lambda: ["orbital_phase"]
+    )
     pqc_structure_group_cols: Optional[List[str]] = None
     pqc_outlier_gate_enabled: bool = False
     pqc_outlier_gate_sigma: float = 3.0
@@ -307,7 +313,9 @@ class PipelineConfig:
     fix_ensure_ephem: Optional[str] = None
     fix_ensure_clk: Optional[str] = None
     fix_ensure_ne_sw: Optional[str] = None
-    fix_remove_patterns: List[str] = field(default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."])
+    fix_remove_patterns: List[str] = field(
+        default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."]
+    )
     # "equatorial_to_ecliptic" or "ecliptic_to_equatorial"
     fix_coord_convert: Optional[str] = None
 
@@ -378,18 +386,17 @@ class PipelineConfig:
         c.home_dir = c.home_dir.expanduser().resolve()
         ds_raw = str(c.dataset_name)
         ds_path = Path(ds_raw).expanduser()
-    
+
         # Interpret dataset_name as:
         # 1) absolute path -> use as-is
         # 2) looks like a path (contains / or starts with .) -> resolve relative to config/cwd (legacy behavior)
         # 3) plain name -> treat as a directory inside home_dir (what you expect)
         if ds_path.is_absolute():
-            dataset_dir = ds_path
+            c.dataset_name = ds_path
         elif ("/" in ds_raw) or ("\\" in ds_raw) or ds_raw.startswith("."):
-            dataset_dir = ds_path.resolve()
+            c.dataset_name = ds_path.resolve()
         else:
-            dataset_dir = (Path(c.home_dir).expanduser() / ds_raw).resolve()
- 
+            c.dataset_name = (Path(c.home_dir).expanduser() / ds_raw).resolve()
 
         c.singularity_image = c.singularity_image.expanduser().resolve()
         c.results_dir = c.results_dir.expanduser().resolve()
@@ -459,6 +466,7 @@ class PipelineConfig:
                     }
                 )
         """
+
         def p(x: Any) -> Path:
             return Path(x) if x is not None else Path(".")
 
@@ -488,7 +496,9 @@ class PipelineConfig:
             branches=list(d.get("branches", ["main", ""])),
             reference_branch=str(d.get("reference_branch", "main")),
             pulsars=d.get("pulsars", "ALL"),
-            outdir_name=(None if d.get("outdir_name") in (None, "") else d.get("outdir_name")),
+            outdir_name=(
+                None if d.get("outdir_name") in (None, "") else d.get("outdir_name")
+            ),
             epoch=str(d.get("epoch", "55000")),
             force_rerun=bool(d.get("force_rerun", False)),
             jobs=int(d.get("jobs", 1)),
@@ -499,14 +509,15 @@ class PipelineConfig:
             make_residual_plots=bool(d.get("make_residual_plots", True)),
             make_outlier_reports=bool(d.get("make_outlier_reports", True)),
             testing_mode=bool(d.get("testing_mode", False)),
-
             run_pqc=bool(d.get("run_pqc", False)),
             pqc_backend_col=str(d.get("pqc_backend_col", "group")),
             pqc_drop_unmatched=bool(d.get("pqc_drop_unmatched", False)),
             pqc_merge_tol_seconds=float(d.get("pqc_merge_tol_seconds", 2.0)),
             pqc_tau_corr_minutes=float(d.get("pqc_tau_corr_minutes", 30.0)),
             pqc_fdr_q=float(d.get("pqc_fdr_q", 0.01)),
-            pqc_mark_only_worst_per_day=bool(d.get("pqc_mark_only_worst_per_day", True)),
+            pqc_mark_only_worst_per_day=bool(
+                d.get("pqc_mark_only_worst_per_day", True)
+            ),
             pqc_tau_rec_days=float(d.get("pqc_tau_rec_days", 7.0)),
             pqc_window_mult=float(d.get("pqc_window_mult", 5.0)),
             pqc_min_points=int(d.get("pqc_min_points", 6)),
@@ -517,7 +528,9 @@ class PipelineConfig:
             pqc_step_scope=str(d.get("pqc_step_scope", "both")),
             pqc_dm_step_enabled=bool(d.get("pqc_dm_step_enabled", True)),
             pqc_dm_step_min_points=int(d.get("pqc_dm_step_min_points", 20)),
-            pqc_dm_step_delta_chi2_thresh=float(d.get("pqc_dm_step_delta_chi2_thresh", 25.0)),
+            pqc_dm_step_delta_chi2_thresh=float(
+                d.get("pqc_dm_step_delta_chi2_thresh", 25.0)
+            ),
             pqc_dm_step_scope=str(d.get("pqc_dm_step_scope", "both")),
             pqc_add_orbital_phase=bool(d.get("pqc_add_orbital_phase", True)),
             pqc_add_solar_elongation=bool(d.get("pqc_add_solar_elongation", True)),
@@ -528,12 +541,19 @@ class PipelineConfig:
             pqc_freq_bins=int(d.get("pqc_freq_bins", 8)),
             pqc_observatory_path=opt_str("pqc_observatory_path"),
             pqc_structure_mode=str(d.get("pqc_structure_mode", "none")),
-            pqc_structure_detrend_features=list_default("pqc_structure_detrend_features", ["solar_elongation_deg", "orbital_phase"]),
-            pqc_structure_test_features=list_default("pqc_structure_test_features", ["solar_elongation_deg", "orbital_phase"]),
+            pqc_structure_detrend_features=list_default(
+                "pqc_structure_detrend_features",
+                ["solar_elongation_deg", "orbital_phase"],
+            ),
+            pqc_structure_test_features=list_default(
+                "pqc_structure_test_features", ["solar_elongation_deg", "orbital_phase"]
+            ),
             pqc_structure_nbins=int(d.get("pqc_structure_nbins", 12)),
             pqc_structure_min_per_bin=int(d.get("pqc_structure_min_per_bin", 3)),
             pqc_structure_p_thresh=float(d.get("pqc_structure_p_thresh", 0.01)),
-            pqc_structure_circular_features=list_default("pqc_structure_circular_features", ["orbital_phase"]),
+            pqc_structure_circular_features=list_default(
+                "pqc_structure_circular_features", ["orbital_phase"]
+            ),
             pqc_structure_group_cols=opt_list_str("pqc_structure_group_cols"),
             pqc_outlier_gate_enabled=bool(d.get("pqc_outlier_gate_enabled", False)),
             pqc_outlier_gate_sigma=float(d.get("pqc_outlier_gate_sigma", 3.0)),
@@ -541,33 +561,49 @@ class PipelineConfig:
             pqc_outlier_gate_sigma_col=opt_str("pqc_outlier_gate_sigma_col"),
             pqc_event_instrument=bool(d.get("pqc_event_instrument", False)),
             pqc_solar_cut_enabled=bool(d.get("pqc_solar_cut_enabled", False)),
-            pqc_solar_cut_deg=(None if d.get("pqc_solar_cut_deg") in (None, "") else float(d.get("pqc_solar_cut_deg"))),
+            pqc_solar_cut_deg=(
+                None
+                if d.get("pqc_solar_cut_deg") in (None, "")
+                else float(d.get("pqc_solar_cut_deg"))
+            ),
             pqc_solar_cut_sigma=float(d.get("pqc_solar_cut_sigma", 3.0)),
             pqc_solar_cut_nbins=int(d.get("pqc_solar_cut_nbins", 18)),
             pqc_solar_cut_min_points=int(d.get("pqc_solar_cut_min_points", 20)),
-            pqc_orbital_phase_cut_enabled=bool(d.get("pqc_orbital_phase_cut_enabled", False)),
-            pqc_orbital_phase_cut_center=float(d.get("pqc_orbital_phase_cut_center", 0.25)),
-            pqc_orbital_phase_cut=(None if d.get("pqc_orbital_phase_cut") in (None, "") else float(d.get("pqc_orbital_phase_cut"))),
-            pqc_orbital_phase_cut_sigma=float(d.get("pqc_orbital_phase_cut_sigma", 3.0)),
+            pqc_orbital_phase_cut_enabled=bool(
+                d.get("pqc_orbital_phase_cut_enabled", False)
+            ),
+            pqc_orbital_phase_cut_center=float(
+                d.get("pqc_orbital_phase_cut_center", 0.25)
+            ),
+            pqc_orbital_phase_cut=(
+                None
+                if d.get("pqc_orbital_phase_cut") in (None, "")
+                else float(d.get("pqc_orbital_phase_cut"))
+            ),
+            pqc_orbital_phase_cut_sigma=float(
+                d.get("pqc_orbital_phase_cut_sigma", 3.0)
+            ),
             pqc_orbital_phase_cut_nbins=int(d.get("pqc_orbital_phase_cut_nbins", 18)),
-            pqc_orbital_phase_cut_min_points=int(d.get("pqc_orbital_phase_cut_min_points", 20)),
-
+            pqc_orbital_phase_cut_min_points=int(
+                d.get("pqc_orbital_phase_cut_min_points", 20)
+            ),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),
-            qc_report_dir=(Path(d["qc_report_dir"]) if d.get("qc_report_dir") else None),
+            qc_report_dir=(
+                Path(d["qc_report_dir"]) if d.get("qc_report_dir") else None
+            ),
             qc_report_no_plots=bool(d.get("qc_report_no_plots", False)),
             qc_report_structure_group_cols=opt_str("qc_report_structure_group_cols"),
             qc_report_no_feature_plots=bool(d.get("qc_report_no_feature_plots", False)),
-
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),
-
             param_scan_typical=bool(d.get("param_scan_typical", False)),
-            param_scan_dm_redchisq_threshold=float(d.get("param_scan_dm_redchisq_threshold", 2.0)),
+            param_scan_dm_redchisq_threshold=float(
+                d.get("param_scan_dm_redchisq_threshold", 2.0)
+            ),
             param_scan_dm_max_order=int(d.get("param_scan_dm_max_order", 4)),
             param_scan_btx_max_fb=int(d.get("param_scan_btx_max_fb", 3)),
-
             fix_apply=bool(d.get("fix_apply", False)),
             fix_branch_name=opt_str("fix_branch_name"),
             fix_base_branch=opt_str("fix_base_branch"),
@@ -582,9 +618,10 @@ class PipelineConfig:
             fix_ensure_ephem=opt_str("fix_ensure_ephem"),
             fix_ensure_clk=opt_str("fix_ensure_clk"),
             fix_ensure_ne_sw=opt_str("fix_ensure_ne_sw"),
-            fix_remove_patterns=list(d.get("fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."])),
+            fix_remove_patterns=list(
+                d.get("fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."])
+            ),
             fix_coord_convert=opt_str("fix_coord_convert"),
-
             fix_qc_remove_outliers=bool(d.get("fix_qc_remove_outliers", False)),
             fix_qc_action=str(d.get("fix_qc_action", "comment")),
             fix_qc_comment_prefix=str(d.get("fix_qc_comment_prefix", "C QC_OUTLIER")),
@@ -593,20 +630,36 @@ class PipelineConfig:
             fix_qc_remove_transients=bool(d.get("fix_qc_remove_transients", False)),
             fix_qc_remove_solar=bool(d.get("fix_qc_remove_solar", False)),
             fix_qc_solar_action=str(d.get("fix_qc_solar_action", "comment")),
-            fix_qc_solar_comment_prefix=str(d.get("fix_qc_solar_comment_prefix", "# QC_SOLAR")),
-            fix_qc_remove_orbital_phase=bool(d.get("fix_qc_remove_orbital_phase", False)),
-            fix_qc_orbital_phase_action=str(d.get("fix_qc_orbital_phase_action", "comment")),
-            fix_qc_orbital_phase_comment_prefix=str(d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE")),
+            fix_qc_solar_comment_prefix=str(
+                d.get("fix_qc_solar_comment_prefix", "# QC_SOLAR")
+            ),
+            fix_qc_remove_orbital_phase=bool(
+                d.get("fix_qc_remove_orbital_phase", False)
+            ),
+            fix_qc_orbital_phase_action=str(
+                d.get("fix_qc_orbital_phase_action", "comment")
+            ),
+            fix_qc_orbital_phase_comment_prefix=str(
+                d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE")
+            ),
             fix_qc_merge_tol_days=float(d.get("fix_qc_merge_tol_days", 2.0 / 86400.0)),
-            fix_qc_results_dir=(Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None),
+            fix_qc_results_dir=(
+                Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None
+            ),
             fix_qc_branch=opt_str("fix_qc_branch"),
-
             binary_only_models=opt_list_str("binary_only_models"),
-
             dpi=int(d.get("dpi", 120)),
-            max_covmat_params=(None if d.get("max_covmat_params") in (None, "") else d.get("max_covmat_params")),
-            ingest_mapping_file=(Path(d["ingest_mapping_file"]) if d.get("ingest_mapping_file") else None),
-            ingest_output_dir=(Path(d["ingest_output_dir"]) if d.get("ingest_output_dir") else None),
+            max_covmat_params=(
+                None
+                if d.get("max_covmat_params") in (None, "")
+                else d.get("max_covmat_params")
+            ),
+            ingest_mapping_file=(
+                Path(d["ingest_mapping_file"]) if d.get("ingest_mapping_file") else None
+            ),
+            ingest_output_dir=(
+                Path(d["ingest_output_dir"]) if d.get("ingest_output_dir") else None
+            ),
         )
 
     @staticmethod
@@ -643,14 +696,18 @@ class PipelineConfig:
 
         if path.suffix.lower() in (".toml", ".tml"):
             if tomllib is None:
-                raise RuntimeError("TOML config requested but tomllib is unavailable in this Python.")
+                raise RuntimeError(
+                    "TOML config requested but tomllib is unavailable in this Python."
+                )
             data = tomllib.loads(path.read_text(encoding="utf-8"))
             # Accept either top-level keys or [pipeline] table
             if "pipeline" in data and isinstance(data["pipeline"], dict):
                 data = data["pipeline"]
             return PipelineConfig.from_dict(data)
 
-        raise ValueError(f"Unsupported config file type: {path.suffix}. Use .json or .toml")
+        raise ValueError(
+            f"Unsupported config file type: {path.suffix}. Use .json or .toml"
+        )
 
     def save_json(self, path: Path) -> None:
         """Write configuration to a JSON file.

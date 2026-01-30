@@ -63,19 +63,25 @@ TASC 55000 1
     assert "EPS1DOT+EPS2DOT" in labels
 
 
-def test_build_typical_candidates_dm_derivs_trigger_only_when_no_binary_and_high_chisq() -> None:
+def test_build_typical_candidates_dm_derivs_trigger_only_when_no_binary_and_high_chisq() -> (
+    None
+):
     par = """
 PSRJ J1234+5678
 F0 1.0 1
 DM 10.0 1
 """.strip() + "\n"
-    cands_low = build_typical_candidates(par, {"redchisq": 1.1}, dm_redchisq_threshold=2.0, dm_max_order=3)
+    cands_low = build_typical_candidates(
+        par, {"redchisq": 1.1}, dm_redchisq_threshold=2.0, dm_max_order=3
+    )
     labels_low = {c.label for c in cands_low}
     # Still includes PX by default (missing)
     assert "PX" in labels_low
-    assert all(not l.startswith("DM") for l in labels_low)
+    assert all(not lbl.startswith("DM") for lbl in labels_low)
 
-    cands_high = build_typical_candidates(par, {"redchisq": 3.0}, dm_redchisq_threshold=2.0, dm_max_order=3)
+    cands_high = build_typical_candidates(
+        par, {"redchisq": 3.0}, dm_redchisq_threshold=2.0, dm_max_order=3
+    )
     labels_high = {c.label for c in cands_high}
     assert "DM1" in labels_high
     assert "DM1+DM2" in labels_high

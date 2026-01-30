@@ -20,6 +20,7 @@ import pandas as pd
 
 from .tim_reader import read_tim_file_robust
 
+
 class PlkParseError(ValueError):
     """Raised when a tempo2 plk log cannot be parsed."""
 
@@ -29,12 +30,14 @@ class PlkParseError(ValueError):
         self.path = path
         self.reason = reason
 
+
 def _find_header_line(lines: List[str], startswith: str) -> Optional[int]:
     """Return the line index whose stripped content starts with ``startswith``."""
     for i, line in enumerate(lines):
         if line.strip().startswith(startswith):
             return i
     return None
+
 
 def read_plklog(file: Path) -> pd.DataFrame:
     """Parse a tempo2 ``plk`` log into a parameter table.
@@ -66,13 +69,20 @@ def read_plklog(file: Path) -> pd.DataFrame:
 
     header_i = _find_header_line(lines, "Param")
     if header_i is None:
-        header_i = next((i for i, l in enumerate(lines) if "Param" in l and "Postfit" in l), None)
+        header_i = next(
+            (
+                i
+                for i, line in enumerate(lines)
+                if "Param" in line and "Postfit" in line
+            ),
+            None,
+        )
     if header_i is None:
         param_rx = re.compile(r"\bparam(?:eter)?\b", re.IGNORECASE)
         pre_rx = re.compile(r"\bpre[- ]?fit\b", re.IGNORECASE)
         post_rx = re.compile(r"\bpost[- ]?fit\b", re.IGNORECASE)
-        for i, l in enumerate(lines):
-            s = l.strip()
+        for i, line in enumerate(lines):
+            s = line.strip()
             if not s:
                 continue
             if param_rx.search(s) and pre_rx.search(s) and post_rx.search(s):
@@ -82,7 +92,7 @@ def read_plklog(file: Path) -> pd.DataFrame:
         raise PlkParseError(file, "Could not find plk table header")
 
     rows = []
-    for line in lines[header_i + 1:]:
+    for line in lines[header_i + 1 :]:
         s = line.strip()
         if not s:
             continue
@@ -96,8 +106,11 @@ def read_plklog(file: Path) -> pd.DataFrame:
     if not rows:
         raise PlkParseError(file, "Plk table header found but no data rows parsed")
 
-    df = pd.DataFrame(rows, columns=["Param", "Prefit", "Postfit", "Uncertainty", "Difference", "Fit"])
+    df = pd.DataFrame(
+        rows, columns=["Param", "Prefit", "Postfit", "Uncertainty", "Difference", "Fit"]
+    )
     return df
+
 
 def read_covmat(file: Path) -> pd.DataFrame:
     """Parse a tempo2 covariance matrix text file.
@@ -119,12 +132,14 @@ def read_covmat(file: Path) -> pd.DataFrame:
 
     header_i = _find_header_line(lines, "Param")
     if header_i is None:
-        header_i = next((i for i, l in enumerate(lines) if l.strip().startswith("Param")), None)
+        header_i = next(
+            (i for i, line in enumerate(lines) if line.strip().startswith("Param")),
+            None,
+        )
     if header_i is None:
         raise ValueError(f"Could not find covmat header in {file}")
 
     data = "".join(lines[header_i:])
-    from io import StringIO
     df = pd.read_csv(StringIO(data), sep=r"\s+", engine="python")
     if "Param" not in df.columns:
         raise ValueError(f"Could not parse covmat into a table in {file}")
@@ -132,6 +147,7 @@ def read_covmat(file: Path) -> pd.DataFrame:
     if "Finishing" in df.index:
         df = df.drop(index="Finishing")
     return df.apply(pd.to_numeric, errors="coerce")
+
 
 GENERAL2_FORMAT = (
     "{sat} {bat} {clock0} {clock1} {clock2} {clock3} {clock4} {shapiro} {shapiroJ} "
@@ -142,6 +158,7 @@ GENERAL2_FORMAT = (
 )
 GENERAL2_COLUMNS = re.findall(r"\{([^}]+)\}", GENERAL2_FORMAT)
 
+
 def _is_number(tok: str) -> bool:
     """Return True if token can be parsed as a float."""
     try:
@@ -149,6 +166,7 @@ def _is_number(tok: str) -> bool:
         return True
     except Exception:
         return False
+
 
 def read_general2(file: Path) -> pd.DataFrame:
     """Parse tempo2 general2 plugin output embedded in a log file.
@@ -169,12 +187,12 @@ def read_general2(file: Path) -> pd.DataFrame:
     """
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
-    n = len(GENERAL2_COLUMNS)
-
     lines = file.read_text(encoding="utf-8", errors="ignore").splitlines()
     try:
         start = next(i for i, ln in enumerate(lines) if start_marker in ln) + 1
-        end = next(i for i, ln in enumerate(lines[start:], start=start) if end_marker in ln)
+        end = next(
+            i for i, ln in enumerate(lines[start:], start=start) if end_marker in ln
+        )
     except StopIteration as e:
         raise ValueError(f"Missing general2 markers in {file}") from e
 
@@ -201,7 +219,7 @@ def read_general2(file: Path) -> pd.DataFrame:
             continue
 
         # Take only the expected fields; ignore any trailing "ERROR: ..." etc
-        parts = parts[:len(columns)]
+        parts = parts[: len(columns)]
 
         # Convert to float; if any token isn't numeric, skip the line
         try:
@@ -217,6 +235,7 @@ def read_general2(file: Path) -> pd.DataFrame:
     df["mjd_int"] = np.floor(df["sat"]).astype("Int64")
 
     return df
+
 
 def read_tim_file(timfile: Path) -> pd.DataFrame:
     """Read a tempo2 `.tim` file using the robust reader.

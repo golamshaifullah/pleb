@@ -58,46 +58,209 @@ def build_parser() -> argparse.ArgumentParser:
         This parser is used by :func:`main` and includes both pipeline and
         param-scan options. The ``qc-report`` subcommand uses a separate parser.
     """
-    p = argparse.ArgumentParser(description="Data combination diagnostics pipeline (tempo2 + plots + reports).")
-    p.add_argument("--config",default=None,help="Path to config file (.json or .toml). Use '-' to read from stdin. Optional if using --set.",)
-    p.add_argument("--set",dest="overrides",action="append",default=[],metavar="KEY=VALUE",help="Override/add a config key. Repeatable. Dotted keys allowed (e.g. fix.required_tim_flags.-pta=\"EPTA\").",)
-    p.add_argument("--results-dir", type=Path, default=None, help="Override results_dir from config.")
-    p.add_argument("--outdir-name", type=str, default=None, help="Override outdir_name from config.")
-    p.add_argument("--force-rerun", action="store_true", help="Re-run tempo2 even if outputs exist.")
-    p.add_argument("--no-tempo2", action="store_true", help="Skip tempo2 run; use existing outputs if present.")
-    p.add_argument("--no-change-reports", action="store_true", help="Skip change report generation.")
-    p.add_argument("--testing", action="store_true", help="Enable testing mode (skips change reports).")
-    p.add_argument("--jobs", type=int, default=None, help="Number of parallel workers to run pulsars concurrently (per branch).")
-    p.add_argument("--qc", action="store_true", help="Run optional pqc outlier detection (requires pqc + libstempo).")
-    p.add_argument("--qc-backend-col", default=None, help="Backend grouping column for pqc (default from config: group).")
-    p.add_argument("--qc-drop-unmatched", action="store_true", help="Drop TOAs unmatched to tim metadata in pqc.")
-    p.add_argument("--qc-add-orbital-phase", action="store_true", help="Enable pqc orbital-phase feature extraction.")
-    p.add_argument("--qc-no-orbital-phase", action="store_true", help="Disable pqc orbital-phase feature extraction.")
-    p.add_argument("--qc-add-solar-elongation", action="store_true", help="Enable pqc solar-elongation feature extraction.")
-    p.add_argument("--qc-no-solar-elongation", action="store_true", help="Disable pqc solar-elongation feature extraction.")
-    p.add_argument("--qc-add-elevation", action="store_true", help="Enable pqc elevation feature extraction.")
-    p.add_argument("--qc-add-airmass", action="store_true", help="Enable pqc airmass feature extraction.")
-    p.add_argument("--qc-add-parallactic-angle", action="store_true", help="Enable pqc parallactic-angle feature extraction.")
-    p.add_argument("--qc-add-freq-bin", action="store_true", help="Enable pqc frequency-bin feature extraction.")
-    p.add_argument("--qc-freq-bins", type=int, default=None, help="Number of pqc frequency bins if enabled.")
-    p.add_argument("--qc-observatory-path", type=Path, default=None, help="Observatory file path for pqc alt/az features.")
-    p.add_argument("--qc-structure-mode", default=None, help="pqc structure mode: none/detrend/test/both.")
-    p.add_argument("--qc-structure-detrend-features", default=None, help="Comma-separated feature columns to detrend against.")
-    p.add_argument("--qc-structure-test-features", default=None, help="Comma-separated feature columns to test for structure.")
-    p.add_argument("--qc-structure-circular-features", default=None, help="Comma-separated circular feature columns.")
-    p.add_argument("--qc-structure-nbins", type=int, default=None, help="Number of bins for pqc structure tests.")
-    p.add_argument("--qc-structure-min-per-bin", type=int, default=None, help="Minimum points per bin for structure tests.")
-    p.add_argument("--qc-structure-p-thresh", type=float, default=None, help="p-value threshold for structure detection.")
-    p.add_argument("--qc-structure-group-cols", default=None, help="Comma-separated grouping columns for structure tests.")
-    p.add_argument("--qc-outlier-gate", action="store_true", help="Enable hard sigma gate for pqc outliers.")
-    p.add_argument("--qc-outlier-gate-sigma", type=float, default=None, help="Sigma threshold for pqc outlier gate.")
-    p.add_argument("--qc-outlier-gate-resid-col", default=None, help="Residual column for pqc outlier gate.")
-    p.add_argument("--qc-outlier-gate-sigma-col", default=None, help="Sigma column for pqc outlier gate.")
-    p.add_argument("--qc-event-instrument", action="store_true", help="Enable per-event membership diagnostics for pqc.")
+    p = argparse.ArgumentParser(
+        description="Data combination diagnostics pipeline (tempo2 + plots + reports)."
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        help="Path to config file (.json or .toml). Use '-' to read from stdin. Optional if using --set.",
+    )
+    p.add_argument(
+        "--set",
+        dest="overrides",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help='Override/add a config key. Repeatable. Dotted keys allowed (e.g. fix.required_tim_flags.-pta="EPTA").',
+    )
+    p.add_argument(
+        "--results-dir",
+        type=Path,
+        default=None,
+        help="Override results_dir from config.",
+    )
+    p.add_argument(
+        "--outdir-name",
+        type=str,
+        default=None,
+        help="Override outdir_name from config.",
+    )
+    p.add_argument(
+        "--force-rerun",
+        action="store_true",
+        help="Re-run tempo2 even if outputs exist.",
+    )
+    p.add_argument(
+        "--no-tempo2",
+        action="store_true",
+        help="Skip tempo2 run; use existing outputs if present.",
+    )
+    p.add_argument(
+        "--no-change-reports",
+        action="store_true",
+        help="Skip change report generation.",
+    )
+    p.add_argument(
+        "--testing",
+        action="store_true",
+        help="Enable testing mode (skips change reports).",
+    )
+    p.add_argument(
+        "--jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers to run pulsars concurrently (per branch).",
+    )
+    p.add_argument(
+        "--qc",
+        action="store_true",
+        help="Run optional pqc outlier detection (requires pqc + libstempo).",
+    )
+    p.add_argument(
+        "--qc-backend-col",
+        default=None,
+        help="Backend grouping column for pqc (default from config: group).",
+    )
+    p.add_argument(
+        "--qc-drop-unmatched",
+        action="store_true",
+        help="Drop TOAs unmatched to tim metadata in pqc.",
+    )
+    p.add_argument(
+        "--qc-add-orbital-phase",
+        action="store_true",
+        help="Enable pqc orbital-phase feature extraction.",
+    )
+    p.add_argument(
+        "--qc-no-orbital-phase",
+        action="store_true",
+        help="Disable pqc orbital-phase feature extraction.",
+    )
+    p.add_argument(
+        "--qc-add-solar-elongation",
+        action="store_true",
+        help="Enable pqc solar-elongation feature extraction.",
+    )
+    p.add_argument(
+        "--qc-no-solar-elongation",
+        action="store_true",
+        help="Disable pqc solar-elongation feature extraction.",
+    )
+    p.add_argument(
+        "--qc-add-elevation",
+        action="store_true",
+        help="Enable pqc elevation feature extraction.",
+    )
+    p.add_argument(
+        "--qc-add-airmass",
+        action="store_true",
+        help="Enable pqc airmass feature extraction.",
+    )
+    p.add_argument(
+        "--qc-add-parallactic-angle",
+        action="store_true",
+        help="Enable pqc parallactic-angle feature extraction.",
+    )
+    p.add_argument(
+        "--qc-add-freq-bin",
+        action="store_true",
+        help="Enable pqc frequency-bin feature extraction.",
+    )
+    p.add_argument(
+        "--qc-freq-bins",
+        type=int,
+        default=None,
+        help="Number of pqc frequency bins if enabled.",
+    )
+    p.add_argument(
+        "--qc-observatory-path",
+        type=Path,
+        default=None,
+        help="Observatory file path for pqc alt/az features.",
+    )
+    p.add_argument(
+        "--qc-structure-mode",
+        default=None,
+        help="pqc structure mode: none/detrend/test/both.",
+    )
+    p.add_argument(
+        "--qc-structure-detrend-features",
+        default=None,
+        help="Comma-separated feature columns to detrend against.",
+    )
+    p.add_argument(
+        "--qc-structure-test-features",
+        default=None,
+        help="Comma-separated feature columns to test for structure.",
+    )
+    p.add_argument(
+        "--qc-structure-circular-features",
+        default=None,
+        help="Comma-separated circular feature columns.",
+    )
+    p.add_argument(
+        "--qc-structure-nbins",
+        type=int,
+        default=None,
+        help="Number of bins for pqc structure tests.",
+    )
+    p.add_argument(
+        "--qc-structure-min-per-bin",
+        type=int,
+        default=None,
+        help="Minimum points per bin for structure tests.",
+    )
+    p.add_argument(
+        "--qc-structure-p-thresh",
+        type=float,
+        default=None,
+        help="p-value threshold for structure detection.",
+    )
+    p.add_argument(
+        "--qc-structure-group-cols",
+        default=None,
+        help="Comma-separated grouping columns for structure tests.",
+    )
+    p.add_argument(
+        "--qc-outlier-gate",
+        action="store_true",
+        help="Enable hard sigma gate for pqc outliers.",
+    )
+    p.add_argument(
+        "--qc-outlier-gate-sigma",
+        type=float,
+        default=None,
+        help="Sigma threshold for pqc outlier gate.",
+    )
+    p.add_argument(
+        "--qc-outlier-gate-resid-col",
+        default=None,
+        help="Residual column for pqc outlier gate.",
+    )
+    p.add_argument(
+        "--qc-outlier-gate-sigma-col",
+        default=None,
+        help="Sigma column for pqc outlier gate.",
+    )
+    p.add_argument(
+        "--qc-event-instrument",
+        action="store_true",
+        help="Enable per-event membership diagnostics for pqc.",
+    )
 
     # Param scan (fit-only): run baseline + candidate .par variants and compare via Δχ² / Wald z.
-    p.add_argument("--param-scan", action="store_true", help="Run a parameter scan (fit-only) instead of the full pipeline.")
-    p.add_argument("--scan-branch", type=str, default=None, help="Git branch to scan (default: config.reference_branch).")
+    p.add_argument(
+        "--param-scan",
+        action="store_true",
+        help="Run a parameter scan (fit-only) instead of the full pipeline.",
+    )
+    p.add_argument(
+        "--scan-branch",
+        type=str,
+        default=None,
+        help="Git branch to scan (default: config.reference_branch).",
+    )
     p.add_argument(
         "--scan",
         dest="scan_specs",
@@ -108,7 +271,12 @@ def build_parser() -> argparse.ArgumentParser:
             "You can also pass a file with --scan-file."
         ),
     )
-    p.add_argument("--scan-file", type=Path, default=None, help="Text file with one candidate spec per line.")
+    p.add_argument(
+        "--scan-file",
+        type=Path,
+        default=None,
+        help="Text file with one candidate spec per line.",
+    )
     p.add_argument(
         "--scan-typical",
         action="store_true",
@@ -142,7 +310,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Limit param scan to one or more pulsars. Repeatable.",
     )
-    p.add_argument("--scan-outdir", type=str, default=None, help="Override output directory name for the param scan run.")
+    p.add_argument(
+        "--scan-outdir",
+        type=str,
+        default=None,
+        help="Override output directory name for the param scan run.",
+    )
 
     # Extras
     p.add_argument(
@@ -161,8 +334,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write a binary/orbital analysis table derived from .par files.",
     )
     # Ingest mode (mapping-driven)
-    p.add_argument("--ingest-mapping", dest="ingest_mapping_file", default=None, help="JSON mapping file to run ingest mode.")
-    p.add_argument("--ingest-output-dir", dest="ingest_output_dir", default=None, help="Output root directory for ingest mode.")
+    p.add_argument(
+        "--ingest-mapping",
+        dest="ingest_mapping_file",
+        default=None,
+        help="JSON mapping file to run ingest mode.",
+    )
+    p.add_argument(
+        "--ingest-output-dir",
+        dest="ingest_output_dir",
+        default=None,
+        help="Output root directory for ingest mode.",
+    )
     return p
 
 
@@ -172,25 +355,69 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
     Returns:
         An :class:`argparse.ArgumentParser` configured for PQC report options.
     """
-    p = argparse.ArgumentParser(description="Generate PQC report summaries and plots from a run directory.")
+    p = argparse.ArgumentParser(
+        description="Generate PQC report summaries and plots from a run directory."
+    )
     p.add_argument("qc_report", nargs="?", help=argparse.SUPPRESS)
-    p.add_argument("--run-dir", type=Path, required=True, help="Run directory containing qc outputs.")
-    p.add_argument("--backend-col", default="group", help="Backend column name (default: group).")
-    p.add_argument("--backend", default=None, help="Optional: filter plots to a single backend key.")
-    p.add_argument("--structure-group-cols", default=None, help="Comma-separated group columns; use ; for multiple groupings.")
-    p.add_argument("--no-feature-plots", action="store_true", help="Skip feature (e.g., orbital phase/solar) plots.")
-    p.add_argument("--report-dir", type=Path, default=None, help="Output directory for report artifacts (default: <run-dir>/qc_report).")
-    p.add_argument("--no-plots", action="store_true", help="Skip transient plot generation.")
+    p.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Run directory containing qc outputs.",
+    )
+    p.add_argument(
+        "--backend-col", default="group", help="Backend column name (default: group)."
+    )
+    p.add_argument(
+        "--backend",
+        default=None,
+        help="Optional: filter plots to a single backend key.",
+    )
+    p.add_argument(
+        "--structure-group-cols",
+        default=None,
+        help="Comma-separated group columns; use ; for multiple groupings.",
+    )
+    p.add_argument(
+        "--no-feature-plots",
+        action="store_true",
+        help="Skip feature (e.g., orbital phase/solar) plots.",
+    )
+    p.add_argument(
+        "--report-dir",
+        type=Path,
+        default=None,
+        help="Output directory for report artifacts (default: <run-dir>/qc_report).",
+    )
+    p.add_argument(
+        "--no-plots", action="store_true", help="Skip transient plot generation."
+    )
     return p
 
 
 def build_ingest_parser() -> argparse.ArgumentParser:
     """Build the CLI parser for the ingest subcommand."""
-    p = argparse.ArgumentParser(description="Ingest pulsar timing files into canonical layout.")
+    p = argparse.ArgumentParser(
+        description="Ingest pulsar timing files into canonical layout."
+    )
     p.add_argument("ingest", nargs="?", help=argparse.SUPPRESS)
-    p.add_argument("--mapping", dest="ingest_mapping_file", required=False, help="JSON mapping file (required unless provided in config).")
-    p.add_argument("--output-dir", dest="ingest_output_dir", default=None, help="Output root directory (required if no config).")
-    p.add_argument("--config", default=None, help="Optional config file to supply output root defaults.")
+    p.add_argument(
+        "--mapping",
+        dest="ingest_mapping_file",
+        required=False,
+        help="JSON mapping file (required unless provided in config).",
+    )
+    p.add_argument(
+        "--output-dir",
+        dest="ingest_output_dir",
+        default=None,
+        help="Output root directory (required if no config).",
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        help="Optional config file to supply output root defaults.",
+    )
     return p
 
 
@@ -210,7 +437,9 @@ def run_qc_report(argv: list[str] | None) -> int:
         backend=(str(args.backend) if args.backend is not None else None),
         report_dir=(Path(args.report_dir) if args.report_dir else None),
         no_plots=bool(args.no_plots),
-        structure_group_cols=(str(args.structure_group_cols) if args.structure_group_cols else None),
+        structure_group_cols=(
+            str(args.structure_group_cols) if args.structure_group_cols else None
+        ),
         no_feature_plots=bool(args.no_feature_plots),
     )
     print(str(report_dir))
@@ -223,20 +452,27 @@ def run_ingest(argv: list[str] | None) -> int:
     cfg = None
     if args.config:
         cfg = PipelineConfig.load(args.config)
-    mapping_file = args.ingest_mapping_file or (cfg.ingest_mapping_file if cfg else None)
+    mapping_file = args.ingest_mapping_file or (
+        cfg.ingest_mapping_file if cfg else None
+    )
     if not mapping_file:
-        raise SystemExit("Ingest mode requires --mapping or ingest_mapping_file in config.")
+        raise SystemExit(
+            "Ingest mode requires --mapping or ingest_mapping_file in config."
+        )
     output_root = args.ingest_output_dir or (cfg.ingest_output_dir if cfg else None)
     if output_root is None and cfg is not None:
         output_root = Path(cfg.home_dir) / Path(cfg.dataset_name)
     if output_root is None or str(output_root).strip() == "":
-        raise SystemExit("Ingest mode requires --output-dir (or ingest_output_dir/home_dir+dataset_name in config).")
+        raise SystemExit(
+            "Ingest mode requires --output-dir (or ingest_output_dir/home_dir+dataset_name in config)."
+        )
     try:
         report = ingest_dataset(Path(mapping_file), Path(output_root))
     except IngestError as e:
         raise SystemExit(str(e)) from e
     print(str(report["output_root"]))
     return 0
+
 
 def _parse_value_as_toml_literal(raw: str):
     """Parse a TOML literal from a CLI override.
@@ -274,6 +510,7 @@ def _parse_csv_list(raw: str | None) -> list[str] | None:
     items = [p for p in items if p]
     return items or None
 
+
 def _set_dotted_key(d: dict, key: str, value):
     """Set a nested value in a dict using dotted-key notation.
 
@@ -289,6 +526,7 @@ def _set_dotted_key(d: dict, key: str, value):
             cur[p] = {}
         cur = cur[p]
     cur[parts[-1]] = value
+
 
 def _load_config_dict(config_arg: str | None) -> dict:
     """Load a raw config dictionary from a file or stdin.
@@ -326,6 +564,7 @@ def _load_config_dict(config_arg: str | None) -> dict:
         return tomllib.loads(text)
     raise ValueError("Config must be .toml or .json")
 
+
 def _dump_toml_no_nulls(data: dict) -> str:
     """Serialize a dict to TOML, omitting ``None`` values.
 
@@ -335,6 +574,7 @@ def _dump_toml_no_nulls(data: dict) -> str:
     Returns:
         TOML string with ``None`` values omitted.
     """
+
     def to_tomlkit(obj):
         if isinstance(obj, dict):
             t = table()
@@ -399,7 +639,7 @@ def main(argv=None) -> int:
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
-            
+
     if args.results_dir is not None:
         cfg.results_dir = args.results_dir
     if args.outdir_name is not None:
@@ -415,57 +655,63 @@ def main(argv=None) -> int:
 
     if args.jobs is not None:
         cfg.jobs = int(args.jobs)
-    if getattr(args, 'qc', False):
+    if getattr(args, "qc", False):
         cfg.run_pqc = True
-    if getattr(args, 'qc_backend_col', None):
+    if getattr(args, "qc_backend_col", None):
         cfg.pqc_backend_col = str(args.qc_backend_col)
-    if getattr(args, 'qc_drop_unmatched', False):
+    if getattr(args, "qc_drop_unmatched", False):
         cfg.pqc_drop_unmatched = True
-    if getattr(args, 'qc_add_orbital_phase', False):
+    if getattr(args, "qc_add_orbital_phase", False):
         cfg.pqc_add_orbital_phase = True
-    if getattr(args, 'qc_no_orbital_phase', False):
+    if getattr(args, "qc_no_orbital_phase", False):
         cfg.pqc_add_orbital_phase = False
-    if getattr(args, 'qc_add_solar_elongation', False):
+    if getattr(args, "qc_add_solar_elongation", False):
         cfg.pqc_add_solar_elongation = True
-    if getattr(args, 'qc_no_solar_elongation', False):
+    if getattr(args, "qc_no_solar_elongation", False):
         cfg.pqc_add_solar_elongation = False
-    if getattr(args, 'qc_add_elevation', False):
+    if getattr(args, "qc_add_elevation", False):
         cfg.pqc_add_elevation = True
-    if getattr(args, 'qc_add_airmass', False):
+    if getattr(args, "qc_add_airmass", False):
         cfg.pqc_add_airmass = True
-    if getattr(args, 'qc_add_parallactic_angle', False):
+    if getattr(args, "qc_add_parallactic_angle", False):
         cfg.pqc_add_parallactic_angle = True
-    if getattr(args, 'qc_add_freq_bin', False):
+    if getattr(args, "qc_add_freq_bin", False):
         cfg.pqc_add_freq_bin = True
-    if getattr(args, 'qc_freq_bins', None) is not None:
+    if getattr(args, "qc_freq_bins", None) is not None:
         cfg.pqc_freq_bins = int(args.qc_freq_bins)
-    if getattr(args, 'qc_observatory_path', None) is not None:
+    if getattr(args, "qc_observatory_path", None) is not None:
         cfg.pqc_observatory_path = str(args.qc_observatory_path)
-    if getattr(args, 'qc_structure_mode', None):
+    if getattr(args, "qc_structure_mode", None):
         cfg.pqc_structure_mode = str(args.qc_structure_mode)
-    if getattr(args, 'qc_structure_detrend_features', None):
-        cfg.pqc_structure_detrend_features = _parse_csv_list(args.qc_structure_detrend_features)
-    if getattr(args, 'qc_structure_test_features', None):
-        cfg.pqc_structure_test_features = _parse_csv_list(args.qc_structure_test_features)
-    if getattr(args, 'qc_structure_circular_features', None):
-        cfg.pqc_structure_circular_features = _parse_csv_list(args.qc_structure_circular_features)
-    if getattr(args, 'qc_structure_nbins', None) is not None:
+    if getattr(args, "qc_structure_detrend_features", None):
+        cfg.pqc_structure_detrend_features = _parse_csv_list(
+            args.qc_structure_detrend_features
+        )
+    if getattr(args, "qc_structure_test_features", None):
+        cfg.pqc_structure_test_features = _parse_csv_list(
+            args.qc_structure_test_features
+        )
+    if getattr(args, "qc_structure_circular_features", None):
+        cfg.pqc_structure_circular_features = _parse_csv_list(
+            args.qc_structure_circular_features
+        )
+    if getattr(args, "qc_structure_nbins", None) is not None:
         cfg.pqc_structure_nbins = int(args.qc_structure_nbins)
-    if getattr(args, 'qc_structure_min_per_bin', None) is not None:
+    if getattr(args, "qc_structure_min_per_bin", None) is not None:
         cfg.pqc_structure_min_per_bin = int(args.qc_structure_min_per_bin)
-    if getattr(args, 'qc_structure_p_thresh', None) is not None:
+    if getattr(args, "qc_structure_p_thresh", None) is not None:
         cfg.pqc_structure_p_thresh = float(args.qc_structure_p_thresh)
-    if getattr(args, 'qc_structure_group_cols', None):
+    if getattr(args, "qc_structure_group_cols", None):
         cfg.pqc_structure_group_cols = _parse_csv_list(args.qc_structure_group_cols)
-    if getattr(args, 'qc_outlier_gate', False):
+    if getattr(args, "qc_outlier_gate", False):
         cfg.pqc_outlier_gate_enabled = True
-    if getattr(args, 'qc_outlier_gate_sigma', None) is not None:
+    if getattr(args, "qc_outlier_gate_sigma", None) is not None:
         cfg.pqc_outlier_gate_sigma = float(args.qc_outlier_gate_sigma)
-    if getattr(args, 'qc_outlier_gate_resid_col', None):
+    if getattr(args, "qc_outlier_gate_resid_col", None):
         cfg.pqc_outlier_gate_resid_col = str(args.qc_outlier_gate_resid_col)
-    if getattr(args, 'qc_outlier_gate_sigma_col', None):
+    if getattr(args, "qc_outlier_gate_sigma_col", None):
         cfg.pqc_outlier_gate_sigma_col = str(args.qc_outlier_gate_sigma_col)
-    if getattr(args, 'qc_event_instrument', False):
+    if getattr(args, "qc_event_instrument", False):
         cfg.pqc_event_instrument = True
 
     if args.fix_dataset:
@@ -496,14 +742,18 @@ def main(argv=None) -> int:
         if args.scan_file is not None:
             if not args.scan_file.exists():
                 raise FileNotFoundError(str(args.scan_file))
-            for raw in args.scan_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+            for raw in args.scan_file.read_text(
+                encoding="utf-8", errors="ignore"
+            ).splitlines():
                 line = raw.strip()
                 if not line or line.startswith(("#", "C ", "c ")):
                     continue
                 specs.append(line)
 
         if not specs and not args.scan_typical:
-            raise SystemExit("--param-scan requires at least one --scan spec (or --scan-file), unless --scan-typical is used.")
+            raise SystemExit(
+                "--param-scan requires at least one --scan spec (or --scan-file), unless --scan-typical is used."
+            )
 
         out_paths = run_param_scan(
             cfg,

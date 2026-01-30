@@ -24,15 +24,27 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 def main() -> None:
     """Plot transient detections from a QC CSV into per-event PNGs."""
     ap = argparse.ArgumentParser(description="Plot transient detections from QC CSV")
     ap.add_argument("--csv", required=True, help="QC output CSV")
     ap.add_argument("--outdir", default="plots", help="Directory for PNGs")
-    ap.add_argument("--backend-col", default="group", help="Backend column name (default: group)")
-    ap.add_argument("--backend", default=None, help="Optional: plot only this backend key")
-    ap.add_argument("--tau-rec-days", type=float, default=7.0, help="Tau used for overlay curve")
-    ap.add_argument("--window-mult", type=float, default=5.0, help="Window length = window_mult*tau for plotting")
+    ap.add_argument(
+        "--backend-col", default="group", help="Backend column name (default: group)"
+    )
+    ap.add_argument(
+        "--backend", default=None, help="Optional: plot only this backend key"
+    )
+    ap.add_argument(
+        "--tau-rec-days", type=float, default=7.0, help="Tau used for overlay curve"
+    )
+    ap.add_argument(
+        "--window-mult",
+        type=float,
+        default=5.0,
+        help="Window length = window_mult*tau for plotting",
+    )
     args = ap.parse_args()
 
     outdir = Path(args.outdir)
@@ -60,18 +72,28 @@ def main() -> None:
         y = sub["resid"].to_numpy()
         s = sub["sigma"].to_numpy()
 
-        t0 = float(sub["transient_t0"].iloc[0]) if "transient_t0" in sub.columns else float(t.min())
-        A = float(sub["transient_amp"].iloc[0]) if "transient_amp" in sub.columns else 0.0
+        t0 = (
+            float(sub["transient_t0"].iloc[0])
+            if "transient_t0" in sub.columns
+            else float(t.min())
+        )
+        A = (
+            float(sub["transient_amp"].iloc[0])
+            if "transient_amp" in sub.columns
+            else 0.0
+        )
 
         # plotting window
         w_end = args.window_mult * args.tau_rec_days
         mask = (t >= t0) & (t <= t0 + w_end)
-        t = t[mask]; y = y[mask]; s = s[mask]
+        t = t[mask]
+        y = y[mask]
+        s = s[mask]
         if len(t) < 2:
             continue
 
         plt.figure()
-        plt.errorbar(t, y, yerr=s, fmt='o', capsize=2, label="event_member")
+        plt.errorbar(t, y, yerr=s, fmt="o", capsize=2, label="event_member")
 
         if "bad_point" in sub.columns:
             bad_point = sub["bad_point"].fillna(False).astype(bool).to_numpy()
@@ -85,7 +107,14 @@ def main() -> None:
                 bad_point |= sub["robust_outlier"].fillna(False).astype(bool).to_numpy()
 
         if np.any(bad_point):
-            plt.plot(t[bad_point], y[bad_point], "x", color="grey", alpha=0.9, label="bad_point")
+            plt.plot(
+                t[bad_point],
+                y[bad_point],
+                "x",
+                color="grey",
+                alpha=0.9,
+                label="bad_point",
+            )
 
         # overlay exponential curve
         tt = np.linspace(t0, t0 + w_end, 200)
@@ -94,7 +123,9 @@ def main() -> None:
 
         plt.xlabel("MJD")
         plt.ylabel("Residual")
-        plt.title(f"{backend} transient {tid} (t0={t0:.6f}, A={A:.3g}) | bad_points={int(bad_point.sum())}")
+        plt.title(
+            f"{backend} transient {tid} (t0={t0:.6f}, A={A:.3g}) | bad_points={int(bad_point.sum())}"
+        )
         plt.legend(fontsize=8, frameon=False)
 
         fname = outdir / f"transient_{backend.replace('.', '_')}_id{tid}.png"
@@ -103,6 +134,7 @@ def main() -> None:
         plt.close()
 
     print(f"Wrote plots to {outdir}")
+
 
 if __name__ == "__main__":
     main()

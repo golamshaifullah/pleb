@@ -7,7 +7,7 @@ that contain mixed headers, directives, and TOA rows.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 import re
 
 import pandas as pd
@@ -32,13 +32,21 @@ def _to_numeric_maybe(s: pd.Series) -> pd.Series:
 
 
 _BAD_STARTS = (
-    "TIME", "MODE", "FORMAT",
-    "Er", "END", "end",
-    "C", "CC", "#",
+    "TIME",
+    "MODE",
+    "FORMAT",
+    "Er",
+    "END",
+    "end",
+    "C",
+    "CC",
+    "#",
 )
 
 _BAD_CONTAINS = (
-    "below", "SKIP", "EFAC",
+    "below",
+    "SKIP",
+    "EFAC",
 )
 
 # Lines starting with 'c ' are comments in many files, but some data lines can start with c0..c9

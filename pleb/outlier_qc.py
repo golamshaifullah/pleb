@@ -202,10 +202,26 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             MergeConfig,
             StructureConfig,
             TransientConfig,
-            StepConfig, RobustOutlierConfig, OutlierGateConfig, SolarCutConfig, OrbitalPhaseCutConfig,
+            StepConfig,
+            RobustOutlierConfig,
+            OutlierGateConfig,
+            SolarCutConfig,
+            OrbitalPhaseCutConfig,
         )
+
         # Sanity check: ensure pqc config classes are importable
-        _ = (BadMeasConfig, FeatureConfig, MergeConfig, StructureConfig, TransientConfig, StepConfig, RobustOutlierConfig, OutlierGateConfig, SolarCutConfig, OrbitalPhaseCutConfig)
+        _ = (
+            BadMeasConfig,
+            FeatureConfig,
+            MergeConfig,
+            StructureConfig,
+            TransientConfig,
+            StepConfig,
+            RobustOutlierConfig,
+            OutlierGateConfig,
+            SolarCutConfig,
+            OrbitalPhaseCutConfig,
+        )
         logger.info("pqc config classes loaded: %s", ",".join([c.__name__ for c in _]))
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
@@ -239,13 +255,27 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
     )
     struct_cfg = StructureConfig(
         mode=str(cfg.structure_mode),
-        detrend_features=tuple(cfg.structure_detrend_features) if cfg.structure_detrend_features else StructureConfig().detrend_features,
-        structure_features=tuple(cfg.structure_test_features) if cfg.structure_test_features else StructureConfig().structure_features,
+        detrend_features=(
+            tuple(cfg.structure_detrend_features)
+            if cfg.structure_detrend_features
+            else StructureConfig().detrend_features
+        ),
+        structure_features=(
+            tuple(cfg.structure_test_features)
+            if cfg.structure_test_features
+            else StructureConfig().structure_features
+        ),
         nbins=int(cfg.structure_nbins),
         min_per_bin=int(cfg.structure_min_per_bin),
         p_thresh=float(cfg.structure_p_thresh),
-        circular_features=tuple(cfg.structure_circular_features) if cfg.structure_circular_features else StructureConfig().circular_features,
-        structure_group_cols=tuple(cfg.structure_group_cols) if cfg.structure_group_cols else None,
+        circular_features=(
+            tuple(cfg.structure_circular_features)
+            if cfg.structure_circular_features
+            else StructureConfig().circular_features
+        ),
+        structure_group_cols=(
+            tuple(cfg.structure_group_cols) if cfg.structure_group_cols else None
+        ),
     )
 
     step_cfg = StepConfig(
@@ -270,8 +300,12 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
     gate_cfg = OutlierGateConfig(
         enabled=bool(cfg.outlier_gate_enabled),
         sigma_thresh=float(cfg.outlier_gate_sigma),
-        resid_col=(str(cfg.outlier_gate_resid_col) if cfg.outlier_gate_resid_col else None),
-        sigma_col=(str(cfg.outlier_gate_sigma_col) if cfg.outlier_gate_sigma_col else None),
+        resid_col=(
+            str(cfg.outlier_gate_resid_col) if cfg.outlier_gate_resid_col else None
+        ),
+        sigma_col=(
+            str(cfg.outlier_gate_sigma_col) if cfg.outlier_gate_sigma_col else None
+        ),
     )
     solar_cfg = SolarCutConfig(
         enabled=bool(cfg.solar_cut_enabled),
@@ -283,7 +317,9 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
     orbital_cfg = OrbitalPhaseCutConfig(
         enabled=bool(cfg.orbital_phase_cut_enabled),
         center_phase=float(cfg.orbital_phase_cut_center),
-        limit_phase=(float(cfg.orbital_phase_cut) if cfg.orbital_phase_cut is not None else None),
+        limit_phase=(
+            float(cfg.orbital_phase_cut) if cfg.orbital_phase_cut is not None else None
+        ),
         sigma_thresh=float(cfg.orbital_phase_cut_sigma),
         nbins=int(cfg.orbital_phase_cut_nbins),
         min_points=int(cfg.orbital_phase_cut_min_points),
@@ -312,7 +348,9 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
     return df
 
 
-def run_pqc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None) -> pd.DataFrame:
+def run_pqc_for_parfile_subprocess(
+    parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None
+) -> pd.DataFrame:
     """Run pqc in a subprocess to isolate segfaults from libstempo.
 
     Args:
@@ -398,8 +436,14 @@ def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
     if "bad_day" in df.columns and "day" in df.columns:
         out["n_bad_days"] = int(df.loc[df["bad_day"].fillna(False), "day"].nunique())
     if "transient_id" in df.columns:
-        out["n_transient_toas"] = int((df["transient_id"].fillna(-1).astype(int) != -1).sum())
-        out["n_transients"] = int(df.loc[df["transient_id"].fillna(-1).astype(int) != -1, "transient_id"].nunique())
+        out["n_transient_toas"] = int(
+            (df["transient_id"].fillna(-1).astype(int) != -1).sum()
+        )
+        out["n_transients"] = int(
+            df.loc[
+                df["transient_id"].fillna(-1).astype(int) != -1, "transient_id"
+            ].nunique()
+        )
     if "solar_bad" in df.columns:
         out["n_solar_bad"] = int(df["solar_bad"].fillna(False).sum())
     if "orbital_phase_bad" in df.columns:

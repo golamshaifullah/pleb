@@ -27,7 +27,9 @@ def which_or_raise(cmd: str, hint: str = "") -> str:
     """
     path = shutil.which(cmd)
     if not path:
-        raise RuntimeError(f"Required executable not found on PATH: {cmd}. {hint}".strip())
+        raise RuntimeError(
+            f"Required executable not found on PATH: {cmd}. {hint}".strip()
+        )
     return path
 
 
@@ -56,12 +58,18 @@ def discover_pulsars(home_dir: Path) -> List[str]:
     """
     pulsars: List[str] = []
     for entry in home_dir.iterdir():
-        if entry.is_dir() and entry.name.startswith("J") and not entry.name.startswith("."):
+        if (
+            entry.is_dir()
+            and entry.name.startswith("J")
+            and not entry.name.startswith(".")
+        ):
             pulsars.append(entry.name)
     return sorted(pulsars)
 
 
-def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Optional[str]) -> Dict[str, Path]:
+def make_output_tree(
+    results_dir: Path, branches: List[str], outdir_name: Optional[str]
+) -> Dict[str, Path]:
     """Create the output directory tree for a pipeline run.
 
     Args:
@@ -78,7 +86,9 @@ def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Option
             paths = make_output_tree(Path("results"), ["main", "EPTA"], None)
     """
     if outdir_name is None:
-        outdir_name = "EPTA_combination_report_" + datetime.now().strftime("%Y%m%dT%H%M")
+        outdir_name = "EPTA_combination_report_" + datetime.now().strftime(
+            "%Y%m%dT%H%M"
+        )
     base = results_dir / outdir_name
     tag = "-".join(branches)
 

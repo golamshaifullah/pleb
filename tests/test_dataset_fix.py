@@ -55,7 +55,9 @@ def test_update_alltim_includes_dry_run_and_apply(tmp_path: Path) -> None:
     assert rep["to_add"] == ["tims/backend.tim"]
 
     # apply
-    rep2 = update_alltim_includes(psr_dir, min_toas=10, apply=True, dry_run=False, backup=False)
+    rep2 = update_alltim_includes(
+        psr_dir, min_toas=10, apply=True, dry_run=False, backup=False
+    )
     assert rep2["added"] == 1
     assert "tims/backend.tim" in parse_include_lines(alltim)
 
@@ -71,7 +73,9 @@ file2 1400 55001 1 1 -pta EPTA
 INCLUDE tims/other.tim
 """,
     )
-    rep = ensure_timfile_flags(t, {"-pta": "EPTA", "-sys": "SYS1"}, apply=True, backup=False)
+    rep = ensure_timfile_flags(
+        t, {"-pta": "EPTA", "-sys": "SYS1"}, apply=True, backup=False
+    )
     assert rep["changed"] is True
 
     txt = t.read_text(encoding="utf-8")
@@ -126,7 +130,9 @@ def test_remove_patterns_from_par_tim(tmp_path: Path) -> None:
     _write(par, "A 1\nBAD NRT.NUPPI. foo\nB 2\n")
     _write(tim, "file 1400 55000 1 1\nNRT.NUPPI. garbage\n")
 
-    rep = remove_patterns_from_par_tim(par, tim, patterns=["NRT.NUPPI."], apply=True, backup=False)
+    rep = remove_patterns_from_par_tim(
+        par, tim, patterns=["NRT.NUPPI."], apply=True, backup=False
+    )
     assert rep["par_removed"] == 1
     assert rep["tim_removed"] == 1
 

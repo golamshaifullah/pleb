@@ -10,6 +10,7 @@ except Exception as e:  # pragma: no cover
 import numpy as np
 import pandas as pd
 
+
 def test_bad_measurement_day_flagging():
     rng = np.random.default_rng(0)
     n = 300
@@ -18,7 +19,7 @@ def test_bad_measurement_day_flagging():
     sigma = np.full(n, 1.0)
     resid = rng.normal(0, 1.0, size=n)
 
-    target_day = day[n//2]
+    target_day = day[n // 2]
     idx = np.where(day == target_day)[0][0]
     resid[idx] = 12.0
 

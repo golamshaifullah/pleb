@@ -10,6 +10,7 @@ except Exception as e:  # pragma: no cover
 import numpy as np
 import pandas as pd
 
+
 def test_transient_detection_simple():
     rng = np.random.default_rng(1)
     n = 120
@@ -21,9 +22,11 @@ def test_transient_detection_simple():
 
     A = 2.0
     resid = rng.normal(0, sigma, size=n)
-    resid += np.where(mjd >= t0, A * np.exp(-(mjd - t0)/tau), 0.0)
+    resid += np.where(mjd >= t0, A * np.exp(-(mjd - t0) / tau), 0.0)
 
     df = pd.DataFrame({"mjd": mjd, "resid": resid, "sigma": sigma, "bad": False})
-    out = scan_transients(df, tau_rec_days=tau, window_mult=5, min_points=10, delta_chi2_thresh=25)
+    out = scan_transients(
+        df, tau_rec_days=tau, window_mult=5, min_points=10, delta_chi2_thresh=25
+    )
 
     assert out["transient_id"].max() >= 0

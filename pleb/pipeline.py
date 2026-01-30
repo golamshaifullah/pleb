@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import os
 import warnings
@@ -133,6 +133,7 @@ def _cfg_get_bool(cfg, name: str, default: bool = False) -> bool:
     # Fall back to Python truthiness for odd values
     return bool(s)
 
+
 def _fix_cfg_fields() -> set[str]:
     """Return the supported :class:`FixDatasetConfig` field names.
 
@@ -148,7 +149,13 @@ def _fix_cfg_fields() -> set[str]:
         return set(getattr(FixDatasetConfig, "__annotations__", {}).keys())
 
 
-def _build_fixdataset_config(cfg, *, apply: bool, qc_results_dir: Path | None = None, qc_branch: str | None = None) -> FixDatasetConfig:
+def _build_fixdataset_config(
+    cfg,
+    *,
+    apply: bool,
+    qc_results_dir: Path | None = None,
+    qc_branch: str | None = None,
+) -> FixDatasetConfig:
     """Create a :class:`FixDatasetConfig` from a :class:`PipelineConfig`.
 
     Args:
@@ -178,61 +185,119 @@ def _build_fixdataset_config(cfg, *, apply: bool, qc_results_dir: Path | None = 
         backup=bool(backup),
         dry_run=bool(dry_run),
         update_alltim_includes=bool(_cfg_get(cfg, "fix_update_alltim_includes", True)),
-        min_toas_per_backend_tim=int(_cfg_get(cfg, "fix_min_toas_per_backend_tim", 10) or 10),
+        min_toas_per_backend_tim=int(
+            _cfg_get(cfg, "fix_min_toas_per_backend_tim", 10) or 10
+        ),
         required_tim_flags=dict(_cfg_get(cfg, "fix_required_tim_flags", {}) or {}),
         infer_system_flags=bool(_cfg_get(cfg, "fix_infer_system_flags", False)),
         system_flag_table_path=_cfg_get(cfg, "fix_system_flag_table_path", None),
-        system_flag_overwrite_existing=bool(_cfg_get(cfg, "fix_system_flag_overwrite_existing", False)),
+        system_flag_overwrite_existing=bool(
+            _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
+        ),
         backend_overrides=dict(_cfg_get(cfg, "fix_backend_overrides", {}) or {}),
-        raise_on_backend_missing=bool(_cfg_get(cfg, "fix_raise_on_backend_missing", False)),
+        raise_on_backend_missing=bool(
+            _cfg_get(cfg, "fix_raise_on_backend_missing", False)
+        ),
         dedupe_toas_within_tim=bool(_cfg_get(cfg, "fix_dedupe_toas_within_tim", False)),
-        check_duplicate_backend_tims=bool(_cfg_get(cfg, "fix_check_duplicate_backend_tims", False)),
+        check_duplicate_backend_tims=bool(
+            _cfg_get(cfg, "fix_check_duplicate_backend_tims", False)
+        ),
         remove_overlaps_exact=bool(_cfg_get(cfg, "fix_remove_overlaps_exact", False)),
         insert_missing_jumps=bool(_cfg_get(cfg, "fix_insert_missing_jumps", True)),
         jump_flag=str(_cfg_get(cfg, "fix_jump_flag", "-sys") or "-sys"),
         ensure_ephem=_cfg_get(cfg, "fix_ensure_ephem", None),
         ensure_clk=_cfg_get(cfg, "fix_ensure_clk", None),
         ensure_ne_sw=_cfg_get(cfg, "fix_ensure_ne_sw", None),
-        remove_patterns=list(_cfg_get(cfg, "fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."]) or []),
+        remove_patterns=list(
+            _cfg_get(cfg, "fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."]) or []
+        ),
         coord_convert=_cfg_get(cfg, "fix_coord_convert", None),
     )
 
     # Extended knobs (present in pipelineb; only applied if FixDatasetConfig supports them)
     kwargs.update(
         dict(
-            prune_missing_includes=bool(_cfg_get(cfg, "fix_prune_missing_includes", True)),
-            drop_small_backend_includes=bool(_cfg_get(cfg, "fix_drop_small_backend_includes", True)),
-            system_flag_update_table=bool(_cfg_get(cfg, "fix_system_flag_update_table", True)),
+            prune_missing_includes=bool(
+                _cfg_get(cfg, "fix_prune_missing_includes", True)
+            ),
+            drop_small_backend_includes=bool(
+                _cfg_get(cfg, "fix_drop_small_backend_includes", True)
+            ),
+            system_flag_update_table=bool(
+                _cfg_get(cfg, "fix_system_flag_update_table", True)
+            ),
             default_backend=_cfg_get(cfg, "fix_default_backend", None),
             group_flag=str(_cfg_get(cfg, "fix_group_flag", "-group") or "-group"),
             pta_flag=str(_cfg_get(cfg, "fix_pta_flag", "-pta") or "-pta"),
             pta_value=_cfg_get(cfg, "fix_pta_value", None),
-            standardize_par_values=bool(_cfg_get(cfg, "fix_standardize_par_values", True)),
-            prune_small_system_toas=bool(_cfg_get(cfg, "fix_prune_small_system_toas", False)),
-            prune_small_system_flag=str(_cfg_get(cfg, "fix_prune_small_system_flag", "-sys") or "-sys"),
+            standardize_par_values=bool(
+                _cfg_get(cfg, "fix_standardize_par_values", True)
+            ),
+            prune_small_system_toas=bool(
+                _cfg_get(cfg, "fix_prune_small_system_toas", False)
+            ),
+            prune_small_system_flag=str(
+                _cfg_get(cfg, "fix_prune_small_system_flag", "-sys") or "-sys"
+            ),
             qc_remove_outliers=bool(_cfg_get(cfg, "fix_qc_remove_outliers", False)),
             qc_action=str(_cfg_get(cfg, "fix_qc_action", "comment") or "comment"),
             qc_backend_col=str(_cfg_get(cfg, "fix_qc_backend_col", "sys") or "sys"),
-            qc_comment_prefix=str(_cfg_get(cfg, "fix_qc_comment_prefix", "C QC_OUTLIER") or "C QC_OUTLIER"),
+            qc_comment_prefix=str(
+                _cfg_get(cfg, "fix_qc_comment_prefix", "C QC_OUTLIER") or "C QC_OUTLIER"
+            ),
             qc_remove_bad=bool(_cfg_get(cfg, "fix_qc_remove_bad", True)),
             qc_remove_transients=bool(_cfg_get(cfg, "fix_qc_remove_transients", False)),
             qc_remove_solar=bool(_cfg_get(cfg, "fix_qc_remove_solar", False)),
-            qc_solar_action=str(_cfg_get(cfg, "fix_qc_solar_action", "comment") or "comment"),
-            qc_solar_comment_prefix=str(_cfg_get(cfg, "fix_qc_solar_comment_prefix", "# QC_SOLAR") or "# QC_SOLAR"),
-            qc_remove_orbital_phase=bool(_cfg_get(cfg, "fix_qc_remove_orbital_phase", False)),
-            qc_orbital_phase_action=str(_cfg_get(cfg, "fix_qc_orbital_phase_action", "comment") or "comment"),
-            qc_orbital_phase_comment_prefix=str(_cfg_get(cfg, "fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE") or "# QC_BIANRY_ECLIPSE"),
-            qc_bad_tau_corr_days=float(_cfg_get(cfg, "fix_qc_bad_tau_corr_days", 0.02) or 0.02),
+            qc_solar_action=str(
+                _cfg_get(cfg, "fix_qc_solar_action", "comment") or "comment"
+            ),
+            qc_solar_comment_prefix=str(
+                _cfg_get(cfg, "fix_qc_solar_comment_prefix", "# QC_SOLAR")
+                or "# QC_SOLAR"
+            ),
+            qc_remove_orbital_phase=bool(
+                _cfg_get(cfg, "fix_qc_remove_orbital_phase", False)
+            ),
+            qc_orbital_phase_action=str(
+                _cfg_get(cfg, "fix_qc_orbital_phase_action", "comment") or "comment"
+            ),
+            qc_orbital_phase_comment_prefix=str(
+                _cfg_get(
+                    cfg, "fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE"
+                )
+                or "# QC_BIANRY_ECLIPSE"
+            ),
+            qc_bad_tau_corr_days=float(
+                _cfg_get(cfg, "fix_qc_bad_tau_corr_days", 0.02) or 0.02
+            ),
             qc_bad_fdr_q=float(_cfg_get(cfg, "fix_qc_bad_fdr_q", 0.01) or 0.01),
-            qc_bad_mark_only_worst_per_day=bool(_cfg_get(cfg, "fix_qc_bad_mark_only_worst_per_day", True)),
-            qc_tr_tau_rec_days=float(_cfg_get(cfg, "fix_qc_tr_tau_rec_days", 7.0) or 7.0),
+            qc_bad_mark_only_worst_per_day=bool(
+                _cfg_get(cfg, "fix_qc_bad_mark_only_worst_per_day", True)
+            ),
+            qc_tr_tau_rec_days=float(
+                _cfg_get(cfg, "fix_qc_tr_tau_rec_days", 7.0) or 7.0
+            ),
             qc_tr_window_mult=float(_cfg_get(cfg, "fix_qc_tr_window_mult", 5.0) or 5.0),
             qc_tr_min_points=int(_cfg_get(cfg, "fix_qc_tr_min_points", 6) or 6),
-            qc_tr_delta_chi2_thresh=float(_cfg_get(cfg, "fix_qc_tr_delta_chi2_thresh", 25.0) or 25.0),
-            qc_tr_suppress_overlap=bool(_cfg_get(cfg, "fix_qc_tr_suppress_overlap", True)),
-            qc_merge_tol_days=float(_cfg_get(cfg, "fix_qc_merge_tol_days", 2.0 / 86400.0) or (2.0 / 86400.0)),
-            qc_results_dir=(qc_results_dir if qc_results_dir is not None else _cfg_get(cfg, "fix_qc_results_dir", None)),
-            qc_branch=(qc_branch if qc_branch is not None else _cfg_get(cfg, "fix_qc_branch", None)),
+            qc_tr_delta_chi2_thresh=float(
+                _cfg_get(cfg, "fix_qc_tr_delta_chi2_thresh", 25.0) or 25.0
+            ),
+            qc_tr_suppress_overlap=bool(
+                _cfg_get(cfg, "fix_qc_tr_suppress_overlap", True)
+            ),
+            qc_merge_tol_days=float(
+                _cfg_get(cfg, "fix_qc_merge_tol_days", 2.0 / 86400.0) or (2.0 / 86400.0)
+            ),
+            qc_results_dir=(
+                qc_results_dir
+                if qc_results_dir is not None
+                else _cfg_get(cfg, "fix_qc_results_dir", None)
+            ),
+            qc_branch=(
+                qc_branch
+                if qc_branch is not None
+                else _cfg_get(cfg, "fix_qc_branch", None)
+            ),
         )
     )
 
@@ -281,7 +346,9 @@ def _apply_fixdataset_and_commit(
 
     existing = {h.name for h in getattr(repo, "heads", [])}
     if new_branch in existing:
-        raise RuntimeError(f"Requested fix branch '{new_branch}' already exists. Choose a different name.")
+        raise RuntimeError(
+            f"Requested fix branch '{new_branch}' already exists. Choose a different name."
+        )
 
     repo.git.checkout("-b", new_branch)
 
@@ -298,7 +365,9 @@ def _apply_fixdataset_and_commit(
     if qc_results_dir is not None and not isinstance(qc_results_dir, Path):
         qc_results_dir = Path(qc_results_dir)
 
-    fcfg = _build_fixdataset_config(cfg, apply=True, qc_results_dir=qc_results_dir, qc_branch=qc_branch)
+    fcfg = _build_fixdataset_config(
+        cfg, apply=True, qc_results_dir=qc_results_dir, qc_branch=qc_branch
+    )
 
     reports = []
     for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
@@ -324,7 +393,9 @@ def _apply_fixdataset_and_commit(
         if pp.endswith(".par") or pp.endswith(".tim"):
             return True
         # system flag table (if created/updated)
-        if pp.endswith("system_flag_table.json") or pp.endswith("system_flag_table.toml"):
+        if pp.endswith("system_flag_table.json") or pp.endswith(
+            "system_flag_table.toml"
+        ):
             return True
         return False
 
@@ -409,14 +480,21 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             stacklevel=2,
         )
     if not cfg.singularity_image.exists():
-        raise FileNotFoundError(f"singularity_image does not exist: {cfg.singularity_image}")
+        raise FileNotFoundError(
+            f"singularity_image does not exist: {cfg.singularity_image}"
+        )
 
-    which_or_raise("singularity", hint="Install Singularity/Apptainer or load it in your environment.")
+    which_or_raise(
+        "singularity",
+        hint="Install Singularity/Apptainer or load it in your environment.",
+    )
 
     try:
         from git import Repo  # type: ignore
     except Exception as e:  # pragma: no cover
-        raise RuntimeError("GitPython is required to run the pipeline (branch checkouts). Install GitPython.") from e
+        raise RuntimeError(
+            "GitPython is required to run the pipeline (branch checkouts). Install GitPython."
+        ) from e
 
     repo = Repo(str(cfg.home_dir))
     require_clean_repo(repo)
@@ -432,7 +510,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         raise RuntimeError("No pulsars selected/found.")
 
     # Branch selection
-    compare_branches: List[str] = list(dict.fromkeys(list(cfg.branches)))  # preserve order
+    compare_branches: List[str] = list(
+        dict.fromkeys(list(cfg.branches))
+    )  # preserve order
     reference_branch = str(cfg.reference_branch) if cfg.reference_branch else ""
 
     branches_to_run = compare_branches.copy()
@@ -441,7 +521,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         logger.info("Testing mode enabled: change reports will be skipped.")
         change_reports_enabled = False
 
-    if reference_branch and reference_branch not in branches_to_run and change_reports_enabled:
+    if (
+        reference_branch
+        and reference_branch not in branches_to_run
+        and change_reports_enabled
+    ):
         branches_to_run.append(reference_branch)
 
     out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name)
@@ -468,13 +552,19 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         if not fix_branch_name:
             stamp = datetime.now().strftime("%d%m%y%H%M")
             fix_branch_name = f"branch_run_{stamp}"
-            logger.info("No fix_branch_name provided; using autogenerated branch '%s'.", fix_branch_name)
+            logger.info(
+                "No fix_branch_name provided; using autogenerated branch '%s'.",
+                fix_branch_name,
+            )
 
         base_branch = str(_cfg_get(cfg, "fix_base_branch", "") or "").strip()
         if not base_branch:
             base_branch = str(reference_branch or current_branch)
 
-        commit_message = str(_cfg_get(cfg, "fix_commit_message", "") or "").strip() or "FixDataset: apply automated dataset fixes"
+        commit_message = (
+            str(_cfg_get(cfg, "fix_commit_message", "") or "").strip()
+            or "FixDataset: apply automated dataset fixes"
+        )
 
         logger.info(
             "Applying FixDataset on new branch '%s' (base: %s) and committing .par/.tim changes.",
@@ -498,16 +588,22 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             checkout(repo, branch)
 
             # Forced fix_dataset reporting per branch (report-only; never modifies the repo in this loop)
-            fcfg = _build_fixdataset_config(cfg, apply=False, qc_results_dir=out_paths.get("qc"), qc_branch=branch)
+            fcfg = _build_fixdataset_config(
+                cfg, apply=False, qc_results_dir=out_paths.get("qc"), qc_branch=branch
+            )
             reports = []
             if run_fix_dataset:
                 for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                    rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
+                    rep = fix_pulsar_dataset(
+                        cfg.home_dir / cfg.dataset_name / pulsar, fcfg
+                    )
                     rep["branch"] = branch
                     reports.append(rep)
                 write_fix_report(reports, out_paths["fix_dataset"] / branch)
             else:
-                logger.info("FixDataset report-only stage skipped (run_fix_dataset=false).")
+                logger.info(
+                    "FixDataset report-only stage skipped (run_fix_dataset=false)."
+                )
 
             # tempo2 runs (parallelizable across pulsars)
             if cfg.run_tempo2:
@@ -515,7 +611,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 # pipelineb feature: if we just applied fixes and we're only running one branch,
                 # force tempo2 rerun unless user explicitly disabled it.
                 force_rerun = bool(cfg.force_rerun) or (
-                    _cfg_get_bool(cfg, "fix_apply", False) and len(branches_to_run) == 1 and bool(getattr(cfg, "run_fix_dataset", True))
+                    _cfg_get_bool(cfg, "fix_apply", False)
+                    and len(branches_to_run) == 1
+                    and bool(getattr(cfg, "run_fix_dataset", True))
                 )
 
                 if n_jobs == 1:
@@ -561,54 +659,98 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     merge_tol_seconds=float(getattr(cfg, "pqc_merge_tol_seconds", 2.0)),
                     tau_corr_minutes=float(getattr(cfg, "pqc_tau_corr_minutes", 30.0)),
                     fdr_q=float(getattr(cfg, "pqc_fdr_q", 0.01)),
-                    mark_only_worst_per_day=bool(getattr(cfg, "pqc_mark_only_worst_per_day", True)),
+                    mark_only_worst_per_day=bool(
+                        getattr(cfg, "pqc_mark_only_worst_per_day", True)
+                    ),
                     tau_rec_days=float(getattr(cfg, "pqc_tau_rec_days", 7.0)),
                     window_mult=float(getattr(cfg, "pqc_window_mult", 5.0)),
                     min_points=int(getattr(cfg, "pqc_min_points", 6)),
-                    delta_chi2_thresh=float(getattr(cfg, "pqc_delta_chi2_thresh", 25.0)),
+                    delta_chi2_thresh=float(
+                        getattr(cfg, "pqc_delta_chi2_thresh", 25.0)
+                    ),
                     step_enabled=bool(getattr(cfg, "pqc_step_enabled", True)),
                     step_min_points=int(getattr(cfg, "pqc_step_min_points", 20)),
-                    step_delta_chi2_thresh=float(getattr(cfg, "pqc_step_delta_chi2_thresh", 25.0)),
+                    step_delta_chi2_thresh=float(
+                        getattr(cfg, "pqc_step_delta_chi2_thresh", 25.0)
+                    ),
                     step_scope=str(getattr(cfg, "pqc_step_scope", "both")),
                     dm_step_enabled=bool(getattr(cfg, "pqc_dm_step_enabled", True)),
                     dm_step_min_points=int(getattr(cfg, "pqc_dm_step_min_points", 20)),
-                    dm_step_delta_chi2_thresh=float(getattr(cfg, "pqc_dm_step_delta_chi2_thresh", 25.0)),
+                    dm_step_delta_chi2_thresh=float(
+                        getattr(cfg, "pqc_dm_step_delta_chi2_thresh", 25.0)
+                    ),
                     dm_step_scope=str(getattr(cfg, "pqc_dm_step_scope", "both")),
                     robust_enabled=bool(getattr(cfg, "pqc_robust_enabled", True)),
                     robust_z_thresh=float(getattr(cfg, "pqc_robust_z_thresh", 5.0)),
                     robust_scope=str(getattr(cfg, "pqc_robust_scope", "both")),
                     add_orbital_phase=bool(getattr(cfg, "pqc_add_orbital_phase", True)),
-                    add_solar_elongation=bool(getattr(cfg, "pqc_add_solar_elongation", True)),
+                    add_solar_elongation=bool(
+                        getattr(cfg, "pqc_add_solar_elongation", True)
+                    ),
                     add_elevation=bool(getattr(cfg, "pqc_add_elevation", False)),
                     add_airmass=bool(getattr(cfg, "pqc_add_airmass", False)),
-                    add_parallactic_angle=bool(getattr(cfg, "pqc_add_parallactic_angle", False)),
+                    add_parallactic_angle=bool(
+                        getattr(cfg, "pqc_add_parallactic_angle", False)
+                    ),
                     add_freq_bin=bool(getattr(cfg, "pqc_add_freq_bin", False)),
                     freq_bins=int(getattr(cfg, "pqc_freq_bins", 8)),
                     observatory_path=getattr(cfg, "pqc_observatory_path", None),
                     structure_mode=str(getattr(cfg, "pqc_structure_mode", "none")),
-                    structure_detrend_features=getattr(cfg, "pqc_structure_detrend_features", None),
-                    structure_test_features=getattr(cfg, "pqc_structure_test_features", None),
+                    structure_detrend_features=getattr(
+                        cfg, "pqc_structure_detrend_features", None
+                    ),
+                    structure_test_features=getattr(
+                        cfg, "pqc_structure_test_features", None
+                    ),
                     structure_nbins=int(getattr(cfg, "pqc_structure_nbins", 12)),
-                    structure_min_per_bin=int(getattr(cfg, "pqc_structure_min_per_bin", 3)),
-                    structure_p_thresh=float(getattr(cfg, "pqc_structure_p_thresh", 0.01)),
-                    structure_circular_features=getattr(cfg, "pqc_structure_circular_features", None),
+                    structure_min_per_bin=int(
+                        getattr(cfg, "pqc_structure_min_per_bin", 3)
+                    ),
+                    structure_p_thresh=float(
+                        getattr(cfg, "pqc_structure_p_thresh", 0.01)
+                    ),
+                    structure_circular_features=getattr(
+                        cfg, "pqc_structure_circular_features", None
+                    ),
                     structure_group_cols=getattr(cfg, "pqc_structure_group_cols", None),
-                    outlier_gate_enabled=bool(getattr(cfg, "pqc_outlier_gate_enabled", False)),
-                    outlier_gate_sigma=float(getattr(cfg, "pqc_outlier_gate_sigma", 3.0)),
-                    outlier_gate_resid_col=getattr(cfg, "pqc_outlier_gate_resid_col", None),
-                    outlier_gate_sigma_col=getattr(cfg, "pqc_outlier_gate_sigma_col", None),
+                    outlier_gate_enabled=bool(
+                        getattr(cfg, "pqc_outlier_gate_enabled", False)
+                    ),
+                    outlier_gate_sigma=float(
+                        getattr(cfg, "pqc_outlier_gate_sigma", 3.0)
+                    ),
+                    outlier_gate_resid_col=getattr(
+                        cfg, "pqc_outlier_gate_resid_col", None
+                    ),
+                    outlier_gate_sigma_col=getattr(
+                        cfg, "pqc_outlier_gate_sigma_col", None
+                    ),
                     event_instrument=bool(getattr(cfg, "pqc_event_instrument", False)),
-                    solar_cut_enabled=bool(getattr(cfg, "pqc_solar_cut_enabled", False)),
+                    solar_cut_enabled=bool(
+                        getattr(cfg, "pqc_solar_cut_enabled", False)
+                    ),
                     solar_cut_deg=getattr(cfg, "pqc_solar_cut_deg", None),
                     solar_cut_sigma=float(getattr(cfg, "pqc_solar_cut_sigma", 3.0)),
                     solar_cut_nbins=int(getattr(cfg, "pqc_solar_cut_nbins", 18)),
-                    solar_cut_min_points=int(getattr(cfg, "pqc_solar_cut_min_points", 20)),
-                    orbital_phase_cut_enabled=bool(getattr(cfg, "pqc_orbital_phase_cut_enabled", False)),
-                    orbital_phase_cut_center=float(getattr(cfg, "pqc_orbital_phase_cut_center", 0.25)),
+                    solar_cut_min_points=int(
+                        getattr(cfg, "pqc_solar_cut_min_points", 20)
+                    ),
+                    orbital_phase_cut_enabled=bool(
+                        getattr(cfg, "pqc_orbital_phase_cut_enabled", False)
+                    ),
+                    orbital_phase_cut_center=float(
+                        getattr(cfg, "pqc_orbital_phase_cut_center", 0.25)
+                    ),
                     orbital_phase_cut=getattr(cfg, "pqc_orbital_phase_cut", None),
-                    orbital_phase_cut_sigma=float(getattr(cfg, "pqc_orbital_phase_cut_sigma", 3.0)),
-                    orbital_phase_cut_nbins=int(getattr(cfg, "pqc_orbital_phase_cut_nbins", 18)),
-                    orbital_phase_cut_min_points=int(getattr(cfg, "pqc_orbital_phase_cut_min_points", 20)),
+                    orbital_phase_cut_sigma=float(
+                        getattr(cfg, "pqc_orbital_phase_cut_sigma", 3.0)
+                    ),
+                    orbital_phase_cut_nbins=int(
+                        getattr(cfg, "pqc_orbital_phase_cut_nbins", 18)
+                    ),
+                    orbital_phase_cut_min_points=int(
+                        getattr(cfg, "pqc_orbital_phase_cut_min_points", 20)
+                    ),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
@@ -618,8 +760,20 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     try:
                         df = run_pqc_for_parfile_subprocess(parfile, out_csv, qc_cfg)
                     except Exception as e:
-                        logger.warning("pqc failed for %s (%s); skipping QC for this pulsar: %s", pulsar, branch, e)
-                        qc_rows.append({"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv), "qc_error": str(e)})
+                        logger.warning(
+                            "pqc failed for %s (%s); skipping QC for this pulsar: %s",
+                            pulsar,
+                            branch,
+                            e,
+                        )
+                        qc_rows.append(
+                            {
+                                "pulsar": pulsar,
+                                "branch": branch,
+                                "qc_csv": str(out_csv),
+                                "qc_error": str(e),
+                            }
+                        )
                         continue
                     row = {"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv)}
                     row.update(summarize_pqc(df))
@@ -628,11 +782,27 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
             if branch in compare_branches:
                 if cfg.make_toa_coverage_plots:
-                    plot_systems_per_pulsar(cfg.home_dir, cfg.dataset_name, out_paths, pulsars, branch, dpi=int(cfg.dpi))
-                    plot_pulsars_per_system(cfg.home_dir, cfg.dataset_name, out_paths, pulsars, branch, dpi=int(cfg.dpi))
+                    plot_systems_per_pulsar(
+                        cfg.home_dir,
+                        cfg.dataset_name,
+                        out_paths,
+                        pulsars,
+                        branch,
+                        dpi=int(cfg.dpi),
+                    )
+                    plot_pulsars_per_system(
+                        cfg.home_dir,
+                        cfg.dataset_name,
+                        out_paths,
+                        pulsars,
+                        branch,
+                        dpi=int(cfg.dpi),
+                    )
 
                 if cfg.make_outlier_reports:
-                    write_outlier_tables(cfg.home_dir, cfg.dataset_name, out_paths, pulsars, [branch])
+                    write_outlier_tables(
+                        cfg.home_dir, cfg.dataset_name, out_paths, pulsars, [branch]
+                    )
 
             # Binary analysis per branch
             if cfg.make_binary_analysis:
@@ -640,7 +810,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 for pulsar in pulsars:
                     parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
                     row = analyse_binary_from_par(parfile)
-                    if bcfg.only_models and row.get("BINARY") not in set(bcfg.only_models):
+                    if bcfg.only_models and row.get("BINARY") not in set(
+                        bcfg.only_models
+                    ):
                         continue
                     row["pulsar"] = pulsar
                     row["branch"] = branch
@@ -651,9 +823,15 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             branches_for_reports = list(compare_branches)
             if reference_branch not in branches_for_reports:
                 branches_for_reports.append(reference_branch)
-            write_change_reports(out_paths, pulsars, branches_for_reports, reference_branch)
-            write_model_comparison_summary(out_paths, pulsars, branches_for_reports, reference_branch)
-            write_new_param_significance(out_paths, pulsars, branches_for_reports, reference_branch)
+            write_change_reports(
+                out_paths, pulsars, branches_for_reports, reference_branch
+            )
+            write_model_comparison_summary(
+                out_paths, pulsars, branches_for_reports, reference_branch
+            )
+            write_new_param_significance(
+                out_paths, pulsars, branches_for_reports, reference_branch
+            )
 
         if cfg.make_covariance_heatmaps:
             plot_covmat_heatmaps(
@@ -669,7 +847,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
         if cfg.make_binary_analysis and binary_rows:
             df = pd.DataFrame(binary_rows)
-            df.to_csv(out_paths["binary_analysis"] / "binary_analysis.tsv", sep="\t", index=False)
+            df.to_csv(
+                out_paths["binary_analysis"] / "binary_analysis.tsv",
+                sep="\t",
+                index=False,
+            )
 
         if getattr(cfg, "run_pqc", False) and qc_rows:
             dfq = pd.DataFrame(qc_rows)
@@ -690,11 +872,21 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 report_dir = generate_qc_report(
                     run_dir=out_paths["tag"],
                     backend_col=backend_col,
-                    backend=(str(cfg.qc_report_backend) if getattr(cfg, "qc_report_backend", None) else None),
+                    backend=(
+                        str(cfg.qc_report_backend)
+                        if getattr(cfg, "qc_report_backend", None)
+                        else None
+                    ),
                     report_dir=report_dir,
                     no_plots=bool(getattr(cfg, "qc_report_no_plots", False)),
-                    structure_group_cols=(str(cfg.qc_report_structure_group_cols) if getattr(cfg, "qc_report_structure_group_cols", None) else None),
-                    no_feature_plots=bool(getattr(cfg, "qc_report_no_feature_plots", False)),
+                    structure_group_cols=(
+                        str(cfg.qc_report_structure_group_cols)
+                        if getattr(cfg, "qc_report_structure_group_cols", None)
+                        else None
+                    ),
+                    no_feature_plots=bool(
+                        getattr(cfg, "qc_report_no_feature_plots", False)
+                    ),
                 )
                 logger.info("QC report written to: %s", report_dir)
             except Exception as e:

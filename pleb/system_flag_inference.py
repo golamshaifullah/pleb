@@ -28,14 +28,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import json
 import re
 
 import numpy as np
 import pandas as pd
-
 
 TELESCOPE_CODES = {"EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR"}
 
@@ -51,8 +50,21 @@ DEFAULT_PTA_BY_TEL = {
 
 # Common directive words in tempo2 tim files.
 _TIM_DIRECTIVES = {
-    "FORMAT", "MODE", "TIME", "EFAC", "EQUAD", "ECORR", "JUMP", "INCLUDE", "SKIP",
-    "TRACK", "PHASE", "FREQ", "SCALE", "T2EFAC", "T2EQUAD",
+    "FORMAT",
+    "MODE",
+    "TIME",
+    "EFAC",
+    "EQUAD",
+    "ECORR",
+    "JUMP",
+    "INCLUDE",
+    "SKIP",
+    "TRACK",
+    "PHASE",
+    "FREQ",
+    "SCALE",
+    "T2EFAC",
+    "T2EQUAD",
 }
 
 # Regex that finds "-key value" pairs (value = next non-space token).
@@ -64,6 +76,7 @@ class BackendMissingError(RuntimeError):
 
     Catch this in the GUI and prompt the user for the backend name.
     """
+
     def __init__(self, timfile: Path, sample_toa_line: str):
         super().__init__(
             f"Could not infer backend for {timfile}. "
@@ -84,6 +97,7 @@ class SystemInferenceConfig:
         canonical_tol_mhz: Frequency tolerance for snapping centers.
         round_mhz: Decimal rounding for inferred centers.
     """
+
     # flag keys to consult for backend/bw/nband if present on TOA lines
     backend_flag: str = "-be"
     bandwidth_flags: Tuple[str, ...] = ("-bw", "-BW", "-bandwidth", "-bwidth")
@@ -143,7 +157,9 @@ def _infer_backend_from_filename(timfile: Path, tel: Optional[str]) -> Optional[
     return None
 
 
-def parse_tim_toa_table(timfile: Path, cfg: SystemInferenceConfig = SystemInferenceConfig()) -> pd.DataFrame:
+def parse_tim_toa_table(
+    timfile: Path, cfg: SystemInferenceConfig = SystemInferenceConfig()
+) -> pd.DataFrame:
     """Parse TOA lines into a table.
 
     Returns columns:
@@ -205,11 +221,17 @@ def parse_tim_toa_table(timfile: Path, cfg: SystemInferenceConfig = SystemInfere
 
         rows.append((i, line, freq, flags, be, bw, nb))
 
-    return pd.DataFrame(rows, columns=["line_idx", "line", "freq_mhz", "flags", "be", "bw_mhz", "nband"])
+    return pd.DataFrame(
+        rows, columns=["line_idx", "line", "freq_mhz", "flags", "be", "bw_mhz", "nband"]
+    )
 
 
-def infer_backend(timfile: Path, df: pd.DataFrame, cfg: SystemInferenceConfig = SystemInferenceConfig(),
-                  override_backend: Optional[str] = None) -> str:
+def infer_backend(
+    timfile: Path,
+    df: pd.DataFrame,
+    cfg: SystemInferenceConfig = SystemInferenceConfig(),
+    override_backend: Optional[str] = None,
+) -> str:
     """Infer backend name for a tim file.
 
     Args:
@@ -283,7 +305,9 @@ def infer_subband_centres(
     idx = np.clip(idx, 0, nband - 1)
 
     centre = f_lo + (idx + 0.5) * sub_bw
-    centre = np.rint(centre).astype(int) if round_mhz == 1 else np.round(centre, round_mhz)
+    centre = (
+        np.rint(centre).astype(int) if round_mhz == 1 else np.round(centre, round_mhz)
+    )
     return idx, centre
 
 
@@ -314,7 +338,19 @@ def infer_sys_group_pta(
     """
     df = parse_tim_toa_table(timfile, cfg=cfg)
     if df.empty:
-        return pd.DataFrame(columns=["line_idx", "sys", "group", "pta", "backend", "tel", "centre_mhz", "bw_mhz", "nband"])
+        return pd.DataFrame(
+            columns=[
+                "line_idx",
+                "sys",
+                "group",
+                "pta",
+                "backend",
+                "tel",
+                "centre_mhz",
+                "bw_mhz",
+                "nband",
+            ]
+        )
 
     tel = override_telescope or _infer_telescope_code(timfile) or "UNKNOWN"
     backend = infer_backend(timfile, df, cfg=cfg, override_backend=override_backend)
@@ -325,38 +361,48 @@ def infer_sys_group_pta(
     bw_vals = df["bw_mhz"].dropna().unique()
     nb_vals = df["nband"].dropna().unique()
 
-    use_binning = (len(bw_vals) == 1 and len(nb_vals) == 1 and float(bw_vals[0]) > 0 and int(nb_vals[0]) > 0)
+    use_binning = (
+        len(bw_vals) == 1
+        and len(nb_vals) == 1
+        and float(bw_vals[0]) > 0
+        and int(nb_vals[0]) > 0
+    )
 
     if use_binning:
         bw = float(bw_vals[0])
         nb = int(nb_vals[0])
 
-        idx, centre = infer_subband_centres(df["freq_mhz"].to_numpy(), bw, nb, round_mhz=cfg.round_mhz)
+        _, centre = infer_subband_centres(
+            df["freq_mhz"].to_numpy(), bw, nb, round_mhz=cfg.round_mhz
+        )
         centre = centre.astype(int)
     else:
         # No bw/nband -> cheap fallback: centre = rounded TOA frequency itself.
         bw = float(bw_vals[0]) if len(bw_vals) == 1 else np.nan
         nb = int(nb_vals[0]) if len(nb_vals) == 1 else np.nan
         centre = np.rint(df["freq_mhz"].to_numpy()).astype(int)
-        idx = np.zeros_like(centre, dtype=int)
 
     # Vectorised string build
     centre_s = pd.Series(centre, index=df.index, dtype="int64").astype(str)
     sys_val = tel + "." + backend + "." + centre_s
-    group_val = sys_val  # cheap: keep group identical unless you have a receiver naming rule
+    group_val = (
+        sys_val  # cheap: keep group identical unless you have a receiver naming rule
+    )
     pta_val = pd.Series([pta] * len(df), index=df.index)
 
-    out = pd.DataFrame({
-        "line_idx": df["line_idx"].to_numpy(),
-        "sys": sys_val.to_numpy(),
-        "group": group_val.to_numpy(),
-        "pta": pta_val.to_numpy(),
-        "backend": backend,
-        "tel": tel,
-        "centre_mhz": centre,
-        "bw_mhz": bw,
-        "nband": nb,
-    })
+    out = pd.DataFrame(
+        {
+            "line_idx": df["line_idx"].to_numpy(),
+            "sys": sys_val.to_numpy(),
+            "group": group_val.to_numpy(),
+            "pta": pta_val.to_numpy(),
+            "backend": backend,
+            "tel": tel,
+            "centre_mhz": centre,
+            "bw_mhz": bw,
+            "nband": nb,
+        }
+    )
     return out
 
 
@@ -398,7 +444,9 @@ def apply_flags_to_timfile(
     overwritten = 0
     new_lines: List[str] = []
 
-    def _set_flag(parts: List[str], flag: str, value: str) -> Tuple[List[str], int, int]:
+    def _set_flag(
+        parts: List[str], flag: str, value: str
+    ) -> Tuple[List[str], int, int]:
         nonlocal overwrite_existing
         if flag in parts:
             if not overwrite_existing:
@@ -423,8 +471,8 @@ def apply_flags_to_timfile(
         parts, a2, o2 = _set_flag(parts, "-group", str(row.group))
         parts, a3, o3 = _set_flag(parts, "-pta", str(row.pta))
 
-        added += (a1 + a2 + a3)
-        overwritten += (o1 + o2 + o3)
+        added += a1 + a2 + a3
+        overwritten += o1 + o2 + o3
 
         after = " ".join(parts)
         if after != before:
@@ -432,7 +480,12 @@ def apply_flags_to_timfile(
         new_lines.append(after)
 
     if dry_run or not apply or not changed:
-        return {"timfile": str(timfile), "changed": bool(changed), "added": added, "overwritten": overwritten}
+        return {
+            "timfile": str(timfile),
+            "changed": bool(changed),
+            "added": added,
+            "overwritten": overwritten,
+        }
 
     if backup:
         b = timfile.with_suffix(timfile.suffix + ".orig")
@@ -440,10 +493,17 @@ def apply_flags_to_timfile(
             b.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     timfile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    return {"timfile": str(timfile), "changed": True, "added": added, "overwritten": overwritten}
+    return {
+        "timfile": str(timfile),
+        "changed": True,
+        "added": added,
+        "overwritten": overwritten,
+    }
 
 
-def canonicalise_centres(assignments: pd.DataFrame, tol_mhz: float = 1.0) -> pd.DataFrame:
+def canonicalise_centres(
+    assignments: pd.DataFrame, tol_mhz: float = 1.0
+) -> pd.DataFrame:
     """Snap center frequencies across pulsars within a tolerance.
 
     Args:
@@ -503,7 +563,9 @@ def canonicalise_centres(assignments: pd.DataFrame, tol_mhz: float = 1.0) -> pd.
     return out
 
 
-def update_mapping_table(mapping_path: Path, inferred: pd.DataFrame) -> Dict[str, List[str]]:
+def update_mapping_table(
+    mapping_path: Path, inferred: pd.DataFrame
+) -> Dict[str, List[str]]:
     """Persist a mapping table for timfile-name -> list of sys values.
 
     Args:
@@ -526,12 +588,16 @@ def update_mapping_table(mapping_path: Path, inferred: pd.DataFrame) -> Dict[str
 
     # inferred must include timfile_name + sys
     if "timfile" not in inferred.columns:
-        raise ValueError("inferred must have column 'timfile' with the tim filename/key")
+        raise ValueError(
+            "inferred must have column 'timfile' with the tim filename/key"
+        )
 
     for tname, sub in inferred.groupby("timfile"):
         sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
         if sys_vals:
             table[tname] = sys_vals
 
-    mapping_path.write_text(json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    mapping_path.write_text(
+        json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return table

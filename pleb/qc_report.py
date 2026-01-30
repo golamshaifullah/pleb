@@ -39,7 +39,9 @@ def _find_qc_csvs(run_dir: Path) -> list[Path]:
     return sorted(out, key=lambda x: str(x))
 
 
-def _run_script(script: Path, args: list[str], capture: bool = False) -> subprocess.CompletedProcess:
+def _run_script(
+    script: Path, args: list[str], capture: bool = False
+) -> subprocess.CompletedProcess:
     """Run a helper script as a subprocess."""
     cmd = [sys.executable, str(script)] + args
     return subprocess.run(cmd, capture_output=capture, text=True)
@@ -78,7 +80,9 @@ def generate_qc_report(
             report_dir = generate_qc_report(Path("results/run_2024-01-01"))
     """
     run_dir = Path(run_dir).expanduser().resolve()
-    report_dir = Path(report_dir).expanduser().resolve() if report_dir else run_dir / "qc_report"
+    report_dir = (
+        Path(report_dir).expanduser().resolve() if report_dir else run_dir / "qc_report"
+    )
     report_dir.mkdir(parents=True, exist_ok=True)
 
     csvs = _find_qc_csvs(run_dir)
@@ -116,12 +120,22 @@ def generate_qc_report(
         diag_out = diag_dir / f"{stem}.txt"
         proc = _run_script(
             diag_script,
-            ["--csv", str(csv_path), "--backend-col", str(backend_col)] + (["--structure-group-cols", str(structure_group_cols)] if structure_group_cols else []),
+            ["--csv", str(csv_path), "--backend-col", str(backend_col)]
+            + (
+                ["--structure-group-cols", str(structure_group_cols)]
+                if structure_group_cols
+                else []
+            ),
             capture=True,
         )
-        diag_out.write_text((proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else ""), encoding="utf-8")
+        diag_out.write_text(
+            (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else ""),
+            encoding="utf-8",
+        )
         if proc.returncode != 0:
-            logger.warning("diagnose_qc.py failed for %s (code %s)", csv_path, proc.returncode)
+            logger.warning(
+                "diagnose_qc.py failed for %s (code %s)", csv_path, proc.returncode
+            )
 
         if not no_plots:
             outdir = plots_root / stem
@@ -137,7 +151,9 @@ def generate_qc_report(
                 plot_args += ["--backend", str(backend)]
             proc = _run_script(plot_script, plot_args, capture=True)
             if proc.returncode != 0:
-                msg = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+                msg = (proc.stdout or "") + (
+                    ("\n" + proc.stderr) if proc.stderr else ""
+                )
                 msg = msg.strip()
                 if any(
                     token in msg
@@ -149,7 +165,12 @@ def generate_qc_report(
                 ):
                     logger.info("No transients to plot for %s", csv_path)
                 else:
-                    logger.warning("plot_transients.py failed for %s (code %s): %s", csv_path, proc.returncode, msg)
+                    logger.warning(
+                        "plot_transients.py failed for %s (code %s): %s",
+                        csv_path,
+                        proc.returncode,
+                        msg,
+                    )
 
         if not no_feature_plots:
             outdir = feature_root / stem
@@ -165,9 +186,16 @@ def generate_qc_report(
                 feat_args += ["--structure-group-cols", str(structure_group_cols)]
             proc = _run_script(feature_script, feat_args, capture=True)
             if proc.returncode != 0:
-                msg = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+                msg = (proc.stdout or "") + (
+                    ("\n" + proc.stderr) if proc.stderr else ""
+                )
                 msg = msg.strip()
-                logger.warning("plot_features.py failed for %s (code %s): %s", csv_path, proc.returncode, msg)
+                logger.warning(
+                    "plot_features.py failed for %s (code %s): %s",
+                    csv_path,
+                    proc.returncode,
+                    msg,
+                )
 
         # Summary residual plot per pulsar
         summary_out = summary_root / f"{stem}_summary.png"
@@ -182,13 +210,22 @@ def generate_qc_report(
                 "--backend-col",
                 str(backend_col),
             ]
-            + ([] if no_feature_plots else ["--feature-plots", "--feature-outdir", str(summary_feat_dir)]),
+            + (
+                []
+                if no_feature_plots
+                else ["--feature-plots", "--feature-outdir", str(summary_feat_dir)]
+            ),
             capture=True,
         )
         if proc.returncode != 0:
             msg = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
             msg = msg.strip()
-            logger.warning("plot_qc_summary.py failed for %s (code %s): %s", csv_path, proc.returncode, msg)
+            logger.warning(
+                "plot_qc_summary.py failed for %s (code %s): %s",
+                csv_path,
+                proc.returncode,
+                msg,
+            )
 
         # Export structure summary table for this CSV
         try:

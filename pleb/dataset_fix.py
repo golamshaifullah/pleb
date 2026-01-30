@@ -13,8 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
-import re
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 import shutil
 import json
 import hashlib
@@ -114,9 +113,13 @@ class FixDatasetConfig:
 
     # System flag inference (smart -sys/-group/-pta creation)
     infer_system_flags: bool = False
-    system_flag_table_path: Optional[str] = None  # JSON mapping stored at dataset root if None
+    system_flag_table_path: Optional[str] = (
+        None  # JSON mapping stored at dataset root if None
+    )
     system_flag_overwrite_existing: bool = False
-    backend_overrides: Dict[str, str] = field(default_factory=dict)  # tim basename -> backend
+    backend_overrides: Dict[str, str] = field(
+        default_factory=dict
+    )  # tim basename -> backend
     raise_on_backend_missing: bool = False
 
     # TIM hygiene
@@ -134,7 +137,9 @@ class FixDatasetConfig:
     ensure_ne_sw: Optional[str] = None
 
     # remove known-bad backend strings (used by remove_nuppi_big in the notebook)
-    remove_patterns: List[str] = field(default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."])
+    remove_patterns: List[str] = field(
+        default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."]
+    )
 
     # Coordinate conversion of par files
     # None | "equ2ecl" | "ecl2equ"
@@ -161,6 +166,7 @@ class FixDatasetConfig:
 # -----------------------------
 # tim file helpers
 # -----------------------------
+
 
 def _cleanline(line: str) -> str:
     """Normalize line endings and trailing spaces."""
@@ -272,7 +278,13 @@ def _backup_file(path: Path) -> None:
     shutil.copy2(path, b)
 
 
-def update_alltim_includes(psr_dir: Path, min_toas: int = 10, apply: bool = False, backup: bool = True, dry_run: bool = False) -> Dict[str, object]:
+def update_alltim_includes(
+    psr_dir: Path,
+    min_toas: int = 10,
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
     """Ensure <psr>_all.tim contains INCLUDE lines for each backend tim file.
 
     This is a refactor of insert_missing_timfiles/update_alltims from FixDataset.ipynb.
@@ -306,12 +318,24 @@ def update_alltim_includes(psr_dir: Path, min_toas: int = 10, apply: bool = Fals
             dropped.append(rel)
 
     if not to_add:
-        return {"psr": psr, "alltim": str(alltim), "added": 0, "to_add": [], "dropped": dropped}
+        return {
+            "psr": psr,
+            "alltim": str(alltim),
+            "added": 0,
+            "to_add": [],
+            "dropped": dropped,
+        }
 
     logger.info("%s: %d missing INCLUDE lines in %s", psr, len(to_add), alltim.name)
 
     if dry_run or not apply:
-        return {"psr": psr, "alltim": str(alltim), "added": 0, "to_add": to_add, "dropped": dropped}
+        return {
+            "psr": psr,
+            "alltim": str(alltim),
+            "added": 0,
+            "to_add": to_add,
+            "dropped": dropped,
+        }
 
     if not alltim.exists():
         raise FileNotFoundError(str(alltim))
@@ -326,7 +350,13 @@ def update_alltim_includes(psr_dir: Path, min_toas: int = 10, apply: bool = Fals
 
     alltim.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
-    return {"psr": psr, "alltim": str(alltim), "added": len(to_add), "to_add": to_add, "dropped": dropped}
+    return {
+        "psr": psr,
+        "alltim": str(alltim),
+        "added": len(to_add),
+        "to_add": to_add,
+        "dropped": dropped,
+    }
 
 
 def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
@@ -352,7 +382,13 @@ def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
     return vals
 
 
-def ensure_timfile_flags(timfile: Path, required: Dict[str, str], apply: bool = False, backup: bool = True, dry_run: bool = False) -> Dict[str, object]:
+def ensure_timfile_flags(
+    timfile: Path,
+    required: Dict[str, str],
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
     """Insert missing flags into TOA lines.
 
     Conservative behavior: only adds a flag if it is missing in that TOA line.
@@ -413,6 +449,7 @@ def ensure_timfile_flags(timfile: Path, required: Dict[str, str], apply: bool = 
 # par file helpers
 # -----------------------------
 
+
 def update_parfile_jumps(
     parfile: Path,
     jump_flag: str,
@@ -461,13 +498,28 @@ def update_parfile_jumps(
         parts = line.split()
         key = parts[0]
 
-        if ensure_ephem is not None and key == "EPHEM" and len(parts) > 1 and parts[1] != ensure_ephem:
+        if (
+            ensure_ephem is not None
+            and key == "EPHEM"
+            and len(parts) > 1
+            and parts[1] != ensure_ephem
+        ):
             parts[1] = ensure_ephem
             changed = True
-        if ensure_clk is not None and key == "CLK" and len(parts) > 1 and parts[1] != ensure_clk:
+        if (
+            ensure_clk is not None
+            and key == "CLK"
+            and len(parts) > 1
+            and parts[1] != ensure_clk
+        ):
             parts[1] = ensure_clk
             changed = True
-        if ensure_ne_sw is not None and key == "NE_SW" and len(parts) > 1 and parts[1] != ensure_ne_sw:
+        if (
+            ensure_ne_sw is not None
+            and key == "NE_SW"
+            and len(parts) > 1
+            and parts[1] != ensure_ne_sw
+        ):
             parts[1] = ensure_ne_sw
             changed = True
 
@@ -477,9 +529,12 @@ def update_parfile_jumps(
 
         new_lines.append(" ".join(parts))
 
-    
     # If ensure_* requested but the key is missing entirely, insert it (tempo2 accepts anywhere; keep near top).
-    present_keys = {(_cleanline(l).split()[0] if _cleanline(l).strip() else '') for l in lines if _cleanline(l).strip()}
+    present_keys = {
+        (_cleanline(line_str).split()[0] if _cleanline(line_str).strip() else "")
+        for line_str in lines
+        if _cleanline(line_str).strip()
+    }
     to_insert: List[str] = []
     if ensure_ephem is not None and "EPHEM" not in present_keys:
         to_insert.append(f"EPHEM {ensure_ephem}")
@@ -491,7 +546,10 @@ def update_parfile_jumps(
         changed = True
         # Insert after any leading comments/blanks, otherwise at start.
         insert_at = 0
-        while insert_at < len(new_lines) and (not new_lines[insert_at].strip() or new_lines[insert_at].lstrip().startswith(("C", "#"))):
+        while insert_at < len(new_lines) and (
+            not new_lines[insert_at].strip()
+            or new_lines[insert_at].lstrip().startswith(("C", "#"))
+        ):
             insert_at += 1
         new_lines[insert_at:insert_at] = to_insert + [""]
 
@@ -522,11 +580,10 @@ def update_parfile_jumps(
     return {"parfile": str(parfile), "changed": True, "missing_jumps": missing}
 
 
-
-
 # -----------------------------
 # PQC outlier application (optional)
 # -----------------------------
+
 
 def _mjd_from_toa_line(line: str, time_offset_sec: float = 0.0) -> Optional[float]:
     """Parse an MJD from a TOA line, applying TIME offset (seconds)."""
@@ -556,7 +613,9 @@ def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
     return matches[0]
 
 
-def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[str, Dict[Optional[str], list[float]]]:
+def _collect_qc_mjds(
+    df: pd.DataFrame, cfg: FixDatasetConfig
+) -> Dict[str, Dict[Optional[str], list[float]]]:
     standard = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_bad:
         for col in ("bad", "bad_day"):
@@ -573,7 +632,11 @@ def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[str, Dict[
     if cfg.qc_remove_orbital_phase and "orbital_phase_bad" in df.columns:
         orbital |= df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
 
-    out: Dict[str, Dict[Optional[str], list[float]]] = {"standard": {}, "solar": {}, "orbital": {}}
+    out: Dict[str, Dict[Optional[str], list[float]]] = {
+        "standard": {},
+        "solar": {},
+        "orbital": {},
+    }
 
     def _build(mask: np.ndarray) -> Dict[Optional[str], list[float]]:
         if not mask.any():
@@ -604,23 +667,41 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         return {"pulsar": psr, "qc_csv": str(qc_csv), "error": str(e)}
 
     mjd_maps = _collect_qc_mjds(df, cfg)
-    if not mjd_maps.get("standard") and not mjd_maps.get("solar") and not mjd_maps.get("orbital"):
+    if (
+        not mjd_maps.get("standard")
+        and not mjd_maps.get("solar")
+        and not mjd_maps.get("orbital")
+    ):
         return {"pulsar": psr, "qc_csv": str(qc_csv), "matched": 0, "changed": False}
 
     action = str(cfg.qc_action or "comment").strip().lower()
     if action not in {"comment", "delete"}:
-        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_action: {cfg.qc_action}"}
+        return {
+            "pulsar": psr,
+            "qc_csv": str(qc_csv),
+            "error": f"Unsupported qc_action: {cfg.qc_action}",
+        }
     solar_action = str(cfg.qc_solar_action or "comment").strip().lower()
     if solar_action not in {"comment", "delete"}:
-        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}"}
+        return {
+            "pulsar": psr,
+            "qc_csv": str(qc_csv),
+            "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}",
+        }
     orbital_action = str(cfg.qc_orbital_phase_action or "comment").strip().lower()
     if orbital_action not in {"comment", "delete"}:
-        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_orbital_phase_action: {cfg.qc_orbital_phase_action}"}
+        return {
+            "pulsar": psr,
+            "qc_csv": str(qc_csv),
+            "error": f"Unsupported qc_orbital_phase_action: {cfg.qc_orbital_phase_action}",
+        }
 
     tol = float(cfg.qc_merge_tol_days or (2.0 / 86400.0))
     comment_prefix = str(cfg.qc_comment_prefix or "C QC_OUTLIER").strip()
     solar_prefix = str(cfg.qc_solar_comment_prefix or "# QC_SOLAR").strip()
-    orbital_prefix = str(cfg.qc_orbital_phase_comment_prefix or "# QC_BINARY_ECLIPSE").strip()
+    orbital_prefix = str(
+        cfg.qc_orbital_phase_comment_prefix or "# QC_BINARY_ECLIPSE"
+    ).strip()
 
     tims = list_backend_timfiles(psr_dir)
     total_matched = 0
@@ -633,15 +714,26 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         solar_map = mjd_maps.get("solar", {})
         orbital_map = mjd_maps.get("orbital", {})
         if (
-            (key not in std_map) and (None not in std_map)
-            and (key not in solar_map) and (None not in solar_map)
-            and (key not in orbital_map) and (None not in orbital_map)
+            (key not in std_map)
+            and (None not in std_map)
+            and (key not in solar_map)
+            and (None not in solar_map)
+            and (key not in orbital_map)
+            and (None not in orbital_map)
         ):
             continue
         target_mjds = np.asarray(std_map.get(key, std_map.get(None, [])), dtype=float)
-        target_mjds_solar = np.asarray(solar_map.get(key, solar_map.get(None, [])), dtype=float)
-        target_mjds_orbital = np.asarray(orbital_map.get(key, orbital_map.get(None, [])), dtype=float)
-        if target_mjds.size == 0 and target_mjds_solar.size == 0 and target_mjds_orbital.size == 0:
+        target_mjds_solar = np.asarray(
+            solar_map.get(key, solar_map.get(None, [])), dtype=float
+        )
+        target_mjds_orbital = np.asarray(
+            orbital_map.get(key, orbital_map.get(None, [])), dtype=float
+        )
+        if (
+            target_mjds.size == 0
+            and target_mjds_solar.size == 0
+            and target_mjds_orbital.size == 0
+        ):
             continue
 
         lines = tim.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -667,8 +759,12 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 new_lines.append(raw)
                 continue
 
-            is_solar = target_mjds_solar.size > 0 and np.any(np.abs(target_mjds_solar - mjd) <= tol)
-            is_orbital = target_mjds_orbital.size > 0 and np.any(np.abs(target_mjds_orbital - mjd) <= tol)
+            is_solar = target_mjds_solar.size > 0 and np.any(
+                np.abs(target_mjds_solar - mjd) <= tol
+            )
+            is_orbital = target_mjds_orbital.size > 0 and np.any(
+                np.abs(target_mjds_orbital - mjd) <= tol
+            )
             is_std = target_mjds.size > 0 and np.any(np.abs(target_mjds - mjd) <= tol)
 
             if is_solar:
@@ -691,7 +787,9 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if orbital_prefix and raw.lstrip().startswith(orbital_prefix):
                     new_lines.append(raw)
                 else:
-                    new_lines.append(f"{orbital_prefix} {raw}" if orbital_prefix else raw)
+                    new_lines.append(
+                        f"{orbital_prefix} {raw}" if orbital_prefix else raw
+                    )
                     commented += 1
                 continue
 
@@ -703,7 +801,9 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if comment_prefix and raw.lstrip().startswith(comment_prefix):
                     new_lines.append(raw)
                 else:
-                    new_lines.append(f"{comment_prefix} {raw}" if comment_prefix else raw)
+                    new_lines.append(
+                        f"{comment_prefix} {raw}" if comment_prefix else raw
+                    )
                     commented += 1
                 continue
 
@@ -733,6 +833,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         "changed_files": int(changed_files),
         "files": file_reports,
     }
+
 
 def remove_patterns_from_par_tim(
     parfile: Path,
@@ -777,7 +878,12 @@ def remove_patterns_from_par_tim(
     tim_lines, tim_removed = filt(timfile)
 
     if dry_run or not apply:
-        return {"parfile": str(parfile), "timfile": str(timfile), "par_removed": par_removed, "tim_removed": tim_removed}
+        return {
+            "parfile": str(parfile),
+            "timfile": str(timfile),
+            "par_removed": par_removed,
+            "tim_removed": tim_removed,
+        }
 
     if par_removed and backup:
         _backup_file(parfile)
@@ -789,18 +895,25 @@ def remove_patterns_from_par_tim(
     if tim_removed:
         timfile.write_text("\n".join(tim_lines) + "\n", encoding="utf-8")
 
-    return {"parfile": str(parfile), "timfile": str(timfile), "par_removed": par_removed, "tim_removed": tim_removed}
+    return {
+        "parfile": str(parfile),
+        "timfile": str(timfile),
+        "par_removed": par_removed,
+        "tim_removed": tim_removed,
+    }
 
 
 # -----------------------------
 # Coordinate conversion (optional: requires astropy)
 # -----------------------------
 
+
 def _require_astropy():
     """Import astropy or raise a helpful error."""
     try:
         from astropy.coordinates import SkyCoord  # noqa
         from astropy import units  # noqa
+
         return True
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
@@ -829,7 +942,11 @@ def equatorial_to_ecliptic_par(parfile: Path) -> Tuple[str, str, str, str, List[
     lines = parfile.read_text(encoding="utf-8", errors="ignore").splitlines(True)
 
     def _get(key: str) -> Optional[List[str]]:
-        rows = [l.rstrip("\n").split() for l in lines if l.strip().startswith(key)]
+        rows = [
+            line_str.rstrip("\n").split()
+            for line_str in lines
+            if line_str.strip().startswith(key)
+        ]
         return rows[0] if rows else None
 
     raj = _get("RAJ")
@@ -840,7 +957,9 @@ def equatorial_to_ecliptic_par(parfile: Path) -> Tuple[str, str, str, str, List[
     if not (raj and decj):
         raise ValueError(f"Missing RAJ/DECJ in {parfile}")
 
-    radec = SkyCoord(ra=raj[1], dec=decj[1], unit=(units.hourangle, units.deg), frame="icrs")
+    radec = SkyCoord(
+        ra=raj[1], dec=decj[1], unit=(units.hourangle, units.deg), frame="icrs"
+    )
     ecl = radec.barycentrictrueecliptic
 
     # Proper motions are tricky; keep notebook behavior: just transform numeric components if present.
@@ -859,8 +978,16 @@ def equatorial_to_ecliptic_par(parfile: Path) -> Tuple[str, str, str, str, List[
             pm_ecl = pmc.barycentrictrueecliptic
             # astropy keeps pm in representation; but values can be extracted
             # This is a best-effort; exact definition depends on convention.
-            pmelong = str(getattr(pm_ecl, "pm_lon_coslat", 0 * units.mas / units.yr).to_value(units.mas / units.yr))
-            pmelat = str(getattr(pm_ecl, "pm_lat", 0 * units.mas / units.yr).to_value(units.mas / units.yr))
+            pmelong = str(
+                getattr(pm_ecl, "pm_lon_coslat", 0 * units.mas / units.yr).to_value(
+                    units.mas / units.yr
+                )
+            )
+            pmelat = str(
+                getattr(pm_ecl, "pm_lat", 0 * units.mas / units.yr).to_value(
+                    units.mas / units.yr
+                )
+            )
         except Exception:
             pmelong = "0"
             pmelat = "0"
@@ -890,7 +1017,11 @@ def ecliptic_to_equatorial_par(parfile: Path) -> Tuple[str, str, str, str, List[
     lines = parfile.read_text(encoding="utf-8", errors="ignore").splitlines(True)
 
     def _get(key: str) -> Optional[List[str]]:
-        rows = [l.rstrip("\n").split() for l in lines if l.strip().startswith(key)]
+        rows = [
+            line_str.rstrip("\n").split()
+            for line_str in lines
+            if line_str.strip().startswith(key)
+        ]
         return rows[0] if rows else None
 
     elong = _get("ELONG")
@@ -901,7 +1032,11 @@ def ecliptic_to_equatorial_par(parfile: Path) -> Tuple[str, str, str, str, List[
     if not (elong and elat):
         raise ValueError(f"Missing ELONG/ELAT in {parfile}")
 
-    ecl = SkyCoord(lon=float(elong[1]) * units.deg, lat=float(elat[1]) * units.deg, frame="barycentrictrueecliptic")
+    ecl = SkyCoord(
+        lon=float(elong[1]) * units.deg,
+        lat=float(elat[1]) * units.deg,
+        frame="barycentrictrueecliptic",
+    )
     radec = ecl.icrs
 
     pmra = "0"
@@ -916,8 +1051,16 @@ def ecliptic_to_equatorial_par(parfile: Path) -> Tuple[str, str, str, str, List[
                 frame="barycentrictrueecliptic",
             )
             icrs_pm = ecl_pm.icrs
-            pmra = str(getattr(icrs_pm, "pm_ra_cosdec", 0 * units.mas / units.yr).to_value(units.mas / units.yr))
-            pmdec = str(getattr(icrs_pm, "pm_dec", 0 * units.mas / units.yr).to_value(units.mas / units.yr))
+            pmra = str(
+                getattr(icrs_pm, "pm_ra_cosdec", 0 * units.mas / units.yr).to_value(
+                    units.mas / units.yr
+                )
+            )
+            pmdec = str(
+                getattr(icrs_pm, "pm_dec", 0 * units.mas / units.yr).to_value(
+                    units.mas / units.yr
+                )
+            )
         except Exception:
             pmra = "0"
             pmdec = "0"
@@ -927,7 +1070,13 @@ def ecliptic_to_equatorial_par(parfile: Path) -> Tuple[str, str, str, str, List[
     return raj, decj, pmra, pmdec, lines
 
 
-def convert_par_coordinates(parfile: Path, mode: str, apply: bool = False, backup: bool = True, dry_run: bool = False) -> Dict[str, object]:
+def convert_par_coordinates(
+    parfile: Path,
+    mode: str,
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
     """Convert a par file between equatorial (RAJ/DECJ) and ecliptic (ELONG/ELAT).
 
     mode: 'equ2ecl' or 'ecl2equ'
@@ -993,6 +1142,7 @@ def convert_par_coordinates(parfile: Path, mode: str, apply: bool = False, backu
 # High-level entry point
 # -----------------------------
 
+
 def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
     """Apply or report dataset fixes for a single pulsar directory.
 
@@ -1038,14 +1188,17 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         )
         report["steps"].append({"update_alltim_includes": rep})
 
-
     # TIM hygiene: dedupe within each backend tim
     if cfg.dedupe_toas_within_tim:
         tims = list_backend_timfiles(psr_dir)
         reps = []
         for t in tims:
             try:
-                reps.append(dedupe_timfile_toas(t, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run))
+                reps.append(
+                    dedupe_timfile_toas(
+                        t, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run
+                    )
+                )
             except Exception as e:
                 reps.append({"timfile": str(t), "error": str(e)})
         report["steps"].append({"dedupe_toas_within_tim": reps})
@@ -1064,7 +1217,9 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     # Cheap overlap removal (exact duplicates across known overlapping backend tims)
     if cfg.remove_overlaps_exact:
         try:
-            rep = remove_overlaps_exact(psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run)
+            rep = remove_overlaps_exact(
+                psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run
+            )
         except Exception as e:
             rep = {"error": str(e)}
         report["steps"].append({"remove_overlaps_exact": rep})
@@ -1077,7 +1232,6 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         except Exception as e:
             rep = {"error": str(e)}
         report["steps"].append({"duplicate_backend_timfiles": rep})
-
 
     if cfg.required_tim_flags:
         tims = list_backend_timfiles(psr_dir)
@@ -1151,7 +1305,6 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
 
             detail_path = write_fix_report(reports, Path("results/fix_dataset"))
     """
-    import json
     out_dir.mkdir(parents=True, exist_ok=True)
 
     detail_path = out_dir / "fix_dataset_report.json"
@@ -1179,12 +1332,17 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
                 missing_jumps += len(rep.get("missing_jumps", []) or [])
             if "remove_patterns" in s:
                 rep = s["remove_patterns"]
-                removed += int(rep.get("par_removed", 0) or 0) + int(rep.get("tim_removed", 0) or 0)
+                removed += int(rep.get("par_removed", 0) or 0) + int(
+                    rep.get("tim_removed", 0) or 0
+                )
         rows.append((psr, added_includes, missing_jumps, removed))
 
     summary_path = out_dir / "fix_dataset_summary.tsv"
     header = "pulsar\tadded_includes\tmissing_jumps\tremoved_lines\n"
-    summary_path.write_text(header + "\n".join([f"{a}\t{b}\t{c}\t{d}" for a, b, c, d in rows]) + "\n", encoding="utf-8")
+    summary_path.write_text(
+        header + "\n".join([f"{a}\t{b}\t{c}\t{d}" for a, b, c, d in rows]) + "\n",
+        encoding="utf-8",
+    )
 
     return detail_path
 
@@ -1202,6 +1360,7 @@ OVERLAPPED_TIMFILES: Dict[str, List[str]] = {
     "NRT.NUPPI.2539.tim": ["NRT.BON.2000.tim"],
 }
 
+
 def _toa_key_from_line(line: str) -> Optional[Tuple[str, str, str, str]]:
     """Cheap TOA identity key for FORMAT 1: first 4 columns as strings."""
     if not is_toa_line(line):
@@ -1210,6 +1369,7 @@ def _toa_key_from_line(line: str) -> Optional[Tuple[str, str, str, str]]:
     if len(parts) < 4:
         return None
     return (parts[0], parts[1], parts[2], parts[3])
+
 
 def dedupe_timfile_toas(
     timfile: Path,
@@ -1254,7 +1414,11 @@ def dedupe_timfile_toas(
         new_lines.append(_cleanline(raw))
 
     if dry_run or not apply or not changed:
-        return {"timfile": str(timfile), "changed": bool(changed), "removed": int(removed)}
+        return {
+            "timfile": str(timfile),
+            "changed": bool(changed),
+            "removed": int(removed),
+        }
 
     if backup:
         _backup_file(timfile)
@@ -1293,7 +1457,10 @@ def infer_and_apply_system_flags(
             update_mapping_table,
         )
     except Exception as e:
-        return {"timfile": str(timfile), "error": f"system_flag_inference import failed: {e}"}
+        return {
+            "timfile": str(timfile),
+            "error": f"system_flag_inference import failed: {e}",
+        }
 
     override_backend = _infer_backend_override(cfg, timfile)
 
@@ -1303,7 +1470,11 @@ def infer_and_apply_system_flags(
         msg = str(e)
         if cfg.raise_on_backend_missing:
             raise
-        return {"timfile": str(timfile), "error": msg, "sample_toa_line": e.sample_toa_line}
+        return {
+            "timfile": str(timfile),
+            "error": msg,
+            "sample_toa_line": e.sample_toa_line,
+        }
 
     stats = apply_flags_to_timfile(
         timfile,
@@ -1318,7 +1489,11 @@ def infer_and_apply_system_flags(
     try:
         # Dataset root is assumed to be parent of psr_dir; fall back to tim's grandparent.
         dataset_root = timfile.parent.parent
-        mapping_path = Path(cfg.system_flag_table_path) if cfg.system_flag_table_path else (dataset_root / "system_flag_table.json")
+        mapping_path = (
+            Path(cfg.system_flag_table_path)
+            if cfg.system_flag_table_path
+            else (dataset_root / "system_flag_table.json")
+        )
         inferred2 = inferred.copy()
         inferred2["timfile"] = timfile.name
         update_mapping_table(mapping_path, inferred2)

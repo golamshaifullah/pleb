@@ -41,13 +41,14 @@ def build_singularity_prefix(
         A command prefix suitable for ``subprocess`` execution.
     """
     cmd: List[str] = ["singularity", "exec"]
-    binds: List[tuple[Path, str]] = [(home_dir/dataset_name, "/data")]
+    binds: List[tuple[Path, str]] = [(home_dir / dataset_name, "/data")]
     if extra_binds:
         binds.extend(extra_binds)
     for host, cont in binds:
         cmd += ["--bind", f"{Path(host).resolve()}:{cont}"]
     cmd.append(str(singularity_image))
     return cmd
+
 
 def tempo2_paths_in_container(pulsar: str) -> Tuple[str, str]:
     """Return container paths for a pulsar's `.par` and `.tim` files.
@@ -61,6 +62,7 @@ def tempo2_paths_in_container(pulsar: str) -> Tuple[str, str]:
     par = f"/data/{pulsar}/{pulsar}.par"
     tim = f"/data/{pulsar}/{pulsar}_all.tim"
     return par, tim
+
 
 def run_subprocess(cmd: List[str], stdout_path: Path, cwd: Path | None = None) -> int:
     """Run a subprocess and capture stdout/stderr to a file.
@@ -79,7 +81,9 @@ def run_subprocess(cmd: List[str], stdout_path: Path, cwd: Path | None = None) -
     """
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     logger.debug("Running: %s", " ".join(cmd))
-    res = subprocess.run(cmd, capture_output=True, text=True, cwd=str(cwd) if cwd else None)
+    res = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=str(cwd) if cwd else None
+    )
     with open(stdout_path, "w", encoding="utf-8") as f:
         f.write(res.stdout)
         if res.stderr:
@@ -88,6 +92,7 @@ def run_subprocess(cmd: List[str], stdout_path: Path, cwd: Path | None = None) -
     if res.returncode != 0:
         logger.warning("Command failed (%s): %s", res.returncode, " ".join(cmd))
     return res.returncode
+
 
 def run_tempo2_for_pulsar(
     home_dir: Path,
@@ -130,11 +135,14 @@ def run_tempo2_for_pulsar(
 
     plk_cmd = prefix + [
         "tempo2",
-        "-f", par, tim,
+        "-f",
+        par,
+        tim,
         "-showchisq",
         "-colour",
         "-sys",
-        "-epoch", str(epoch),
+        "-epoch",
+        str(epoch),
     ]
     run_subprocess(plk_cmd, plk_out, cwd=work_dir)
 
@@ -142,7 +150,9 @@ def run_tempo2_for_pulsar(
         "tempo2",
         "-output",
         "matrix",
-        "-f", par, tim,
+        "-f",
+        par,
+        tim,
     ]
     rc = run_subprocess(matrix_cmd, cov_out, cwd=work_dir)
     if rc != 0:
@@ -155,7 +165,10 @@ def run_tempo2_for_pulsar(
         "tempo2",
         "-output",
         "general2",
-        "-f", par, tim,
-        "-s", gen2_strings,
+        "-f",
+        par,
+        tim,
+        "-s",
+        gen2_strings,
     ]
     run_subprocess(gen_cmd, gen_out, cwd=work_dir)

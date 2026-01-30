@@ -72,105 +72,150 @@ testing_mode = false
 
 # ---- Optional QC stage (PQC) ----
 # run_pqc: enable PQC stage. allowed: true/false. default: false
+#   Runs pqc to compute QC metrics, flags, and diagnostic tables/plots.
 run_pqc = true
 # pqc_backend_col: backend grouping column name. allowed: string. default: "group"
+#   This is the column used to split data into backend groups for QC.
 pqc_backend_col = "sys"
 # pqc_drop_unmatched: drop TOAs without tim metadata. allowed: true/false. default: false
+#   If true, TOAs that cannot be matched to tim metadata are excluded from QC.
 pqc_drop_unmatched = false
 # pqc_merge_tol_seconds: tim/TOA match tolerance (sec). allowed: float. default: 2.0
+#   Matching tolerance between TOAs and timfile metadata.
 pqc_merge_tol_seconds = 2.0
 # pqc_tau_corr_minutes: OU corr timescale for bad-measurement detection (min). allowed: float. default: 30.0
+#   Used in OU model for identifying isolated bad measurements.
 pqc_tau_corr_minutes = 30.0
 # pqc_fdr_q: BH FDR for bad-measurement detection. allowed: float in (0,1]. default: 0.01
+#   Target false discovery rate for bad-measurement flags.
 pqc_fdr_q = 0.01
 # pqc_mark_only_worst_per_day: mark only worst TOA per bad day. allowed: true/false. default: true
+#   If true, only the worst TOA on a bad day is flagged.
 pqc_mark_only_worst_per_day = true
 # pqc_tau_rec_days: transient recovery timescale (days). allowed: float. default: 7.0
+#   Controls recovery of transient model in time.
 pqc_tau_rec_days = 7.0
 # pqc_window_mult: transient scan window multiplier. allowed: float. default: 5.0
+#   Search window width as a multiple of tau_rec.
 pqc_window_mult = 5.0
 # pqc_min_points: min points per transient window. allowed: int. default: 6
+#   Minimum number of points required to test a transient window.
 pqc_min_points = 6
 # pqc_delta_chi2_thresh: transient Δχ² threshold. allowed: float. default: 25.0
+#   Threshold for declaring a transient.
 pqc_delta_chi2_thresh = 10000.0
 
 # Step and DM-step detection
 # pqc_step_enabled: enable step detection. allowed: true/false. default: true
+#   Detect step-like residual changes (non-DM).
 pqc_step_enabled = false
 # pqc_step_min_points: min points on each side of step. allowed: int. default: 20
+#   Minimum points on each side to test a step.
 pqc_step_min_points = 20
 # pqc_step_delta_chi2_thresh: step Δχ² threshold. allowed: float. default: 25.0
+#   Threshold for declaring a step.
 pqc_step_delta_chi2_thresh = 25.0
 # pqc_step_scope: scope for step detection. allowed: "backend"|"global"|"both". default: "both"
+#   Where to look for steps: within backend, across all data, or both.
 pqc_step_scope = "both"
 
 # pqc_dm_step_enabled: enable DM-like step detection. allowed: true/false. default: true
+#   Detect frequency-dependent step-like changes (DM-like).
 pqc_dm_step_enabled = false
 # pqc_dm_step_min_points: min points on each side. allowed: int. default: 20
+#   Minimum points on each side to test a DM-step.
 pqc_dm_step_min_points = 20
 # pqc_dm_step_delta_chi2_thresh: DM-step Δχ² threshold. allowed: float. default: 25.0
+#   Threshold for declaring a DM-step.
 pqc_dm_step_delta_chi2_thresh = 250.0
 # pqc_dm_step_scope: scope for DM-step detection. allowed: "backend"|"global"|"both". default: "both"
+#   Where to look for DM-steps: within backend, across all data, or both.
 pqc_dm_step_scope = "both"
 
 # Robust outlier diagnostics
 # pqc_robust_enabled: enable MAD-based outliers. allowed: true/false. default: true
+#   Robust outlier detection using median/MAD.
 pqc_robust_enabled = true
 # pqc_robust_z_thresh: robust z threshold. allowed: float. default: 5.0
+#   Threshold on robust z-score.
 pqc_robust_z_thresh = 2.0
 # pqc_robust_scope: scope for robust outliers. allowed: "backend"|"global"|"both". default: "both"
+#   Where to compute robust stats: per backend, global, or both.
 pqc_robust_scope = "both"
 
 # Feature extraction
 # pqc_add_orbital_phase: compute orbital phase. allowed: true/false. default: true
+#   Requires binary model parameters in par file.
 pqc_add_orbital_phase = true
 # pqc_add_solar_elongation: compute solar elongation (astropy). allowed: true/false. default: true
+#   Uses astropy to compute Sun-pulsar angle.
 pqc_add_solar_elongation = true
 # pqc_add_elevation: compute elevation. allowed: true/false. default: false
+#   Requires observatory coordinates; can be used for horizon effects.
 pqc_add_elevation = true
 # pqc_add_airmass: compute airmass. allowed: true/false. default: false
+#   Derived from elevation; requires observatory coordinates.
 pqc_add_airmass = true
 # pqc_add_parallactic_angle: compute parallactic angle. allowed: true/false. default: false
+#   Derived from observatory coordinates.
 pqc_add_parallactic_angle = true
 # pqc_add_freq_bin: add frequency-bin feature. allowed: true/false. default: false
+#   Adds discrete freq_bin column based on observing frequency.
 pqc_add_freq_bin = true
 # pqc_freq_bins: number of freq bins when enabled. allowed: int >=1. default: 8
+#   Number of bins for freq_bin feature.
 pqc_freq_bins = 20
 # pqc_observatory_path: observatory XYZ file. allowed: string path or empty. default: "" -> None
+#   Overrides built-in observatory list.
 pqc_observatory_path = ""
 
 # Structure tests
 # pqc_structure_mode: feature-structure mode. allowed: "none"|"detrend"|"test"|"both". default: "none"
+#   "detrend": regress residuals on features; "test": run structure tests; "both": do both.
 pqc_structure_mode = "both"
 # pqc_structure_detrend_features: features to detrend against. allowed: list of strings. default: ["solar_elongation_deg","orbital_phase"]
+#   Features used for detrending residuals.
 pqc_structure_detrend_features = ["solar_elongation_deg", "orbital_phase", "freq_bin"]
 # pqc_structure_test_features: features to test for structure. allowed: list of strings. default: ["solar_elongation_deg","orbital_phase"]
+#   Features used for structure testing.
 pqc_structure_test_features = ["orbital_phase", "solar_elongation_deg", "freq_bin"]
 # pqc_structure_nbins: number of bins for structure tests. allowed: int >=1. default: 12
+#   Binning resolution for structure tests.
 pqc_structure_nbins = 200
 # pqc_structure_min_per_bin: min points per bin. allowed: int >=0. default: 3
+#   Minimum points per bin; bins with fewer points are skipped.
 pqc_structure_min_per_bin = 0
 # pqc_structure_p_thresh: p-value threshold. allowed: float in (0,1]. default: 0.01
+#   Threshold for declaring structure.
 pqc_structure_p_thresh = 0.01
 # pqc_structure_circular_features: circular features in [0,1). allowed: list of strings. default: ["orbital_phase"]
+#   Treated as circular for binning/structure tests.
 pqc_structure_circular_features = ["orbital_phase", "solar_elongation_deg"]
 # pqc_structure_group_cols: grouping columns for structure tests. allowed: list of strings or empty. default: "" -> None
+#   Groupings for structure tests; empty means no grouping.
 pqc_structure_group_cols = ""
 
 # Outlier gating
 # pqc_outlier_gate_enabled: enable hard sigma gate. allowed: true/false. default: false
+#   Hard cut based on residual/sigma columns.
 pqc_outlier_gate_enabled = false
 # pqc_outlier_gate_sigma: sigma threshold. allowed: float. default: 3.0
+#   Threshold for sigma gating.
 pqc_outlier_gate_sigma = 3.0
 # pqc_outlier_gate_resid_col: residual column. allowed: string or empty. default: "" -> None
+#   Name of residual column to use (defaults to pqc internal).
 pqc_outlier_gate_resid_col = ""
 # pqc_outlier_gate_sigma_col: sigma column. allowed: string or empty. default: "" -> None
+#   Name of sigma column to use (defaults to pqc internal).
 pqc_outlier_gate_sigma_col = ""
 # pqc_event_instrument: include per-event membership diagnostics. allowed: true/false. default: false
+#   If true, pqc adds per-event membership diagnostics to outputs.
 pqc_event_instrument = true
 # pqc_solar_cut_enabled: enable solar-elongation cutoff flagging. allowed: true/false. default: false
+#   When enabled, pqc adds solar_bad and a cutoff value used for marking TOAs.
 pqc_solar_cut_enabled = false
 # pqc_solar_cut_deg: fixed solar cutoff angle (deg). allowed: float or empty. default: "" -> None (auto)
+#   If empty, pqc estimates the cutoff as the average angle where residuals return within N-sigma of zero.
 pqc_solar_cut_deg = ""
 # pqc_solar_cut_sigma: sigma threshold for auto cutoff. allowed: float. default: 3.0
 pqc_solar_cut_sigma = 3.0
@@ -179,10 +224,13 @@ pqc_solar_cut_nbins = 18
 # pqc_solar_cut_min_points: min points for auto cutoff. allowed: int. default: 20
 pqc_solar_cut_min_points = 20
 # pqc_orbital_phase_cut_enabled: enable orbital-phase cutoff flagging. allowed: true/false. default: false
+#   When enabled, pqc adds orbital_phase_bad and a cutoff value used for marking TOAs.
 pqc_orbital_phase_cut_enabled = false
 # pqc_orbital_phase_cut_center: eclipse center phase (0..1). allowed: float. default: 0.25
+#   Phase is wrapped to [0,1); centre is used for symmetric windows.
 pqc_orbital_phase_cut_center = 0.25
 # pqc_orbital_phase_cut: fixed cutoff half-width in phase (0..0.5). allowed: float or empty. default: "" -> None (auto)
+#   If empty, pqc estimates the cutoff as the average phase where residuals return within N-sigma of zero.
 pqc_orbital_phase_cut = ""
 # pqc_orbital_phase_cut_sigma: sigma threshold for auto cutoff. allowed: float. default: 3.0
 pqc_orbital_phase_cut_sigma = 3.0
@@ -193,18 +241,25 @@ pqc_orbital_phase_cut_min_points = 20
 
 # ---- Optional QC report artifacts ----
 # qc_report: generate QC report artifacts. allowed: true/false. default: false
+#   Creates plots and summary tables from pqc outputs.
 qc_report = true
 # qc_report_backend_col: backend column for report plots. allowed: string or empty. default: "" -> None
+#   Overrides backend column used for report visual grouping.
 qc_report_backend_col = "group"
 # qc_report_backend: filter to a single backend key. allowed: string or empty. default: "" -> None
+#   If set, restricts report to a single backend.
 qc_report_backend = ""
 # qc_report_dir: output directory override. allowed: string or empty. default: "" -> None
+#   If empty, uses run output directory.
 qc_report_dir = ""
 # qc_report_no_plots: skip transient plots. allowed: true/false. default: false
+#   Skips transient plots only; feature plots still generated unless disabled.
 qc_report_no_plots = false
 # qc_report_structure_group_cols: override group cols (";" separates multiple groupings). allowed: string or empty. default: "" -> None
+#   Semicolon-separated list of groupings for structure plots.
 qc_report_structure_group_cols = "group;sys;freq_bin"
 # qc_report_no_feature_plots: skip feature plots. allowed: true/false. default: false
+#   Skips feature plots (solar/phase/freq_bin, etc).
 qc_report_no_feature_plots = false
 
 # ---- Add-on toggles ----
@@ -225,122 +280,175 @@ param_scan_btx_max_fb = 3
 
 # ---- FixDataset apply/commit ----
 # fix_apply: apply and commit dataset fixes. allowed: true/false. default: false
+#   If true, modifies files in-place and commits to a branch.
 fix_apply = false
 # fix_branch_name: branch name for apply. allowed: string or empty. default: "" -> None (auto)
+#   If empty, a timestamped branch name is generated.
 fix_branch_name = ""
 # fix_base_branch: base branch for apply. allowed: string or empty. default: "" -> None (auto)
+#   If empty, uses reference_branch or current branch.
 fix_base_branch = "main"
 # fix_commit_message: commit message. allowed: string or empty. default: "" -> None (auto)
+#   If empty, uses a standard FixDataset message.
 fix_commit_message = "TEST: apply FixDataset fixes"
 # fix_backup: create backups before apply. allowed: true/false. default: true (false when fix_apply)
+#   Backups are disabled when fix_apply is true (to avoid duplication).
 fix_backup = false
 # fix_dry_run: no writes if true. allowed: true/false. default: false (forced false if fix_apply)
+#   If true, emits a report only without modifying files.
 fix_dry_run = false
 
 # ---- FixDataset switches ----
 # fix_update_alltim_includes: update INCLUDE lines. allowed: true/false. default: true
+#   Rewrites INCLUDE ordering to match expected layout.
 fix_update_alltim_includes = true
 # fix_min_toas_per_backend_tim: min TOAs per backend tim. allowed: int >=0. default: 10
+#   Used when splitting into per-backend tims.
 fix_min_toas_per_backend_tim = 10
 # fix_infer_system_flags: infer system flags. allowed: true/false. default: false
+#   Builds system-flag mapping using signal properties.
 fix_infer_system_flags = true
 # fix_system_flag_table_path: path for system-flag table. allowed: string or empty. default: "" -> None
+#   If set, read/write system-flag mapping at this path.
 fix_system_flag_table_path = ""
 # fix_system_flag_overwrite_existing: overwrite existing system flags. allowed: true/false. default: false
+#   If true, replace existing system flags rather than preserving them.
 fix_system_flag_overwrite_existing = true
 # fix_backend_overrides: backend mapping overrides. allowed: table/dict. default: {}
+#   Explicit mapping overrides (e.g., sys name replacements).
 fix_backend_overrides = {}
 # fix_raise_on_backend_missing: error if backend missing. allowed: true/false. default: false
+#   If true, missing backend mapping is a hard error.
 fix_raise_on_backend_missing = false
 # fix_dedupe_toas_within_tim: dedupe TOAs within tim. allowed: true/false. default: false
+#   Removes duplicate TOAs within a tim file.
 fix_dedupe_toas_within_tim = true
 # fix_check_duplicate_backend_tims: detect duplicate backend tims. allowed: true/false. default: false
+#   Detects duplicate backend tim files.
 fix_check_duplicate_backend_tims = true
 # fix_remove_overlaps_exact: remove exact overlaps. allowed: true/false. default: false
+#   Drops exact duplicates across tim files.
 fix_remove_overlaps_exact = true
 # fix_required_tim_flags: enforce required flags. allowed: table/dict. default: {}
+#   Ensures required flags appear on each TOA.
 fix_required_tim_flags = { "-pta" = "EPTA" }
 # fix_insert_missing_jumps: insert missing JUMPs. allowed: true/false. default: true
+#   Adds JUMP parameters for missing backends.
 fix_insert_missing_jumps = true
 # fix_jump_flag: flag used for jumps. allowed: string. default: "-sys"
+#   Flag used to group TOAs for JUMP insertion.
 fix_jump_flag = "-sys"
 # fix_ensure_ephem: ensure ephemeris parameter. allowed: string or empty. default: "" -> None
+#   If set, enforce this EPHEM in par files.
 fix_ensure_ephem = ""
 # fix_ensure_clk: ensure clock parameter. allowed: string or empty. default: "" -> None
+#   If set, enforce this CLK in par files.
 fix_ensure_clk = ""
 # fix_ensure_ne_sw: ensure NE_SW parameter. allowed: string or empty. default: "" -> None
+#   If set, enforce this NE_SW in par files.
 fix_ensure_ne_sw = ""
 # fix_remove_patterns: list of patterns to remove. allowed: list of strings. default: ["NRT.NUPPI.","NRT.NUXPI."]
+#   Removes matching tim files or INCLUDEs.
 fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
 # fix_coord_convert: coordinate conversion. allowed: "equatorial_to_ecliptic"|"ecliptic_to_equatorial"|"". default: "" -> None
+#   If set, converts coordinate system in par files.
 fix_coord_convert = ""
 # fix_prune_missing_includes: drop missing INCLUDEs. allowed: true/false. default: true
+#   Removes INCLUDEs that point to missing files.
 fix_prune_missing_includes = true
 # fix_drop_small_backend_includes: drop small backend INCLUDEs. allowed: true/false. default: true
+#   Drops backend INCLUDEs with too few TOAs.
 fix_drop_small_backend_includes = true
 # fix_system_flag_update_table: write/update system-flag table. allowed: true/false. default: true
+#   Writes system flag mapping table when inferred.
 fix_system_flag_update_table = true
 # fix_default_backend: default backend label. allowed: string or empty. default: "" -> None
+#   Used when backend info is missing.
 fix_default_backend = ""
 # fix_group_flag: group flag name. allowed: string. default: "-group"
+#   Flag used for grouping in tim files.
 fix_group_flag = "-group"
 # fix_pta_flag: PTA flag name. allowed: string. default: "-pta"
+#   PTA flag name for required PTA values.
 fix_pta_flag = "-pta"
 # fix_pta_value: default PTA value. allowed: string or empty. default: "" -> None
+#   Value used when inserting PTA flag.
 fix_pta_value = ""
 # fix_standardize_par_values: standardize par values. allowed: true/false. default: true
+#   Enforces common formatting for par parameters.
 fix_standardize_par_values = true
 # fix_prune_small_system_toas: drop small system groups. allowed: true/false. default: false
+#   Prunes system groups with small TOA counts.
 fix_prune_small_system_toas = false
 # fix_prune_small_system_flag: system flag for pruning. allowed: string. default: "-sys"
+#   Flag used to group TOAs for pruning.
 fix_prune_small_system_flag = "-sys"
 
 # ---- PQC -> FixDataset application ----
 # fix_qc_remove_outliers: apply PQC outliers. allowed: true/false. default: false
+#   Uses PQC outputs to comment/delete TOAs.
 fix_qc_remove_outliers = false
 # fix_qc_action: action for PQC outliers. allowed: "comment"|"delete". default: "comment"
+#   Action for PQC outlier flags.
 fix_qc_action = "comment"
 # fix_qc_comment_prefix: prefix for commented TOAs. allowed: string. default: "C QC_OUTLIER"
+#   Comment prefix added to tim lines.
 fix_qc_comment_prefix = "C QC_OUTLIER"
 # fix_qc_backend_col: backend column for PQC matching. allowed: string. default: "sys"
+#   Backend column used when matching TOAs to PQC outputs.
 fix_qc_backend_col = "sys"
 # fix_qc_remove_bad: act on bad/bad_day flags. allowed: true/false. default: true
+#   Applies per-day bad flags from PQC.
 fix_qc_remove_bad = true
 # fix_qc_remove_transients: act on transient flags. allowed: true/false. default: false
+#   Applies transient flags from PQC.
 fix_qc_remove_transients = false
 # fix_qc_remove_solar: act on solar-elongation flags. allowed: true/false. default: false
+#   Requires pqc solar cut to be enabled; uses pqc solar_bad in the QC outputs.
 fix_qc_remove_solar = false
 # fix_qc_solar_action: action for solar flags. allowed: "comment"|"delete". default: "comment"
 fix_qc_solar_action = "comment"
 # fix_qc_solar_comment_prefix: comment prefix for solar flags. allowed: string. default: "# QC_SOLAR"
 fix_qc_solar_comment_prefix = "# QC_SOLAR"
 # fix_qc_remove_orbital_phase: act on orbital-phase flags. allowed: true/false. default: false
+#   Requires pqc orbital-phase cut to be enabled; uses pqc orbital_phase_bad in the QC outputs.
 fix_qc_remove_orbital_phase = false
 # fix_qc_orbital_phase_action: action for orbital-phase flags. allowed: "comment"|"delete". default: "comment"
 fix_qc_orbital_phase_action = "comment"
 # fix_qc_orbital_phase_comment_prefix: comment prefix for orbital-phase flags. allowed: string. default: "# QC_BIANRY_ECLIPSE"
 fix_qc_orbital_phase_comment_prefix = "# QC_BIANRY_ECLIPSE"
 # fix_qc_bad_tau_corr_days: OU tau (days) for bad-day detection. allowed: float. default: 0.02
+#   Used only when computing bad-day flags in FixDataset.
 fix_qc_bad_tau_corr_days = 0.02
 # fix_qc_bad_fdr_q: FDR threshold. allowed: float. default: 0.01
+#   FDR target when computing bad-day flags.
 fix_qc_bad_fdr_q = 0.01
 # fix_qc_bad_mark_only_worst_per_day: only mark worst per day. allowed: true/false. default: true
+#   If true, mark only worst TOA per bad day.
 fix_qc_bad_mark_only_worst_per_day = true
 # fix_qc_tr_tau_rec_days: transient tau (days). allowed: float. default: 7.0
+#   Transient recovery time for FixDataset calculations.
 fix_qc_tr_tau_rec_days = 7.0
 # fix_qc_tr_window_mult: transient window multiplier. allowed: float. default: 5.0
+#   Window width as multiple of tau_rec.
 fix_qc_tr_window_mult = 5.0
 # fix_qc_tr_min_points: transient min points. allowed: int. default: 6
+#   Minimum points needed to evaluate a transient.
 fix_qc_tr_min_points = 6
 # fix_qc_tr_delta_chi2_thresh: transient Δχ² threshold. allowed: float. default: 25.0
+#   Threshold for declaring a transient.
 fix_qc_tr_delta_chi2_thresh = 25.0
 # fix_qc_tr_suppress_overlap: suppress overlapping transients. allowed: true/false. default: true
+#   If true, suppress overlapping transient events.
 fix_qc_tr_suppress_overlap = true
 # fix_qc_merge_tol_days: merge tolerance in days. allowed: float. default: 2.0/86400.0
+#   Tolerance when matching PQC outputs to TOAs.
 fix_qc_merge_tol_days = 2.3148148148148147e-05
 # fix_qc_results_dir: QC CSV directory. allowed: string or empty. default: "" -> None
+#   If set, overrides QC output directory used for FixDataset matching.
 fix_qc_results_dir = ""
 # fix_qc_branch: QC branch subdir. allowed: string or empty. default: "" -> None
+#   If set, overrides branch subdir for QC outputs.
 fix_qc_branch = ""
 
 # ---- Binary analysis settings ----
@@ -349,14 +457,18 @@ binary_only_models = ""
 
 # ---- Plotting controls ----
 # dpi: plot resolution. allowed: int. default: 120
+#   Affects PDF/PNG output resolution.
 dpi = 150
 # max_covmat_params: max params in covmat heatmaps. allowed: int or empty. default: "" -> None
+#   If set, limits covariance heatmap size for large models.
 max_covmat_params = ""
 
 # ---- Ingest mode (mapping-driven) ----
 # ingest_mapping_file: JSON mapping file path. allowed: string or empty. default: "" -> None
+#   Mapping is required for ingest mode; no autoparse is performed. Unmapped backends error unless ignored.
 ingest_mapping_file = ""
 # ingest_output_dir: output root for ingest. allowed: string or empty. default: "" -> None
+#   Output structure: JNAME/JNAME.par, JNAME/JNAME_all.tim, tims/TEL.BE.CENFREQ.tim, tmplts/<orig>.
 ingest_output_dir = ""
 
 # ---------------------------------------------------------------------

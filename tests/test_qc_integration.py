@@ -5,6 +5,7 @@ import pytest
 
 from pleb.outlier_qc import PTAQCConfig, run_pqc_for_parfile
 
+
 def test_pqc_missing_dependency_errors(tmp_path):
     # If pqc is installed in this environment, skip (we can't run it without libstempo + real par/tim).
     if importlib.util.find_spec("pqc") is not None:

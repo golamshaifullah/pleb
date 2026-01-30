@@ -30,7 +30,14 @@ Finishing up
 """,
     )
     df = read_plklog(plk)
-    assert list(df.columns) == ["Param", "Prefit", "Postfit", "Uncertainty", "Difference", "Fit"]
+    assert list(df.columns) == [
+        "Param",
+        "Prefit",
+        "Postfit",
+        "Uncertainty",
+        "Difference",
+        "Fit",
+    ]
     assert set(df["Param"]) == {"F0", "RAJ"}
 
 
@@ -77,7 +84,9 @@ NEWP 0  2.0  1.0  0.0  1
     assert float(f0["ref_postfit"]) == 100.0
     assert float(f0["branch_postfit"]) == 101.0
     # sigma = 1 / sqrt(0.5^2 + 0.5^2)
-    assert math.isclose(float(f0["sigma"]), 1.0 / math.sqrt(0.5**2 + 0.5**2), rel_tol=1e-9)
+    assert math.isclose(
+        float(f0["sigma"]), 1.0 / math.sqrt(0.5**2 + 0.5**2), rel_tol=1e-9
+    )
 
     # RAJ is treated as HMS diff string
     raj = df[df["Param"] == "RAJ"].iloc[0]

@@ -104,7 +104,9 @@ def parse_candidate_specs(specs: Sequence[str]) -> List[Candidate]:
             else:
                 params.append((p.strip().upper(), None))
 
-        label = _safe_label("+".join([f"{n}{'' if v is None else '=' + v}" for n, v in params]))
+        label = _safe_label(
+            "+".join([f"{n}{'' if v is None else '=' + v}" for n, v in params])
+        )
         out.append(Candidate(label=label, params=tuple(params)))
     return out
 
@@ -200,7 +202,12 @@ def build_typical_candidates(
             # ELL1 family: scan PBDOT, XDOT, and pair EPS1DOT+EPS2DOT.
             cands.append(Candidate(label="PBDOT", params=(("PBDOT", None),)))
             cands.append(Candidate(label="XDOT", params=(("XDOT", None),)))
-            cands.append(Candidate(label="EPS1DOT+EPS2DOT", params=(("EPS1DOT", None), ("EPS2DOT", None))))
+            cands.append(
+                Candidate(
+                    label="EPS1DOT+EPS2DOT",
+                    params=(("EPS1DOT", None), ("EPS2DOT", None)),
+                )
+            )
 
         else:
             # Generic (BT/DD/DDK/T2/etc.): common derivatives.
@@ -289,7 +296,11 @@ def apply_candidate_to_par_text(par_text: str, cand: Candidate) -> str:
             else:
                 parts.append("1")
 
-            out_lines.append(" ".join(parts) + (" " if comment and not comment.startswith(" ") else "") + comment)
+            out_lines.append(
+                " ".join(parts)
+                + (" " if comment and not comment.startswith(" ") else "")
+                + comment
+            )
         else:
             out_lines.append(line)
 
@@ -301,7 +312,7 @@ def apply_candidate_to_par_text(par_text: str, cand: Candidate) -> str:
         out_lines.append(f"{nm} {val if val is not None else '0'} 1")
 
     # Append raw lines if not already present
-    existing = {l.strip() for l in out_lines if l.strip()}
+    existing = {line_str.strip() for line_str in out_lines if line_str.strip()}
     for raw_line in cand.raw_lines:
         rl = raw_line.strip()
         if rl and rl not in existing:
@@ -358,19 +369,25 @@ def _parse_plk_stats_text(text: str) -> Dict[str, Optional[float]]:
                     continue
         return None
 
-    chisq = _rx([
-        r"chisq\s*=\s*([0-9.+\-eE]+)",
-        r"chi\s*\^?2\s*=\s*([0-9.+\-eE]+)",
-    ])
-    redchisq = _rx([
-        r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)",
-        r"red\s*chisq\s*=\s*([0-9.+\-eE]+)",
-    ])
-    n_toas = _rx([
-        r"number\s+of\s+\w*points\s+in\s+fit\s*=\s*([0-9.+\-eE]+)",
-        r"ntoa\s*=\s*([0-9.+\-eE]+)",
-        r"number\s+of\s+toas\s*=\s*([0-9.+\-eE]+)",
-    ])
+    chisq = _rx(
+        [
+            r"chisq\s*=\s*([0-9.+\-eE]+)",
+            r"chi\s*\^?2\s*=\s*([0-9.+\-eE]+)",
+        ]
+    )
+    redchisq = _rx(
+        [
+            r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)",
+            r"red\s*chisq\s*=\s*([0-9.+\-eE]+)",
+        ]
+    )
+    n_toas = _rx(
+        [
+            r"number\s+of\s+\w*points\s+in\s+fit\s*=\s*([0-9.+\-eE]+)",
+            r"ntoa\s*=\s*([0-9.+\-eE]+)",
+            r"number\s+of\s+toas\s*=\s*([0-9.+\-eE]+)",
+        ]
+    )
     return {"chisq": chisq, "redchisq": redchisq, "n_toas": n_toas}
 
 
@@ -400,7 +417,11 @@ def summarize_plk_only(plk_path: Path) -> Dict[str, Optional[float]]:
             stats = summarize_plk_only(Path("J1234+5678_plk.log"))
     """
     # Summarize a tempo2 fit from just the captured stdout (plk log).
-    text = plk_path.read_text(encoding="utf-8", errors="ignore") if plk_path.exists() else ""
+    text = (
+        plk_path.read_text(encoding="utf-8", errors="ignore")
+        if plk_path.exists()
+        else ""
+    )
     st = _parse_plk_stats_text(text)
     try:
         df = read_plklog(plk_path)
@@ -425,7 +446,9 @@ def summarize_plk_only(plk_path: Path) -> Dict[str, Optional[float]]:
     return out
 
 
-def _extract_param_z(plk_df: pd.DataFrame, names: Iterable[str]) -> Tuple[Optional[float], str]:
+def _extract_param_z(
+    plk_df: pd.DataFrame, names: Iterable[str]
+) -> Tuple[Optional[float], str]:
     """Return (max_z, 'name=z;...') for the given parameter names."""
     if plk_df is None or plk_df.empty:
         return None, ""
@@ -445,7 +468,9 @@ def _extract_param_z(plk_df: pd.DataFrame, names: Iterable[str]) -> Tuple[Option
     if not zs:
         return None, ""
     max_z = max(z for _, z in zs)
-    details = ";".join([f"{n}={z:.3g}" for n, z in sorted(zs, key=lambda x: x[1], reverse=True)])
+    details = ";".join(
+        [f"{n}={z:.3g}" for n, z in sorted(zs, key=lambda x: x[1], reverse=True)]
+    )
     return max_z, details
 
 
@@ -507,15 +532,22 @@ def run_param_scan(
     if not cfg.home_dir.exists():
         raise FileNotFoundError(f"home_dir does not exist: {cfg.home_dir}")
     if not cfg.singularity_image.exists():
-        raise FileNotFoundError(f"singularity_image does not exist: {cfg.singularity_image}")
-    which_or_raise("singularity", hint="Install Singularity/Apptainer or load it in your environment.")
+        raise FileNotFoundError(
+            f"singularity_image does not exist: {cfg.singularity_image}"
+        )
+    which_or_raise(
+        "singularity",
+        hint="Install Singularity/Apptainer or load it in your environment.",
+    )
 
     # Allow config to set a default "typical" scan profile.
     scan_typical = bool(scan_typical or getattr(cfg, "param_scan_typical", False))
 
     scan_branch = branch or cfg.reference_branch
     if not scan_branch:
-        raise ValueError("No branch provided for param scan (and config.reference_branch is empty).")
+        raise ValueError(
+            "No branch provided for param scan (and config.reference_branch is empty)."
+        )
 
     # Pulsar selection
     if pulsars is None:
@@ -528,13 +560,19 @@ def run_param_scan(
     if not pulsar_list:
         raise RuntimeError("No pulsars selected/found.")
 
-    manual_candidates = parse_candidate_specs(candidate_specs) if candidate_specs else []
+    manual_candidates = (
+        parse_candidate_specs(candidate_specs) if candidate_specs else []
+    )
     if not scan_typical and not manual_candidates:
-        raise ValueError("No candidates specified (provide --scan, --scan-file, or use --scan-typical).")
+        raise ValueError(
+            "No candidates specified (provide --scan, --scan-file, or use --scan-typical)."
+        )
 
     # Defaults for the typical profile (can be overridden by CLI args, then config)
     if dm_redchisq_threshold is None:
-        dm_redchisq_threshold = float(getattr(cfg, "param_scan_dm_redchisq_threshold", 2.0) or 2.0)
+        dm_redchisq_threshold = float(
+            getattr(cfg, "param_scan_dm_redchisq_threshold", 2.0) or 2.0
+        )
     if dm_max_order is None:
         dm_max_order = int(getattr(cfg, "param_scan_dm_max_order", 4) or 4)
     if btx_max_fb is None:
@@ -565,7 +603,9 @@ def run_param_scan(
     try:
         from git import Repo  # type: ignore
     except Exception as e:  # pragma: no cover
-        raise RuntimeError("GitPython is required to run --param-scan (branch checkouts). Install GitPython.") from e
+        raise RuntimeError(
+            "GitPython is required to run --param-scan (branch checkouts). Install GitPython."
+        ) from e
 
     repo = Repo(str(cfg.home_dir))
     require_clean_repo(repo)
@@ -588,7 +628,13 @@ def run_param_scan(
         base_plk = out_paths["plk"] / f"{pulsar}_{scan_branch}_BASE_plk.log"
 
         if cfg.force_rerun or not base_plk.exists():
-            _run_fit_only_plk(cfg=cfg, pulsar=pulsar, par_host_path=base_par, work_dir=p_work, plk_out=base_plk)
+            _run_fit_only_plk(
+                cfg=cfg,
+                pulsar=pulsar,
+                par_host_path=base_par,
+                work_dir=p_work,
+                plk_out=base_plk,
+            )
 
         base_stats = summarize_plk_only(base_plk)
 
@@ -625,7 +671,10 @@ def run_param_scan(
         cands_all.extend(manual_candidates)
 
         # De-dup + skip no-op edits
-        uniq: Dict[Tuple[str, Tuple[Tuple[str, Optional[str]], ...], Tuple[str, ...]], Candidate] = {}
+        uniq: Dict[
+            Tuple[str, Tuple[Tuple[str, Optional[str]], ...], Tuple[str, ...]],
+            Candidate,
+        ] = {}
         for c in cands_all:
             key = (c.label, c.params, c.raw_lines)
             if key not in uniq:
@@ -646,21 +695,38 @@ def run_param_scan(
 
             mod_plk = out_paths["plk"] / f"{pulsar}_{scan_branch}_{cand.label}_plk.log"
             if cfg.force_rerun or not mod_plk.exists():
-                _run_fit_only_plk(cfg=cfg, pulsar=pulsar, par_host_path=mod_par, work_dir=p_work, plk_out=mod_plk)
+                _run_fit_only_plk(
+                    cfg=cfg,
+                    pulsar=pulsar,
+                    par_host_path=mod_par,
+                    work_dir=p_work,
+                    plk_out=mod_plk,
+                )
 
             cand_stats = summarize_plk_only(mod_plk)
 
             # Nested-model LRT
             delta_k = None
-            if base_stats.get("k_fit") is not None and cand_stats.get("k_fit") is not None:
+            if (
+                base_stats.get("k_fit") is not None
+                and cand_stats.get("k_fit") is not None
+            ):
                 delta_k = float(cand_stats["k_fit"]) - float(base_stats["k_fit"])  # type: ignore[index]
             delta_chisq = None
-            if base_stats.get("chisq") is not None and cand_stats.get("chisq") is not None:
+            if (
+                base_stats.get("chisq") is not None
+                and cand_stats.get("chisq") is not None
+            ):
                 delta_chisq = float(base_stats["chisq"]) - float(cand_stats["chisq"])  # type: ignore[index]
 
             # p-value (use the same chi2 tail utility as reports.py)
             pval = None
-            if delta_k is not None and delta_chisq is not None and delta_k > 0 and delta_chisq > 0:
+            if (
+                delta_k is not None
+                and delta_chisq is not None
+                and delta_k > 0
+                and delta_chisq > 0
+            ):
                 # Use SciPy if available, else fall back to mpmath.
                 try:
                     from scipy.stats import chi2  # type: ignore
@@ -670,7 +736,10 @@ def run_param_scan(
                     try:
                         import mpmath as mp  # type: ignore
 
-                        pval = float(mp.gammainc(delta_k / 2.0, delta_chisq / 2.0, mp.inf) / mp.gamma(delta_k / 2.0))
+                        pval = float(
+                            mp.gammainc(delta_k / 2.0, delta_chisq / 2.0, mp.inf)
+                            / mp.gamma(delta_k / 2.0)
+                        )
                     except Exception:
                         pval = None
 
@@ -725,6 +794,7 @@ def run_param_scan(
 
         if all_rows:
             df = pd.DataFrame(all_rows)
+
             # rank within each pulsar by p-value then delta chisq
             def _rank_key(x):
                 try:
@@ -733,9 +803,14 @@ def run_param_scan(
                     return float("inf")
 
             df["p_value_for_sort"] = df["lrt_p_value"].apply(_rank_key)
-            df = df.sort_values(["pulsar", "p_value_for_sort", "lrt_delta_chisq"], ascending=[True, True, False])
+            df = df.sort_values(
+                ["pulsar", "p_value_for_sort", "lrt_delta_chisq"],
+                ascending=[True, True, False],
+            )
             df = df.drop(columns=["p_value_for_sort"])
-            out_file = out_paths["param_scan"] / f"param_scan_{_safe_label(scan_branch)}.tsv"
+            out_file = (
+                out_paths["param_scan"] / f"param_scan_{_safe_label(scan_branch)}.tsv"
+            )
             df.to_csv(out_file, sep="\t", index=False)
 
         return {k: Path(v) for k, v in out_paths.items()}

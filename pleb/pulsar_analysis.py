@@ -101,7 +101,20 @@ def analyse_binary_from_par(parfile: Path) -> Dict[str, object]:
     out["BINARY"] = model
 
     # Common orbital params
-    for k in ["PB", "A1", "T0", "OM", "ECC", "TASC", "EPS1", "EPS2", "PBDOT", "XDOT", "OMDOT", "ECCDOT"]:
+    for k in [
+        "PB",
+        "A1",
+        "T0",
+        "OM",
+        "ECC",
+        "TASC",
+        "EPS1",
+        "EPS2",
+        "PBDOT",
+        "XDOT",
+        "OMDOT",
+        "ECCDOT",
+    ]:
         if k in p:
             out[k] = _to_float(p[k]) if k not in ("BINARY",) else p[k]
 
@@ -112,7 +125,13 @@ def analyse_binary_from_par(parfile: Path) -> Dict[str, object]:
     eps2 = _to_float(p.get("EPS2"))
     tasc = _to_float(p.get("TASC"))
 
-    if a1 is not None and pb is not None and eps1 is not None and eps2 is not None and tasc is not None:
+    if (
+        a1 is not None
+        and pb is not None
+        and eps1 is not None
+        and eps2 is not None
+        and tasc is not None
+    ):
         try:
             asini, pb_out, e, om, t0 = btx_parameters(a1, pb, eps1, eps2, tasc)
             out["ELL1_asini"] = asini

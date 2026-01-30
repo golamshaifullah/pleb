@@ -11,7 +11,7 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import re
 from functools import lru_cache
 import numpy as np
@@ -21,6 +21,7 @@ from .parsers import PlkParseError, read_plklog, read_general2, read_tim_file
 from .logging_utils import get_logger
 
 logger = get_logger("pleb.reports")
+
 
 def _chi2_sf(x: float, df: float) -> float:
     """Compute the chi-square survival function.
@@ -39,16 +40,16 @@ def _chi2_sf(x: float, df: float) -> float:
         return float("nan")
     try:
         from scipy.stats import chi2  # type: ignore
+
         return float(chi2.sf(x, df))
     except Exception:
         try:
             import mpmath as mp  # type: ignore
+
             # sf = Q(k/2, x/2)
             return float(mp.gammainc(df / 2.0, x / 2.0, mp.inf) / mp.gamma(df / 2.0))
         except Exception:
             return float("nan")
-
-
 
 
 @lru_cache(maxsize=512)
@@ -72,7 +73,6 @@ def _mjd_day_int(series: pd.Series) -> pd.Series:
     """
     s = pd.to_numeric(series, errors="coerce")
     return np.floor(s).astype("Int64")
-
 
 
 def _hms_to_seconds(hms: str) -> Optional[float]:
@@ -109,7 +109,11 @@ def _parse_plk_stats(plk_path: Path) -> Dict[str, Optional[float]]:
 
     tempo2 output formats vary, so we use tolerant regexes and return None if absent.
     """
-    text = plk_path.read_text(encoding="utf-8", errors="ignore") if plk_path.exists() else ""
+    text = (
+        plk_path.read_text(encoding="utf-8", errors="ignore")
+        if plk_path.exists()
+        else ""
+    )
     if not text:
         return {"chisq": None, "redchisq": None, "n_toas": None}
 
@@ -123,23 +127,31 @@ def _parse_plk_stats(plk_path: Path) -> Dict[str, Optional[float]]:
                     continue
         return None
 
-    chisq = _rx([
-        r"chisq\s*=\s*([0-9.+\-eE]+)",
-        r"chi\s*\^?2\s*=\s*([0-9.+\-eE]+)",
-    ])
-    redchisq = _rx([
-        r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)",
-        r"red\s*chisq\s*=\s*([0-9.+\-eE]+)",
-    ])
-    n_toas = _rx([
-        r"number\s+of\s+\w*points\s+in\s+fit\s*=\s*([0-9.+\-eE]+)",
-        r"ntoa\s*=\s*([0-9.+\-eE]+)",
-        r"number\s+of\s+toas\s*=\s*([0-9.+\-eE]+)",
-    ])
+    chisq = _rx(
+        [
+            r"chisq\s*=\s*([0-9.+\-eE]+)",
+            r"chi\s*\^?2\s*=\s*([0-9.+\-eE]+)",
+        ]
+    )
+    redchisq = _rx(
+        [
+            r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)",
+            r"red\s*chisq\s*=\s*([0-9.+\-eE]+)",
+        ]
+    )
+    n_toas = _rx(
+        [
+            r"number\s+of\s+\w*points\s+in\s+fit\s*=\s*([0-9.+\-eE]+)",
+            r"ntoa\s*=\s*([0-9.+\-eE]+)",
+            r"number\s+of\s+toas\s*=\s*([0-9.+\-eE]+)",
+        ]
+    )
     return {"chisq": chisq, "redchisq": redchisq, "n_toas": n_toas}
 
 
-def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict[str, Path]) -> pd.DataFrame:
+def compare_plk(
+    branch: str, reference_branch: str, pulsar: str, out_paths: Dict[str, Path]
+) -> pd.DataFrame:
     """Compare post-fit parameters between a branch and a reference branch.
 
     Optimizations vs the original notebook:
@@ -162,12 +174,18 @@ def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict
     df_ref = _read_plk_cached(str(ref_path))
     df_br = _read_plk_cached(str(br_path))
 
-    keep = [c for c in ["Param", "Postfit", "Uncertainty", "Fit"] if c in df_ref.columns]
+    keep = [
+        c for c in ["Param", "Postfit", "Uncertainty", "Fit"] if c in df_ref.columns
+    ]
     df_ref = df_ref[keep].copy()
     df_br = df_br[[c for c in keep if c in df_br.columns]].copy()
 
-    m = df_ref.merge(df_br, on="Param", how="outer", suffixes=("_ref", "_branch"), indicator=True)
-    m["status"] = m["_merge"].map({"both": "both", "left_only": "missing", "right_only": "new"})
+    m = df_ref.merge(
+        df_br, on="Param", how="outer", suffixes=("_ref", "_branch"), indicator=True
+    )
+    m["status"] = m["_merge"].map(
+        {"both": "both", "left_only": "missing", "right_only": "new"}
+    )
     m = m.drop(columns=["_merge"])
 
     # numeric diffs
@@ -178,16 +196,24 @@ def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict
     # hms diffs (RA/DEC style)
     ref_hms = m.get("Postfit_ref", pd.Series(dtype=object)).astype("string")
     br_hms = m.get("Postfit_branch", pd.Series(dtype=object)).astype("string")
-    ref_sec = ref_hms.apply(lambda x: _hms_to_seconds(str(x)) if x is not pd.NA else None)
+    ref_sec = ref_hms.apply(
+        lambda x: _hms_to_seconds(str(x)) if x is not pd.NA else None
+    )
     br_sec = br_hms.apply(lambda x: _hms_to_seconds(str(x)) if x is not pd.NA else None)
-    diff_sec = (pd.to_numeric(br_sec, errors="coerce") - pd.to_numeric(ref_sec, errors="coerce"))
-    diff_hms_str = diff_sec.apply(lambda x: _format_seconds_as_hms(float(x)) if pd.notna(x) else pd.NA)
+    diff_sec = pd.to_numeric(br_sec, errors="coerce") - pd.to_numeric(
+        ref_sec, errors="coerce"
+    )
+    diff_hms_str = diff_sec.apply(
+        lambda x: _format_seconds_as_hms(float(x)) if pd.notna(x) else pd.NA
+    )
 
     # uncertainty-normalized significance (numeric only)
     uref = _maybe_float_series(m.get("Uncertainty_ref", pd.Series(dtype=float)))
     ubr = _maybe_float_series(m.get("Uncertainty_branch", pd.Series(dtype=float)))
     denom = np.sqrt(uref**2 + ubr**2)
-    sigma = np.where((np.isfinite(diff_num)) & (denom > 0), np.abs(diff_num) / denom, np.nan)
+    sigma = np.where(
+        (np.isfinite(diff_num)) & (denom > 0), np.abs(diff_num) / denom, np.nan
+    )
 
     # Choose diff representation: HMS if applicable, else numeric, else string
     diff_display = diff_num.astype("float64")
@@ -197,26 +223,36 @@ def compare_plk(branch: str, reference_branch: str, pulsar: str, out_paths: Dict
     diff_display = diff_display.where(~use_hms, diff_hms_str.astype("object"))
 
     # for truly non-numeric values, fall back to "branch | ref" for readability
-    needs_fallback = pd.isna(diff_display) & m["Postfit_branch"].notna() & m["Postfit_ref"].notna()
-    diff_display = diff_display.where(~needs_fallback, (m["Postfit_branch"].astype(str) + " | " + m["Postfit_ref"].astype(str)))
+    needs_fallback = (
+        pd.isna(diff_display) & m["Postfit_branch"].notna() & m["Postfit_ref"].notna()
+    )
+    diff_display = diff_display.where(
+        ~needs_fallback,
+        (m["Postfit_branch"].astype(str) + " | " + m["Postfit_ref"].astype(str)),
+    )
 
-    out = pd.DataFrame({
-        "Param": m["Param"],
-        "status": m["status"],
-        "ref_postfit": m.get("Postfit_ref"),
-        "branch_postfit": m.get("Postfit_branch"),
-        "ref_uncertainty": m.get("Uncertainty_ref"),
-        "branch_uncertainty": m.get("Uncertainty_branch"),
-        "diff": diff_display,
-        "sigma": sigma,
-        "ref_fit": m.get("Fit_ref"),
-        "branch_fit": m.get("Fit_branch"),
-    })
+    out = pd.DataFrame(
+        {
+            "Param": m["Param"],
+            "status": m["status"],
+            "ref_postfit": m.get("Postfit_ref"),
+            "branch_postfit": m.get("Postfit_branch"),
+            "ref_uncertainty": m.get("Uncertainty_ref"),
+            "branch_uncertainty": m.get("Uncertainty_branch"),
+            "diff": diff_display,
+            "sigma": sigma,
+            "ref_fit": m.get("Fit_ref"),
+            "branch_fit": m.get("Fit_branch"),
+        }
+    )
 
     # stable order
     return out.sort_values(["status", "Param"], kind="mergesort", ignore_index=True)
 
-def _warn_plk_skip(pulsar: str, branch: str, reference_branch: str, path: Optional[Path], reason: str) -> None:
+
+def _warn_plk_skip(
+    pulsar: str, branch: str, reference_branch: str, path: Optional[Path], reason: str
+) -> None:
     """Log a warning for a skipped change report due to PLK issues."""
     path_str = str(path) if path is not None else "unknown path"
     logger.warning(
@@ -229,7 +265,12 @@ def _warn_plk_skip(pulsar: str, branch: str, reference_branch: str, path: Option
     )
 
 
-def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str) -> None:
+def write_change_reports(
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branches: List[str],
+    reference_branch: str,
+) -> None:
     """Write per-pulsar change reports and a combined summary.
 
     Args:
@@ -252,7 +293,13 @@ def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branche
             try:
                 df = compare_plk(branch, reference_branch, pulsar, out_paths)
             except FileNotFoundError as e:
-                _warn_plk_skip(pulsar, branch, reference_branch, Path(e.filename) if e.filename else None, "Missing plk log")
+                _warn_plk_skip(
+                    pulsar,
+                    branch,
+                    reference_branch,
+                    Path(e.filename) if e.filename else None,
+                    "Missing plk log",
+                )
                 skipped += 1
                 continue
             except PlkParseError as e:
@@ -260,10 +307,15 @@ def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branche
                 skipped += 1
                 continue
             except ValueError as e:
-                _warn_plk_skip(pulsar, branch, reference_branch, None, f"Unparseable plk log: {e}")
+                _warn_plk_skip(
+                    pulsar, branch, reference_branch, None, f"Unparseable plk log: {e}"
+                )
                 skipped += 1
                 continue
-            out_file = out_paths["change_report"] / f"{pulsar}_change_{reference_branch}_to_{branch}.tsv"
+            out_file = (
+                out_paths["change_report"]
+                / f"{pulsar}_change_{reference_branch}_to_{branch}.tsv"
+            )
             df.to_csv(out_file, sep="\t", index=False)
             df2 = df.copy()
             df2.insert(0, "pulsar", pulsar)
@@ -272,9 +324,15 @@ def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branche
 
     if combined:
         combined_df = pd.concat(combined, ignore_index=True)
-        combined_df.to_csv(out_paths["change_report"] / f"ALL_change_{reference_branch}_summary.tsv", sep="\t", index=False)
+        combined_df.to_csv(
+            out_paths["change_report"] / f"ALL_change_{reference_branch}_summary.tsv",
+            sep="\t",
+            index=False,
+        )
     if skipped:
-        logger.warning("Skipped %d change report(s) due to missing/unparseable plk logs.", skipped)
+        logger.warning(
+            "Skipped %d change report(s) due to missing/unparseable plk logs.", skipped
+        )
 
 
 def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
@@ -289,7 +347,9 @@ def _fit_params_count(plk_df: pd.DataFrame) -> Optional[int]:
     return int(s.isin({"t", "true", "y", "yes", "fit", "fitted", "1"}).sum())
 
 
-def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[str, Optional[float]]:
+def summarize_run(
+    out_paths: Dict[str, Path], pulsar: str, branch: str
+) -> Dict[str, Optional[float]]:
     """Summarize a tempo2 run to support model comparison.
 
     Args:
@@ -330,7 +390,7 @@ def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[
                 if good.sum() > 1:
                     y = post[good].to_numpy(dtype=float)
                     # general2 often reports err in microseconds; keep the same heuristic as plotting.py
-                    e = (err[good].to_numpy(dtype=float) * 1e-6)
+                    e = err[good].to_numpy(dtype=float) * 1e-6
                     w = 1.0 / (e**2)
                     mu = np.sum(w * y) / np.sum(w)
                     wrms = float(np.sqrt(np.sum(w * (y - mu) ** 2) / np.sum(w)))
@@ -359,7 +419,12 @@ def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[
     return out
 
 
-def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str) -> None:
+def write_model_comparison_summary(
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branches: List[str],
+    reference_branch: str,
+) -> None:
     """Write a per-pulsar model comparison summary table vs a reference branch.
 
     Args:
@@ -391,7 +456,9 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
             # deltas
             for k in ["chisq", "redchisq", "wrms_post", "aic", "bic"]:
                 rv, bv = ref_stats.get(k), st.get(k)
-                row[f"delta_{k}"] = (bv - rv) if (rv is not None and bv is not None) else None
+                row[f"delta_{k}"] = (
+                    (bv - rv) if (rv is not None and bv is not None) else None
+                )
 
             # Rapid nested-model test heuristic:
             # If the branch model is an extension of the reference, then
@@ -402,12 +469,21 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
             bc = st.get("chisq")
 
             delta_k = (bk - rk) if (rk is not None and bk is not None) else None
-            delta_chisq_improve = (rc - bc) if (rc is not None and bc is not None) else None
+            delta_chisq_improve = (
+                (rc - bc) if (rc is not None and bc is not None) else None
+            )
 
             row["delta_k_fit"] = delta_k
             row["lrt_delta_chisq"] = delta_chisq_improve
-            if (delta_k is not None) and (delta_chisq_improve is not None) and (delta_k > 0) and (delta_chisq_improve > 0):
-                row["lrt_p_value"] = _chi2_sf(float(delta_chisq_improve), float(delta_k))
+            if (
+                (delta_k is not None)
+                and (delta_chisq_improve is not None)
+                and (delta_k > 0)
+                and (delta_chisq_improve > 0)
+            ):
+                row["lrt_p_value"] = _chi2_sf(
+                    float(delta_chisq_improve), float(delta_k)
+                )
             else:
                 row["lrt_p_value"] = None
 
@@ -420,7 +496,14 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
     out_file = out_paths["change_report"] / f"MODEL_COMPARISON_{reference_branch}.tsv"
     df.to_csv(out_file, sep="	", index=False)
 
-def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], reference_branch: str, z_threshold: float = 3.0) -> None:
+
+def write_new_param_significance(
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branches: List[str],
+    reference_branch: str,
+    z_threshold: float = 3.0,
+) -> None:
     """Summarize 'new' parameters in each branch vs reference and their Wald z = :math:`|x|/σ`.
 
     This is a rapid way to screen whether newly-added fitted parameters look
@@ -460,11 +543,15 @@ def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str],
 
             # Pull branch postfit/unc (compare_plk outputs branch_* columns)
             post = pd.to_numeric(
-                new_df.get("branch_postfit", pd.Series(index=new_df.index, dtype=float)),
+                new_df.get(
+                    "branch_postfit", pd.Series(index=new_df.index, dtype=float)
+                ),
                 errors="coerce",
             )
             unc = pd.to_numeric(
-                new_df.get("branch_uncertainty", pd.Series(index=new_df.index, dtype=float)),
+                new_df.get(
+                    "branch_uncertainty", pd.Series(index=new_df.index, dtype=float)
+                ),
                 errors="coerce",
             )
             z = (post.abs() / unc).where((unc > 0) & post.notna(), np.nan)
@@ -475,30 +562,44 @@ def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str],
 
             max_z = float(np.nanmax(z.to_numpy())) if n_z else None
             if max_z is not None and np.isfinite(max_z):
-                max_param = str(new_df.loc[z.idxmax(), "Param"]) if z.idxmax() in new_df.index else None
+                max_param = (
+                    str(new_df.loc[z.idxmax(), "Param"])
+                    if z.idxmax() in new_df.index
+                    else None
+                )
             else:
                 max_param = None
 
-            rows.append({
-                "pulsar": pulsar,
-                "branch": branch,
-                "reference": reference_branch,
-                "n_new_params": n_new,
-                "n_new_with_numeric_sigma": n_z,
-                f"n_new_sig_z>={float(z_threshold):g}": n_sig,
-                "max_new_param_z": max_z,
-                "max_new_param": max_param,
-            })
+            rows.append(
+                {
+                    "pulsar": pulsar,
+                    "branch": branch,
+                    "reference": reference_branch,
+                    "n_new_params": n_new,
+                    "n_new_with_numeric_sigma": n_z,
+                    f"n_new_sig_z>={float(z_threshold):g}": n_sig,
+                    "max_new_param_z": max_z,
+                    "max_new_param": max_param,
+                }
+            )
 
     if not rows:
         return
 
     out = pd.DataFrame(rows)
-    out_file = out_paths["change_report"] / f"NEW_PARAM_SIGNIFICANCE_{reference_branch}.tsv"
+    out_file = (
+        out_paths["change_report"] / f"NEW_PARAM_SIGNIFICANCE_{reference_branch}.tsv"
+    )
     out.to_csv(out_file, sep="\t", index=False)
 
 
-def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branches: List[str]) -> None:
+def write_outlier_tables(
+    home_dir: Path,
+    dataset_name: Path,
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branches: List[str],
+) -> None:
     """Write per-pulsar outlier tables from general2 outputs.
 
     Args:
@@ -524,13 +625,25 @@ def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str
                 mjd = pd.to_numeric(dmf[2], errors="coerce").dropna()
                 if mjd.empty:
                     continue
-                tmp = pd.DataFrame({
-                    "mjd_int": _mjd_day_int(mjd),
-                    "system": timfile.stem,
-                    "timfile": str(timfile),
-                })
+                tmp = pd.DataFrame(
+                    {
+                        "mjd_int": _mjd_day_int(mjd),
+                        "system": timfile.stem,
+                        "timfile": str(timfile),
+                    }
+                )
                 tim_lookup.append(tmp)
-        tim_lookup_df = pd.concat(tim_lookup, ignore_index=True) if tim_lookup else pd.DataFrame({"mjd_int": pd.Series(dtype="Int64"), "system": pd.Series(dtype="string"), "timfile": pd.Series(dtype="string")})
+        tim_lookup_df = (
+            pd.concat(tim_lookup, ignore_index=True)
+            if tim_lookup
+            else pd.DataFrame(
+                {
+                    "mjd_int": pd.Series(dtype="Int64"),
+                    "system": pd.Series(dtype="string"),
+                    "timfile": pd.Series(dtype="string"),
+                }
+            )
+        )
 
         for branch in branches:
             gen_file = out_paths["general2"] / f"{pulsar}_{branch}.general2"
@@ -539,7 +652,12 @@ def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str
             try:
                 df = read_general2(gen_file)
             except Exception as e:
-                logger.warning("Failed to read general2 for outliers: %s on %s (%s)", pulsar, branch, e)
+                logger.warning(
+                    "Failed to read general2 for outliers: %s on %s (%s)",
+                    pulsar,
+                    branch,
+                    e,
+                )
                 continue
 
             if "sat" not in df.columns or "post" not in df.columns:
@@ -549,7 +667,9 @@ def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str
             df["post_num"] = pd.to_numeric(df["post"], errors="coerce")
 
             good = df["mjd_int"].notna() & df["post_num"].notna()
-            keep_cols = ["mjd_int", "post_num"] + [c for c in df.columns if c in ("err", "freq", "solarangle", "pre")]
+            keep_cols = ["mjd_int", "post_num"] + [
+                c for c in df.columns if c in ("err", "freq", "solarangle", "pre")
+            ]
             df = df.loc[good, keep_cols]
 
             if df.empty:

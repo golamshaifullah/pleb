@@ -24,7 +24,14 @@ def test_read_plklog_header_variants(tmp_path: Path) -> None:
     ]
     _write_plk(plk, header, rows)
     df = read_plklog(plk)
-    assert list(df.columns) == ["Param", "Prefit", "Postfit", "Uncertainty", "Difference", "Fit"]
+    assert list(df.columns) == [
+        "Param",
+        "Prefit",
+        "Postfit",
+        "Uncertainty",
+        "Difference",
+        "Fit",
+    ]
     assert len(df) == 2
 
 
@@ -42,12 +49,18 @@ def test_write_change_reports_skips_unparseable(tmp_path: Path, caplog) -> None:
 
     # Parseable logs for J0000+0000
     header = "Param   Prefit   Postfit   Uncertainty   Difference   Fit"
-    _write_plk(out_paths["plk"] / f"{pulsars[0]}_{ref}_plk.log", header, ["F0 1 2 3 4 Y"])
-    _write_plk(out_paths["plk"] / f"{pulsars[0]}_{branch}_plk.log", header, ["F0 1 2 3 4 Y"])
+    _write_plk(
+        out_paths["plk"] / f"{pulsars[0]}_{ref}_plk.log", header, ["F0 1 2 3 4 Y"]
+    )
+    _write_plk(
+        out_paths["plk"] / f"{pulsars[0]}_{branch}_plk.log", header, ["F0 1 2 3 4 Y"]
+    )
 
     # Unparseable logs for J0001+0001 (empty)
     (out_paths["plk"] / f"{pulsars[1]}_{ref}_plk.log").write_text("", encoding="utf-8")
-    (out_paths["plk"] / f"{pulsars[1]}_{branch}_plk.log").write_text("", encoding="utf-8")
+    (out_paths["plk"] / f"{pulsars[1]}_{branch}_plk.log").write_text(
+        "", encoding="utf-8"
+    )
 
     with caplog.at_level(logging.WARNING, logger="pleb.reports"):
         write_change_reports(out_paths, pulsars, [ref, branch], ref)

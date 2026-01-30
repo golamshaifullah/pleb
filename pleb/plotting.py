@@ -27,9 +27,11 @@ logger = get_logger("pleb.plotting")
 
 try:
     import seaborn as sns  # type: ignore
+
     HAVE_SEABORN = True
 except Exception:
     HAVE_SEABORN = False
+
 
 def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
     """Compute histogram bin count using the Freedman–Diaconis rule.
@@ -54,11 +56,12 @@ def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
     iqr = q75 - q25
     if iqr == 0:
         return min(max_bins, 30)
-    bin_width = 2 * iqr * (x.size ** (-1/3))
+    bin_width = 2 * iqr * (x.size ** (-1 / 3))
     if bin_width <= 0:
         return min(max_bins, 30)
     bins = int(np.ceil((x.max() - x.min()) / bin_width))
     return int(np.clip(bins, 5, max_bins))
+
 
 class MathTextSciFormatter(ScalarFormatter):
     """Matplotlib scalar formatter using MathText scientific notation.
@@ -66,6 +69,7 @@ class MathTextSciFormatter(ScalarFormatter):
     Args:
         fmt: Format string passed to Matplotlib.
     """
+
     def __init__(self, fmt: str = "%1.1e"):
         """Create a scalar formatter using MathText scientific notation."""
         super().__init__(useMathText=True)
@@ -73,6 +77,7 @@ class MathTextSciFormatter(ScalarFormatter):
 
     def _set_format(self):
         self.format = self.fmt
+
 
 def savefig(fig: plt.Figure, path: Path, dpi: int) -> None:
     """Save a Matplotlib figure to disk and close it.
@@ -91,7 +96,15 @@ def savefig(fig: plt.Figure, path: Path, dpi: int) -> None:
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
-def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
+
+def plot_systems_per_pulsar(
+    home_dir: Path,
+    dataset_name: Path,
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branch: str,
+    dpi: int,
+) -> None:
     """Plot per-pulsar system timelines and write summary tables.
 
     Args:
@@ -107,16 +120,22 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
 
             plot_systems_per_pulsar(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
     """
-    fig, axes = plt.subplots(nrows=len(pulsars), ncols=1, sharex=True, figsize=(12, max(2, 3*len(pulsars))))
+    fig, axes = plt.subplots(
+        nrows=len(pulsars), ncols=1, sharex=True, figsize=(12, max(2, 3 * len(pulsars)))
+    )
     if len(pulsars) == 1:
         axes = [axes]
 
     summary_path = out_paths["tag"] / f"{branch}_summary.tsv"
     all_summary_path = out_paths["tag"] / f"{branch}_all_summary.tsv"
     with open(summary_path, "w", encoding="utf-8") as f:
-        f.write("branch\tpulsar\tsystem\tmjd_min\tmjd_max\tmean_cadence\tmedian_cadence\tntoas\tepochs\n")
+        f.write(
+            "branch\tpulsar\tsystem\tmjd_min\tmjd_max\tmean_cadence\tmedian_cadence\tntoas\tepochs\n"
+        )
     with open(all_summary_path, "w", encoding="utf-8") as f:
-        f.write("branch\tpulsar\tsystem\tmjd_min\tmjd_max\tmean_cadence\tmedian_cadence\tntoas\tepochs\n")
+        f.write(
+            "branch\tpulsar\tsystem\tmjd_min\tmjd_max\tmean_cadence\tmedian_cadence\tntoas\tepochs\n"
+        )
 
     for ax, pulsar in zip(axes, pulsars):
         tim_dir = home_dir / dataset_name / pulsar / "tims"
@@ -136,7 +155,13 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
                 continue
 
             system = timfile.stem
-            ax.plot(mjd, np.full_like(mjd, y, dtype=float), linestyle="none", marker=".", markersize=2)
+            ax.plot(
+                mjd,
+                np.full_like(mjd, y, dtype=float),
+                linestyle="none",
+                marker=".",
+                markersize=2,
+            )
 
             epochs = int(pd.Series(mjd.astype(int)).nunique())
             ntoas = int(mjd.size)
@@ -145,7 +170,9 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
             med_cad = float(np.nanmedian(cadence)) if cadence.size else np.nan
 
             with open(summary_path, "a", encoding="utf-8") as f:
-                f.write(f"{branch}\t{pulsar}\t{system}\t{mjd.min():.6f}\t{mjd.max():.6f}\t{mean_cad:.3f}\t{med_cad:.3f}\t{ntoas}\t{epochs}\n")
+                f.write(
+                    f"{branch}\t{pulsar}\t{system}\t{mjd.min():.6f}\t{mjd.max():.6f}\t{mean_cad:.3f}\t{med_cad:.3f}\t{ntoas}\t{epochs}\n"
+                )
 
             all_toas.extend(mjd.tolist())
 
@@ -155,7 +182,9 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
             mean_cad = float(np.nanmean(cadence)) if cadence.size else np.nan
             med_cad = float(np.nanmedian(cadence)) if cadence.size else np.nan
             with open(all_summary_path, "a", encoding="utf-8") as f:
-                f.write(f"{branch}\t{pulsar}\tALL\t{all_toas_np.min():.6f}\t{all_toas_np.max():.6f}\t{mean_cad:.3f}\t{med_cad:.3f}\t{all_toas_np.size}\t{int(pd.Series(all_toas_np.astype(int)).nunique())}\n")
+                f.write(
+                    f"{branch}\t{pulsar}\tALL\t{all_toas_np.min():.6f}\t{all_toas_np.max():.6f}\t{mean_cad:.3f}\t{med_cad:.3f}\t{all_toas_np.size}\t{int(pd.Series(all_toas_np.astype(int)).nunique())}\n"
+                )
 
         ax.set_title(f"{pulsar} on {branch}")
         ax.set_ylabel("system index")
@@ -164,7 +193,15 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
     axes[-1].set_xlabel("MJD")
     savefig(fig, out_paths["png"] / f"SystemsPerPulsar_{branch}.png", dpi=dpi)
 
-def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[str, Path], pulsars: List[str], branch: str, dpi: int) -> None:
+
+def plot_pulsars_per_system(
+    home_dir: Path,
+    dataset_name: Path,
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branch: str,
+    dpi: int,
+) -> None:
     """Plot per-system timelines across pulsars.
 
     Args:
@@ -204,14 +241,20 @@ def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[
     ncols = min(6, max(1, int(math.ceil(math.sqrt(n)))))
     nrows = int(math.ceil(n / ncols))
 
-    fig = plt.figure(figsize=(4*ncols, 3*nrows))
+    fig = plt.figure(figsize=(4 * ncols, 3 * nrows))
     gs = gridspec.GridSpec(nrows, ncols, figure=fig, wspace=0.3, hspace=0.6)
 
     for i, system in enumerate(systems):
         r, c = divmod(i, ncols)
         ax = fig.add_subplot(gs[r, c])
         for p_idx, mjd in system_to_data[system]:
-            ax.plot(mjd, np.full_like(mjd, p_idx, dtype=float), linestyle="none", marker=".", markersize=2)
+            ax.plot(
+                mjd,
+                np.full_like(mjd, p_idx, dtype=float),
+                linestyle="none",
+                marker=".",
+                markersize=2,
+            )
         ax.set_title(system, fontsize=10)
         ax.set_ylim(-0.5, len(pulsars) - 0.5)
         ax.grid(alpha=0.2)
@@ -219,7 +262,14 @@ def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[
     fig.suptitle(f"Pulsars per system on {branch}", y=0.995)
     savefig(fig, out_paths["png"] / f"PulsarsPerSystem_{branch}.png", dpi=dpi)
 
-def plot_covmat_heatmaps(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], dpi: int, max_params: Optional[int] = None) -> None:
+
+def plot_covmat_heatmaps(
+    out_paths: Dict[str, Path],
+    pulsars: List[str],
+    branches: List[str],
+    dpi: int,
+    max_params: Optional[int] = None,
+) -> None:
     """Plot covariance matrix heatmaps per pulsar/branch.
 
     Args:
@@ -242,7 +292,9 @@ def plot_covmat_heatmaps(out_paths: Dict[str, Path], pulsars: List[str], branche
             try:
                 df = read_covmat(cov_file)
             except Exception as e:
-                logger.warning("Failed to read covmat for %s on %s: %s", pulsar, branch, e)
+                logger.warning(
+                    "Failed to read covmat for %s on %s: %s", pulsar, branch, e
+                )
                 continue
 
             if max_params is not None and df.shape[0] > max_params:
@@ -265,7 +317,10 @@ def plot_covmat_heatmaps(out_paths: Dict[str, Path], pulsars: List[str], branche
             ax.set_title(f"Covariance matrix: {pulsar} on {branch}")
             savefig(fig, out_paths["png"] / f"CovMat_{pulsar}_{branch}.png", dpi=dpi)
 
-def plot_residuals(out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], dpi: int) -> None:
+
+def plot_residuals(
+    out_paths: Dict[str, Path], pulsars: List[str], branches: List[str], dpi: int
+) -> None:
     """Plot timing residuals per pulsar/branch.
 
     Args:
@@ -292,17 +347,23 @@ def plot_residuals(out_paths: Dict[str, Path], pulsars: List[str], branches: Lis
             try:
                 df = read_general2(gen_file)
             except Exception as e:
-                logger.warning("Failed to read general2 for %s on %s: %s", pulsar, branch, e)
+                logger.warning(
+                    "Failed to read general2 for %s on %s: %s", pulsar, branch, e
+                )
                 continue
 
-            if not {"sat","pre","post","err"}.issubset(set(df.columns)):
-                logger.warning("general2 missing required columns for %s on %s", pulsar, branch)
+            if not {"sat", "pre", "post", "err"}.issubset(set(df.columns)):
+                logger.warning(
+                    "general2 missing required columns for %s on %s", pulsar, branch
+                )
                 continue
 
             sat = pd.to_numeric(df["sat"], errors="coerce")
             pre = pd.to_numeric(df["pre"], errors="coerce")
             post = pd.to_numeric(df["post"], errors="coerce")
-            err = pd.to_numeric(df["err"], errors="coerce") * 1e-6  # μs -> s (heuristic)
+            err = (
+                pd.to_numeric(df["err"], errors="coerce") * 1e-6
+            )  # μs -> s (heuristic)
 
             good = sat.notna() & pre.notna() & post.notna() & err.notna()
             if good.sum() < 2:
@@ -324,17 +385,33 @@ def plot_residuals(out_paths: Dict[str, Path], pulsars: List[str], branches: Lis
             q32, q68 = np.quantile(post, [0.32, 0.68])
 
             with open(summary_path, "a", encoding="utf-8") as f:
-                f.write(f"{branch}\t{pulsar}\t{wrms:.6e}\t{q32:.6e}\t{q68:.6e}\t{post.size}\n")
+                f.write(
+                    f"{branch}\t{pulsar}\t{wrms:.6e}\t{q32:.6e}\t{q68:.6e}\t{post.size}\n"
+                )
 
             fig1 = plt.figure(figsize=(8, 5))
             ax1 = fig1.add_subplot(111)
-            ax1.hist(pre, bins=freedman_diaconis_bins(pre), density=True, alpha=0.6, label="pre-fit")
-            ax1.hist(post, bins=freedman_diaconis_bins(post), density=True, alpha=0.6, label="post-fit")
+            ax1.hist(
+                pre,
+                bins=freedman_diaconis_bins(pre),
+                density=True,
+                alpha=0.6,
+                label="pre-fit",
+            )
+            ax1.hist(
+                post,
+                bins=freedman_diaconis_bins(post),
+                density=True,
+                alpha=0.6,
+                label="post-fit",
+            )
             ax1.set_title(f"Residual distribution: {pulsar} on {branch}")
             ax1.set_xlabel("residual")
             ax1.set_ylabel("density")
             ax1.legend()
-            savefig(fig1, out_paths["png"] / f"ResidualHist_{pulsar}_{branch}.png", dpi=dpi)
+            savefig(
+                fig1, out_paths["png"] / f"ResidualHist_{pulsar}_{branch}.png", dpi=dpi
+            )
 
             fig2 = plt.figure(figsize=(10, 5))
             ax2 = fig2.add_subplot(111)
@@ -342,10 +419,22 @@ def plot_residuals(out_paths: Dict[str, Path], pulsars: List[str], branches: Lis
             ax2.scatter(sat, pre, s=6, alpha=0.35, label="pre-fit")
             outliers = np.abs(post) >= (3.0 * np.std(post))
             if outliers.any():
-                ax2.scatter(sat[outliers], post[outliers], s=20, facecolors="none", edgecolors="red", linewidths=0.8, label="3σ outliers")
+                ax2.scatter(
+                    sat[outliers],
+                    post[outliers],
+                    s=20,
+                    facecolors="none",
+                    edgecolors="red",
+                    linewidths=0.8,
+                    label="3σ outliers",
+                )
             ax2.set_title(f"Residuals vs time: {pulsar} on {branch}")
             ax2.set_xlabel("MJD (sat)")
             ax2.yaxis.set_major_formatter(MathTextSciFormatter("%1.1e"))
             ax2.grid(alpha=0.25)
             ax2.legend()
-            savefig(fig2, out_paths["png"] / f"ResidualsVsTime_{pulsar}_{branch}.png", dpi=dpi)
+            savefig(
+                fig2,
+                out_paths["png"] / f"ResidualsVsTime_{pulsar}_{branch}.png",
+                dpi=dpi,
+            )

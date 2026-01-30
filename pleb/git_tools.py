@@ -13,6 +13,7 @@ from .logging_utils import get_logger
 
 logger = get_logger("pleb.git")
 
+
 def checkout(repo: Repo, branch: str) -> None:
     """Check out a git branch.
 
@@ -26,6 +27,7 @@ def checkout(repo: Repo, branch: str) -> None:
             checkout(repo, "main")
     """
     repo.git.checkout(branch)
+
 
 def require_clean_repo(repo: Repo) -> None:
     """Warn if the git repository has uncommitted changes.

@@ -27,6 +27,7 @@ def _default_log_file() -> Path:
     _LOG_FILE = log_dir / f"pleb_{ts}.log"
     return _LOG_FILE
 
+
 def get_logger(name: str = "pleb", level: int = logging.INFO) -> logging.Logger:
     """Return a configured logger for pipeline modules.
 
