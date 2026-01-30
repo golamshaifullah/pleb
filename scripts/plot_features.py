@@ -102,6 +102,15 @@ def main() -> None:
         if "dm_step_id" in df.columns:
             event_member |= pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
 
+    if "solar_bad" in df.columns:
+        solar_bad = df["solar_bad"].fillna(False).astype(bool).to_numpy()
+    else:
+        solar_bad = np.zeros(len(df), dtype=bool)
+    if "orbital_phase_bad" in df.columns:
+        orbital_bad = df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+    else:
+        orbital_bad = np.zeros(len(df), dtype=bool)
+
     if args.features:
         features = [f.strip() for f in args.features.split(",") if f.strip()]
     else:
@@ -164,6 +173,9 @@ def main() -> None:
                 bad_only = good & bad_sub & (~event_sub)
                 event_only = good & event_sub & (~bad_sub)
                 both = good & bad_sub & event_sub
+                idx = sub.index.to_numpy()
+                solar_only = good & solar_bad[idx]
+                orbital_only = good & orbital_bad[idx]
 
                 if s is not None:
                     plt.errorbar(x[normal], y[normal], yerr=s[normal], fmt=".", alpha=0.4, capsize=0)
@@ -177,6 +189,10 @@ def main() -> None:
                 if both.any():
                     plt.plot(x[both], y[both], "x", color="grey", alpha=0.9, label="bad_point+event_member")
                     plt.scatter(x[both], y[both], s=30, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label=None)
+                if solar_only.any():
+                    plt.scatter(x[solar_only], y[solar_only], s=30, marker="^", facecolors="none", edgecolors="orange", alpha=0.9, label="solar_bad")
+                if orbital_only.any():
+                    plt.scatter(x[orbital_only], y[orbital_only], s=30, marker="s", facecolors="none", edgecolors="blue", alpha=0.9, label="orbital_phase_bad")
 
                 stats = _bin_stats(x, y, nbins=int(args.bins))
                 if stats is not None:
@@ -192,7 +208,11 @@ def main() -> None:
                         plt.xlim(-xmax, xmax)
                     plt.axvline(0.0, color="black", lw=0.8, alpha=0.6)
                 label = ",".join([f"{c}={row.get(c)}" for c in cols]) if cols else "all"
-                plt.title(f"{feat} ({label}) | bad_points={int(bad_sub.sum())} | event_members={int(event_sub.sum())}")
+                plt.title(
+                    f"{feat} ({label}) | bad_points={int(bad_sub.sum())} | "
+                    f"event_members={int(event_sub.sum())} | solar_bad={int(solar_bad[idx].sum())} | "
+                    f"orbital_phase_bad={int(orbital_bad[idx].sum())}"
+                )
 
                 fname = f"{feat}_{label.replace('=', '_').replace(',', '_').replace(' ', '')}.png"
                 plt.tight_layout()

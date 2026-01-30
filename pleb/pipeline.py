@@ -219,6 +219,9 @@ def _build_fixdataset_config(cfg, *, apply: bool, qc_results_dir: Path | None = 
             qc_remove_solar=bool(_cfg_get(cfg, "fix_qc_remove_solar", False)),
             qc_solar_action=str(_cfg_get(cfg, "fix_qc_solar_action", "comment") or "comment"),
             qc_solar_comment_prefix=str(_cfg_get(cfg, "fix_qc_solar_comment_prefix", "# QC_SOLAR") or "# QC_SOLAR"),
+            qc_remove_orbital_phase=bool(_cfg_get(cfg, "fix_qc_remove_orbital_phase", False)),
+            qc_orbital_phase_action=str(_cfg_get(cfg, "fix_qc_orbital_phase_action", "comment") or "comment"),
+            qc_orbital_phase_comment_prefix=str(_cfg_get(cfg, "fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE") or "# QC_BIANRY_ECLIPSE"),
             qc_bad_tau_corr_days=float(_cfg_get(cfg, "fix_qc_bad_tau_corr_days", 0.02) or 0.02),
             qc_bad_fdr_q=float(_cfg_get(cfg, "fix_qc_bad_fdr_q", 0.01) or 0.01),
             qc_bad_mark_only_worst_per_day=bool(_cfg_get(cfg, "fix_qc_bad_mark_only_worst_per_day", True)),
@@ -600,6 +603,12 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     solar_cut_sigma=float(getattr(cfg, "pqc_solar_cut_sigma", 3.0)),
                     solar_cut_nbins=int(getattr(cfg, "pqc_solar_cut_nbins", 18)),
                     solar_cut_min_points=int(getattr(cfg, "pqc_solar_cut_min_points", 20)),
+                    orbital_phase_cut_enabled=bool(getattr(cfg, "pqc_orbital_phase_cut_enabled", False)),
+                    orbital_phase_cut_center=float(getattr(cfg, "pqc_orbital_phase_cut_center", 0.25)),
+                    orbital_phase_cut=getattr(cfg, "pqc_orbital_phase_cut", None),
+                    orbital_phase_cut_sigma=float(getattr(cfg, "pqc_orbital_phase_cut_sigma", 3.0)),
+                    orbital_phase_cut_nbins=int(getattr(cfg, "pqc_orbital_phase_cut_nbins", 18)),
+                    orbital_phase_cut_min_points=int(getattr(cfg, "pqc_orbital_phase_cut_min_points", 20)),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)

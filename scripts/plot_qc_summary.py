@@ -113,6 +113,15 @@ def main() -> None:
         if "dm_step_id" in df.columns:
             event_member |= pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
 
+    if "solar_bad" in df.columns:
+        solar_bad = df["solar_bad"].fillna(False).astype(bool).to_numpy()
+    else:
+        solar_bad = np.zeros(len(df), dtype=bool)
+    if "orbital_phase_bad" in df.columns:
+        orbital_bad = df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+    else:
+        orbital_bad = np.zeros(len(df), dtype=bool)
+
     # Color map per group
     groups = df[args.backend_col].astype(str) if args.backend_col in df.columns else pd.Series(["all"] * len(df))
     systems = df[args.system_col].astype(str) if args.system_col in df.columns else pd.Series(["all"] * len(df))
@@ -165,6 +174,14 @@ def main() -> None:
         plt.scatter(df.loc[both, "mjd"], df.loc[both, resid_col],
                     s=36, marker="o", facecolors="none", edgecolors="red", alpha=0.9, label=None)
 
+    # Solar-flagged: open orange triangles
+    if solar_bad.any():
+        plt.scatter(df.loc[solar_bad, "mjd"], df.loc[solar_bad, resid_col],
+                    s=36, marker="^", facecolors="none", edgecolors="orange", alpha=0.9, label="solar_bad")
+    if orbital_bad.any():
+        plt.scatter(df.loc[orbital_bad, "mjd"], df.loc[orbital_bad, resid_col],
+                    s=36, marker="s", facecolors="none", edgecolors="blue", alpha=0.9, label="orbital_phase_bad")
+
     # Feature splines
     for feat in FEATURE_COLUMNS:
         if feat not in df.columns:
@@ -202,7 +219,12 @@ def main() -> None:
     plt.ylabel(resid_col)
     bad_count = int(bad_point.sum())
     event_count = int(event_member.sum())
-    plt.title(f"{Path(args.csv).name} | bad_points={bad_count} | event_members={event_count}")
+    solar_count = int(solar_bad.sum())
+    orbital_count = int(orbital_bad.sum())
+    plt.title(
+        f"{Path(args.csv).name} | bad_points={bad_count} | event_members={event_count} | "
+        f"solar_bad={solar_count} | orbital_phase_bad={orbital_count}"
+    )
     plt.legend(fontsize=7, ncol=2, frameon=False)
     plt.tight_layout()
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)

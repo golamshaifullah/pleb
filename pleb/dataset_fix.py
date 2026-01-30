@@ -86,6 +86,9 @@ class FixDatasetConfig:
         qc_remove_solar: Apply solar-elongation flags from QC.
         qc_solar_action: ``comment`` or ``delete`` for solar-flagged TOAs.
         qc_solar_comment_prefix: Prefix for solar-flagged TOA comments.
+        qc_remove_orbital_phase: Apply orbital-phase flags from QC.
+        qc_orbital_phase_action: ``comment`` or ``delete`` for orbital-phase TOAs.
+        qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
         qc_merge_tol_days: MJD tolerance for QC matching.
         qc_results_dir: Directory containing QC CSV outputs.
         qc_branch: Subdirectory for QC results (optional).
@@ -147,6 +150,9 @@ class FixDatasetConfig:
     qc_remove_solar: bool = False
     qc_solar_action: str = "comment"
     qc_solar_comment_prefix: str = "# QC_SOLAR"
+    qc_remove_orbital_phase: bool = False
+    qc_orbital_phase_action: str = "comment"
+    qc_orbital_phase_comment_prefix: str = "# QC_BIANRY_ECLIPSE"
     qc_merge_tol_days: float = 2.0 / 86400.0
     qc_results_dir: Optional[Path] = None
     qc_branch: Optional[str] = None
@@ -563,7 +569,11 @@ def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[str, Dict[
     if cfg.qc_remove_solar and "solar_bad" in df.columns:
         solar |= df["solar_bad"].fillna(False).astype(bool).to_numpy()
 
-    out: Dict[str, Dict[Optional[str], list[float]]] = {"standard": {}, "solar": {}}
+    orbital = np.zeros(len(df), dtype=bool)
+    if cfg.qc_remove_orbital_phase and "orbital_phase_bad" in df.columns:
+        orbital |= df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+
+    out: Dict[str, Dict[Optional[str], list[float]]] = {"standard": {}, "solar": {}, "orbital": {}}
 
     def _build(mask: np.ndarray) -> Dict[Optional[str], list[float]]:
         if not mask.any():
@@ -577,6 +587,7 @@ def _collect_qc_mjds(df: pd.DataFrame, cfg: FixDatasetConfig) -> Dict[str, Dict[
 
     out["standard"] = _build(standard)
     out["solar"] = _build(solar)
+    out["orbital"] = _build(orbital)
     return out
 
 
@@ -593,7 +604,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         return {"pulsar": psr, "qc_csv": str(qc_csv), "error": str(e)}
 
     mjd_maps = _collect_qc_mjds(df, cfg)
-    if not mjd_maps.get("standard") and not mjd_maps.get("solar"):
+    if not mjd_maps.get("standard") and not mjd_maps.get("solar") and not mjd_maps.get("orbital"):
         return {"pulsar": psr, "qc_csv": str(qc_csv), "matched": 0, "changed": False}
 
     action = str(cfg.qc_action or "comment").strip().lower()
@@ -602,10 +613,14 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     solar_action = str(cfg.qc_solar_action or "comment").strip().lower()
     if solar_action not in {"comment", "delete"}:
         return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}"}
+    orbital_action = str(cfg.qc_orbital_phase_action or "comment").strip().lower()
+    if orbital_action not in {"comment", "delete"}:
+        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": f"Unsupported qc_orbital_phase_action: {cfg.qc_orbital_phase_action}"}
 
     tol = float(cfg.qc_merge_tol_days or (2.0 / 86400.0))
     comment_prefix = str(cfg.qc_comment_prefix or "C QC_OUTLIER").strip()
     solar_prefix = str(cfg.qc_solar_comment_prefix or "# QC_SOLAR").strip()
+    orbital_prefix = str(cfg.qc_orbital_phase_comment_prefix or "# QC_BINARY_ECLIPSE").strip()
 
     tims = list_backend_timfiles(psr_dir)
     total_matched = 0
@@ -616,11 +631,17 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         key = tim.name
         std_map = mjd_maps.get("standard", {})
         solar_map = mjd_maps.get("solar", {})
-        if (key not in std_map) and (None not in std_map) and (key not in solar_map) and (None not in solar_map):
+        orbital_map = mjd_maps.get("orbital", {})
+        if (
+            (key not in std_map) and (None not in std_map)
+            and (key not in solar_map) and (None not in solar_map)
+            and (key not in orbital_map) and (None not in orbital_map)
+        ):
             continue
         target_mjds = np.asarray(std_map.get(key, std_map.get(None, [])), dtype=float)
         target_mjds_solar = np.asarray(solar_map.get(key, solar_map.get(None, [])), dtype=float)
-        if target_mjds.size == 0 and target_mjds_solar.size == 0:
+        target_mjds_orbital = np.asarray(orbital_map.get(key, orbital_map.get(None, [])), dtype=float)
+        if target_mjds.size == 0 and target_mjds_solar.size == 0 and target_mjds_orbital.size == 0:
             continue
 
         lines = tim.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -647,6 +668,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 continue
 
             is_solar = target_mjds_solar.size > 0 and np.any(np.abs(target_mjds_solar - mjd) <= tol)
+            is_orbital = target_mjds_orbital.size > 0 and np.any(np.abs(target_mjds_orbital - mjd) <= tol)
             is_std = target_mjds.size > 0 and np.any(np.abs(target_mjds - mjd) <= tol)
 
             if is_solar:
@@ -658,6 +680,18 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     new_lines.append(raw)
                 else:
                     new_lines.append(f"{solar_prefix} {raw}" if solar_prefix else raw)
+                    commented += 1
+                continue
+
+            if is_orbital:
+                total_matched += 1
+                if orbital_action == "delete":
+                    removed += 1
+                    continue
+                if orbital_prefix and raw.lstrip().startswith(orbital_prefix):
+                    new_lines.append(raw)
+                else:
+                    new_lines.append(f"{orbital_prefix} {raw}" if orbital_prefix else raw)
                     commented += 1
                 continue
 

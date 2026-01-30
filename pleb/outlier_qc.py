@@ -149,6 +149,14 @@ class PTAQCConfig:
     solar_cut_nbins: int = 18
     solar_cut_min_points: int = 20
 
+    # Orbital-phase based flagging
+    orbital_phase_cut_enabled: bool = False
+    orbital_phase_cut_center: float = 0.25
+    orbital_phase_cut: float | None = None
+    orbital_phase_cut_sigma: float = 3.0
+    orbital_phase_cut_nbins: int = 18
+    orbital_phase_cut_min_points: int = 20
+
 
 @contextmanager
 def _pushd(path: Path):
@@ -194,10 +202,10 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             MergeConfig,
             StructureConfig,
             TransientConfig,
-            StepConfig, RobustOutlierConfig, OutlierGateConfig, SolarCutConfig,
+            StepConfig, RobustOutlierConfig, OutlierGateConfig, SolarCutConfig, OrbitalPhaseCutConfig,
         )
         # Sanity check: ensure pqc config classes are importable
-        _ = (BadMeasConfig, FeatureConfig, MergeConfig, StructureConfig, TransientConfig, StepConfig, RobustOutlierConfig, OutlierGateConfig, SolarCutConfig)
+        _ = (BadMeasConfig, FeatureConfig, MergeConfig, StructureConfig, TransientConfig, StepConfig, RobustOutlierConfig, OutlierGateConfig, SolarCutConfig, OrbitalPhaseCutConfig)
         logger.info("pqc config classes loaded: %s", ",".join([c.__name__ for c in _]))
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
@@ -272,6 +280,14 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         nbins=int(cfg.solar_cut_nbins),
         min_points=int(cfg.solar_cut_min_points),
     )
+    orbital_cfg = OrbitalPhaseCutConfig(
+        enabled=bool(cfg.orbital_phase_cut_enabled),
+        center_phase=float(cfg.orbital_phase_cut_center),
+        limit_phase=(float(cfg.orbital_phase_cut) if cfg.orbital_phase_cut is not None else None),
+        sigma_thresh=float(cfg.orbital_phase_cut_sigma),
+        nbins=int(cfg.orbital_phase_cut_nbins),
+        min_points=int(cfg.orbital_phase_cut_min_points),
+    )
 
     # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
     with _pushd(out_csv.parent):
@@ -288,6 +304,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             robust_cfg=robust_cfg,
             gate_cfg=gate_cfg,
             solar_cfg=solar_cfg,
+            orbital_cfg=orbital_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
         )
 
@@ -383,4 +400,8 @@ def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
     if "transient_id" in df.columns:
         out["n_transient_toas"] = int((df["transient_id"].fillna(-1).astype(int) != -1).sum())
         out["n_transients"] = int(df.loc[df["transient_id"].fillna(-1).astype(int) != -1, "transient_id"].nunique())
+    if "solar_bad" in df.columns:
+        out["n_solar_bad"] = int(df["solar_bad"].fillna(False).sum())
+    if "orbital_phase_bad" in df.columns:
+        out["n_orbital_phase_bad"] = int(df["orbital_phase_bad"].fillna(False).sum())
     return out

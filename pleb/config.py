@@ -107,6 +107,12 @@ class PipelineConfig:
         pqc_solar_cut_sigma: Sigma threshold for automatic cutoff estimation.
         pqc_solar_cut_nbins: Number of bins for cutoff estimation.
         pqc_solar_cut_min_points: Minimum points for cutoff estimation.
+        pqc_orbital_phase_cut_enabled: Enable orbital-phase based flagging.
+        pqc_orbital_phase_cut_center: Eclipse center phase (0..1).
+        pqc_orbital_phase_cut: Fixed orbital-phase cutoff (0..0.5), or None for auto.
+        pqc_orbital_phase_cut_sigma: Sigma threshold for automatic cutoff estimation.
+        pqc_orbital_phase_cut_nbins: Number of bins for cutoff estimation.
+        pqc_orbital_phase_cut_min_points: Minimum points for cutoff estimation.
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -146,6 +152,9 @@ class PipelineConfig:
         fix_qc_remove_solar: Act on solar-elongation flags.
         fix_qc_solar_action: Action for solar-flagged TOAs (comment/delete).
         fix_qc_solar_comment_prefix: Prefix for solar-flagged TOA comments.
+        fix_qc_remove_orbital_phase: Act on orbital-phase flags.
+        fix_qc_orbital_phase_action: Action for orbital-phase flagged TOAs (comment/delete).
+        fix_qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
         fix_qc_merge_tol_days: MJD tolerance when matching TOAs.
         fix_qc_results_dir: Directory containing pqc CSV outputs. If unset and
             fix_apply is true, defaults to ``<results>/qc/<fix_branch_name>``.
@@ -253,6 +262,12 @@ class PipelineConfig:
     pqc_solar_cut_sigma: float = 3.0
     pqc_solar_cut_nbins: int = 18
     pqc_solar_cut_min_points: int = 20
+    pqc_orbital_phase_cut_enabled: bool = False
+    pqc_orbital_phase_cut_center: float = 0.25
+    pqc_orbital_phase_cut: Optional[float] = None
+    pqc_orbital_phase_cut_sigma: float = 3.0
+    pqc_orbital_phase_cut_nbins: int = 18
+    pqc_orbital_phase_cut_min_points: int = 20
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -306,6 +321,9 @@ class PipelineConfig:
     fix_qc_remove_solar: bool = False
     fix_qc_solar_action: str = "comment"
     fix_qc_solar_comment_prefix: str = "# QC_SOLAR"
+    fix_qc_remove_orbital_phase: bool = False
+    fix_qc_orbital_phase_action: str = "comment"
+    fix_qc_orbital_phase_comment_prefix: str = "# QC_BIANRY_ECLIPSE"
     fix_qc_merge_tol_days: float = 2.0 / 86400.0
     fix_qc_results_dir: Optional[Path] = None
     fix_qc_branch: Optional[str] = None
@@ -527,6 +545,12 @@ class PipelineConfig:
             pqc_solar_cut_sigma=float(d.get("pqc_solar_cut_sigma", 3.0)),
             pqc_solar_cut_nbins=int(d.get("pqc_solar_cut_nbins", 18)),
             pqc_solar_cut_min_points=int(d.get("pqc_solar_cut_min_points", 20)),
+            pqc_orbital_phase_cut_enabled=bool(d.get("pqc_orbital_phase_cut_enabled", False)),
+            pqc_orbital_phase_cut_center=float(d.get("pqc_orbital_phase_cut_center", 0.25)),
+            pqc_orbital_phase_cut=(None if d.get("pqc_orbital_phase_cut") in (None, "") else float(d.get("pqc_orbital_phase_cut"))),
+            pqc_orbital_phase_cut_sigma=float(d.get("pqc_orbital_phase_cut_sigma", 3.0)),
+            pqc_orbital_phase_cut_nbins=int(d.get("pqc_orbital_phase_cut_nbins", 18)),
+            pqc_orbital_phase_cut_min_points=int(d.get("pqc_orbital_phase_cut_min_points", 20)),
 
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
@@ -570,6 +594,9 @@ class PipelineConfig:
             fix_qc_remove_solar=bool(d.get("fix_qc_remove_solar", False)),
             fix_qc_solar_action=str(d.get("fix_qc_solar_action", "comment")),
             fix_qc_solar_comment_prefix=str(d.get("fix_qc_solar_comment_prefix", "# QC_SOLAR")),
+            fix_qc_remove_orbital_phase=bool(d.get("fix_qc_remove_orbital_phase", False)),
+            fix_qc_orbital_phase_action=str(d.get("fix_qc_orbital_phase_action", "comment")),
+            fix_qc_orbital_phase_comment_prefix=str(d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE")),
             fix_qc_merge_tol_days=float(d.get("fix_qc_merge_tol_days", 2.0 / 86400.0)),
             fix_qc_results_dir=(Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None),
             fix_qc_branch=opt_str("fix_qc_branch"),
