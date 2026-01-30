@@ -63,6 +63,7 @@ class FixDatasetConfig:
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
         system_flag_table_path: Path to the system-flag table (JSON/TOML).
+        system_flag_mapping_path: Path to editable mapping/allowlist JSON.
         system_flag_overwrite_existing: Overwrite existing system flags.
         backend_overrides: Map tim basename to backend name override.
         raise_on_backend_missing: Raise when backend cannot be inferred.
@@ -116,6 +117,7 @@ class FixDatasetConfig:
     system_flag_table_path: Optional[str] = (
         None  # JSON mapping stored at dataset root if None
     )
+    system_flag_mapping_path: Optional[str] = None
     system_flag_overwrite_existing: bool = False
     backend_overrides: Dict[str, str] = field(
         default_factory=dict
@@ -1452,9 +1454,12 @@ def infer_and_apply_system_flags(
     try:
         from .system_flag_inference import (
             BackendMissingError,
+            TelescopeMissingError,
             infer_sys_group_pta,
             apply_flags_to_timfile,
             update_mapping_table,
+            load_system_flag_mapping,
+            SystemInferenceConfig,
         )
     except Exception as e:
         return {
@@ -1463,17 +1468,56 @@ def infer_and_apply_system_flags(
         }
 
     override_backend = _infer_backend_override(cfg, timfile)
+    dataset_root = timfile.parent.parent
+    override_telescope = None
+    mapping = None
+
+    # Optional mapping/allowlist file (editable by users).
+    try:
+        mapping_path = (
+            Path(cfg.system_flag_mapping_path)
+            if cfg.system_flag_mapping_path
+            else (dataset_root / "system_flag_mapping.json")
+        )
+        if mapping_path.exists():
+            mapping = load_system_flag_mapping(mapping_path)
+            if not override_backend:
+                be_map = mapping.get("backend_by_timfile", {}) or {}
+                override_backend = be_map.get(timfile.name) or be_map.get(str(timfile))
+            tel_map = mapping.get("telescope_by_timfile", {}) or {}
+            override_telescope = tel_map.get(timfile.name) or tel_map.get(str(timfile))
+    except Exception:
+        mapping = None
+
+    cfg_override = None
+    if mapping:
+        base_cfg = SystemInferenceConfig()
+        cfg_override = SystemInferenceConfig(
+            backend_allowlist=mapping.get("backend_allowlist"),
+            telescope_allowlist=(
+                mapping.get("telescope_allowlist")
+                if mapping.get("telescope_allowlist") is not None
+                else base_cfg.telescope_allowlist
+            ),
+            backend_aliases=mapping.get("backend_aliases", {}),
+            telescope_aliases=mapping.get("telescope_aliases", {}),
+        )
 
     try:
-        inferred = infer_sys_group_pta(timfile, override_backend=override_backend)
-    except BackendMissingError as e:
+        inferred = infer_sys_group_pta(
+            timfile,
+            cfg=cfg_override if cfg_override is not None else SystemInferenceConfig(),
+            override_backend=override_backend,
+            override_telescope=override_telescope,
+        )
+    except (BackendMissingError, TelescopeMissingError) as e:
         msg = str(e)
         if cfg.raise_on_backend_missing:
             raise
         return {
             "timfile": str(timfile),
             "error": msg,
-            "sample_toa_line": e.sample_toa_line,
+            "sample_toa_line": getattr(e, "sample_toa_line", None),
         }
 
     stats = apply_flags_to_timfile(
@@ -1488,7 +1532,6 @@ def infer_and_apply_system_flags(
     # Update a global mapping table at dataset root (keyed by timfile basename).
     try:
         # Dataset root is assumed to be parent of psr_dir; fall back to tim's grandparent.
-        dataset_root = timfile.parent.parent
         mapping_path = (
             Path(cfg.system_flag_table_path)
             if cfg.system_flag_table_path

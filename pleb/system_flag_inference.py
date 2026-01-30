@@ -26,7 +26,7 @@ See Also:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -86,6 +86,18 @@ class BackendMissingError(RuntimeError):
         self.sample_toa_line = sample_toa_line
 
 
+class TelescopeMissingError(RuntimeError):
+    """Raised when a telescope cannot be inferred automatically."""
+
+    def __init__(self, timfile: Path, sample_toa_line: str):
+        super().__init__(
+            f"Could not infer telescope for {timfile}. "
+            f"Provide a telescope code; sample TOA line:\n{sample_toa_line}"
+        )
+        self.timfile = timfile
+        self.sample_toa_line = sample_toa_line
+
+
 @dataclass(frozen=True, slots=True)
 class SystemInferenceConfig:
     """Configuration for system flag inference from `.tim` files.
@@ -96,6 +108,12 @@ class SystemInferenceConfig:
         nband_flags: Flag keys containing sub-band counts.
         canonical_tol_mhz: Frequency tolerance for snapping centers.
         round_mhz: Decimal rounding for inferred centers.
+        backend_allowlist: Optional allowlist of backend names (uppercased).
+        telescope_allowlist: Optional allowlist of telescope codes (uppercased).
+        backend_aliases: Optional mapping of backend aliases to canonical names.
+        telescope_aliases: Optional mapping of telescope aliases to canonical names.
+        reject_backend_values: Backend tokens treated as missing.
+        reject_telescope_values: Telescope tokens treated as missing.
     """
 
     # flag keys to consult for backend/bw/nband if present on TOA lines
@@ -106,6 +124,13 @@ class SystemInferenceConfig:
     canonical_tol_mhz: float = 1.0
     # how to round centre frequencies (MHz)
     round_mhz: int = 1
+    # optional allowlists/aliases (uppercased)
+    backend_allowlist: Optional[Tuple[str, ...]] = None
+    telescope_allowlist: Optional[Tuple[str, ...]] = tuple(sorted(TELESCOPE_CODES))
+    backend_aliases: Dict[str, str] = field(default_factory=dict)
+    telescope_aliases: Dict[str, str] = field(default_factory=dict)
+    reject_backend_values: Tuple[str, ...] = ("UNK", "UNKNOWN", "")
+    reject_telescope_values: Tuple[str, ...] = ("UNK", "UNKNOWN", "")
 
 
 def is_toa_line(raw: str) -> bool:
@@ -226,6 +251,54 @@ def parse_tim_toa_table(
     )
 
 
+def _norm_token(val: Optional[str]) -> str:
+    if val is None:
+        return ""
+    return str(val).strip().upper()
+
+
+def _apply_alias(val: str, aliases: Dict[str, str]) -> str:
+    if not val:
+        return val
+    return aliases.get(val, val)
+
+
+def _is_rejected(val: str, rejects: Tuple[str, ...]) -> bool:
+    return val in rejects
+
+
+def _enforce_allowlist(val: str, allowlist: Optional[Tuple[str, ...]]) -> bool:
+    if allowlist is None:
+        return True
+    return val in allowlist
+
+
+def load_system_flag_mapping(path: Path) -> Dict[str, object]:
+    """Load editable system-flag mapping/allowlist JSON."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    def _norm_list(val) -> Optional[Tuple[str, ...]]:
+        if val is None:
+            return None
+        if not isinstance(val, list):
+            return None
+        return tuple(_norm_token(x) for x in val if str(x).strip())
+
+    def _norm_aliases(val) -> Dict[str, str]:
+        if not isinstance(val, dict):
+            return {}
+        return {_norm_token(k): _norm_token(v) for k, v in val.items() if str(k).strip()}
+
+    out: Dict[str, object] = {}
+    out["backend_allowlist"] = _norm_list(data.get("backend_allowlist"))
+    out["telescope_allowlist"] = _norm_list(data.get("telescope_allowlist"))
+    out["backend_aliases"] = _norm_aliases(data.get("backend_aliases"))
+    out["telescope_aliases"] = _norm_aliases(data.get("telescope_aliases"))
+    out["backend_by_timfile"] = data.get("backend_by_timfile") or {}
+    out["telescope_by_timfile"] = data.get("telescope_by_timfile") or {}
+    return out
+
+
 def infer_backend(
     timfile: Path,
     df: pd.DataFrame,
@@ -247,26 +320,88 @@ def infer_backend(
         BackendMissingError: If the backend cannot be inferred.
     """
     if override_backend:
-        return override_backend
+        val = _apply_alias(_norm_token(override_backend), cfg.backend_aliases)
+        if _is_rejected(val, cfg.reject_backend_values):
+            raise BackendMissingError(timfile, df["line"].iloc[0])
+        if not _enforce_allowlist(val, cfg.backend_allowlist):
+            raise BackendMissingError(timfile, df["line"].iloc[0])
+        return val
 
     # 1) from -be if present anywhere
     if "be" in df.columns:
         uniq = [x for x in df["be"].dropna().unique().tolist() if str(x).strip()]
         if len(uniq) == 1:
-            return str(uniq[0])
+            val = _apply_alias(_norm_token(uniq[0]), cfg.backend_aliases)
+            if _is_rejected(val, cfg.reject_backend_values):
+                # treat as missing and fall back to filename
+                pass
+            elif not _enforce_allowlist(val, cfg.backend_allowlist):
+                raise BackendMissingError(timfile, df["line"].iloc[0])
+            else:
+                return val
         if len(uniq) > 1:
             # If multiple, keep as-is: backend varies => treat each distinct as a backend group.
             # Downstream caller can handle grouping.
-            return str(uniq[0])
+            val = _apply_alias(_norm_token(uniq[0]), cfg.backend_aliases)
+            if _is_rejected(val, cfg.reject_backend_values):
+                raise BackendMissingError(timfile, df["line"].iloc[0])
+            if not _enforce_allowlist(val, cfg.backend_allowlist):
+                raise BackendMissingError(timfile, df["line"].iloc[0])
+            return val
 
     tel = _infer_telescope_code(timfile)
     be2 = _infer_backend_from_filename(timfile, tel)
     if be2:
-        return be2
+        val = _apply_alias(_norm_token(be2), cfg.backend_aliases)
+        if _is_rejected(val, cfg.reject_backend_values):
+            raise BackendMissingError(timfile, df["line"].iloc[0])
+        if not _enforce_allowlist(val, cfg.backend_allowlist):
+            raise BackendMissingError(timfile, df["line"].iloc[0])
+        return val
 
     # 3) can't infer -> raise with a sample TOA line
     sample = df["line"].iloc[0] if len(df) else "(no TOA lines found)"
     raise BackendMissingError(timfile, sample)
+
+
+def infer_telescope(
+    timfile: Path,
+    cfg: SystemInferenceConfig = SystemInferenceConfig(),
+    override_telescope: Optional[str] = None,
+) -> str:
+    if override_telescope:
+        val = _apply_alias(_norm_token(override_telescope), cfg.telescope_aliases)
+        if _is_rejected(val, cfg.reject_telescope_values):
+            raise TelescopeMissingError(timfile, "(override provided)")
+        if not _enforce_allowlist(val, cfg.telescope_allowlist):
+            raise TelescopeMissingError(timfile, "(override provided)")
+        return val
+
+    val = _infer_telescope_code(timfile)
+    if not val:
+        toks = timfile.name.split(".")
+        if toks:
+            cand = _norm_token(toks[0])
+            if _enforce_allowlist(cand, cfg.telescope_allowlist):
+                val = cand
+    if not val:
+        sample = "(no TOA lines found)"
+        try:
+            lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+            for raw in lines:
+                if is_toa_line(raw):
+                    sample = raw.strip()
+                    break
+        except Exception:
+            pass
+        raise TelescopeMissingError(timfile, sample)
+
+    val = _apply_alias(_norm_token(val), cfg.telescope_aliases)
+    if _is_rejected(val, cfg.reject_telescope_values):
+        raise TelescopeMissingError(timfile, "(filename)")
+    if not _enforce_allowlist(val, cfg.telescope_allowlist):
+        raise TelescopeMissingError(timfile, "(filename)")
+    return val
 
 
 def infer_subband_centres(
@@ -352,7 +487,7 @@ def infer_sys_group_pta(
             ]
         )
 
-    tel = override_telescope or _infer_telescope_code(timfile) or "UNKNOWN"
+    tel = infer_telescope(timfile, cfg=cfg, override_telescope=override_telescope)
     backend = infer_backend(timfile, df, cfg=cfg, override_backend=override_backend)
 
     pta = override_pta or DEFAULT_PTA_BY_TEL.get(tel, "EPTA")

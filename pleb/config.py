@@ -136,6 +136,8 @@ class PipelineConfig:
         fix_update_alltim_includes: Update INCLUDE lines in .tim files.
         fix_min_toas_per_backend_tim: Minimum TOAs per backend .tim.
         fix_required_tim_flags: Required flags for .tim entries.
+        fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
+        fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_insert_missing_jumps: Insert missing JUMP lines.
         fix_jump_flag: Flag used for inserted jumps.
         fix_ensure_ephem: Ensure ephemeris parameter exists.
@@ -307,6 +309,7 @@ class PipelineConfig:
 
     # Example: {"-pta": "EPTA", "-be": "P200"}
     fix_required_tim_flags: Dict[str, str] = field(default_factory=dict)
+    fix_system_flag_mapping_path: Optional[str] = None
 
     fix_insert_missing_jumps: bool = True
     fix_jump_flag: str = "-sys"
@@ -404,6 +407,10 @@ class PipelineConfig:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
             c.fix_qc_results_dir = Path(c.fix_qc_results_dir).expanduser().resolve()
+        if c.fix_system_flag_mapping_path is not None:
+            c.fix_system_flag_mapping_path = (
+                Path(c.fix_system_flag_mapping_path).expanduser().resolve()
+            )
         if c.ingest_mapping_file is not None:
             c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
         if c.ingest_output_dir is not None:
@@ -435,6 +442,10 @@ class PipelineConfig:
             d["qc_report_dir"] = str(d["qc_report_dir"])
         if d.get("fix_qc_results_dir") is not None:
             d["fix_qc_results_dir"] = str(d["fix_qc_results_dir"])
+        if d.get("fix_system_flag_mapping_path") is not None:
+            d["fix_system_flag_mapping_path"] = str(
+                d["fix_system_flag_mapping_path"]
+            )
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -613,6 +624,7 @@ class PipelineConfig:
             fix_update_alltim_includes=bool(d.get("fix_update_alltim_includes", True)),
             fix_min_toas_per_backend_tim=int(d.get("fix_min_toas_per_backend_tim", 10)),
             fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
+            fix_system_flag_mapping_path=opt_str("fix_system_flag_mapping_path"),
             fix_insert_missing_jumps=bool(d.get("fix_insert_missing_jumps", True)),
             fix_jump_flag=str(d.get("fix_jump_flag", "-sys")),
             fix_ensure_ephem=opt_str("fix_ensure_ephem"),

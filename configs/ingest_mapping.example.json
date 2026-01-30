@@ -1,0 +1,35 @@
+{
+  "sources": [
+    "/data/epta/raw",
+    "/data/epta/legacy"
+  ],
+  "par_roots": [
+    "/data/epta/raw/parfiles",
+    "/data/epta/legacy/par"
+  ],
+  "template_roots": [
+    "/data/epta/raw/templates"
+  ],
+  "ignore_backends": [
+    "NRT.OLD.CHECK"
+  ],
+  "pulsar_aliases": {
+    "B1937+21": "J1939+2134",
+    "B1855+09": "J1857+0943"
+  },
+  "backends": {
+    "EFF.P200.1360": {
+      "root": "/data/epta/raw/tim/EFF/P200/1360",
+      "tim_glob": "*.tim",
+      "ignore_suffixes": ["_all.tim"]
+    },
+    "NRT.NUPPI.1480": {
+      "root": "/data/epta/legacy/NRT/NUPPI/1480",
+      "tim_glob": "*.tim"
+    },
+    "JBO.ROACH.1520": {
+      "root": "/data/epta/raw/JBO/ROACH/1520",
+      "ignore": false
+    }
+  }
+}

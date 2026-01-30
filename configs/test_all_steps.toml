@@ -311,6 +311,10 @@ fix_infer_system_flags = true
 # fix_system_flag_table_path: path for system-flag table. allowed: string or empty. default: "" -> None
 #   If set, read/write system-flag mapping at this path.
 fix_system_flag_table_path = ""
+# fix_system_flag_mapping_path: editable mapping/allowlist JSON. allowed: string or empty. default: "" -> None
+#   If empty, uses <dataset_root>/system_flag_mapping.json when present.
+#   Use this to define backend/telescope allowlists and per-timfile overrides.
+fix_system_flag_mapping_path = ""
 # fix_system_flag_overwrite_existing: overwrite existing system flags. allowed: true/false. default: false
 #   If true, replace existing system flags rather than preserving them.
 fix_system_flag_overwrite_existing = true

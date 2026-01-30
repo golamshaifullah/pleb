@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/pleb/ingest_mapping.schema.json",
+  "title": "pleb ingest mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional list of top-level roots for discovery (informational only)."
+    },
+    "par_roots": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Roots scanned for .par files."
+    },
+    "template_roots": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Roots scanned for template files (copied into tmplts/)."
+    },
+    "ignore_backends": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Backend names to skip entirely."
+    },
+    "pulsar_aliases": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Explicit B->J (or other) pulsar name mappings. Required for B-name ingestion."
+    },
+    "backends": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "root": { "type": "string" },
+          "ignore": { "type": "boolean", "default": false },
+          "tim_glob": { "type": "string", "default": "*.tim" },
+          "ignore_suffixes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": ["_all.tim"]
+          }
+        },
+        "required": ["root"]
+      },
+      "description": "Mapping of backend name -> scan config. Backend name uses PETA format: TEL.BE.CENFREQ."
+    }
+  }
+}

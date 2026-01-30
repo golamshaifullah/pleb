@@ -191,6 +191,7 @@ def _build_fixdataset_config(
         required_tim_flags=dict(_cfg_get(cfg, "fix_required_tim_flags", {}) or {}),
         infer_system_flags=bool(_cfg_get(cfg, "fix_infer_system_flags", False)),
         system_flag_table_path=_cfg_get(cfg, "fix_system_flag_table_path", None),
+        system_flag_mapping_path=_cfg_get(cfg, "fix_system_flag_mapping_path", None),
         system_flag_overwrite_existing=bool(
             _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
         ),
