@@ -1,11 +1,35 @@
-"""Data Combination Diagnostics Pipeline.
+"""Run the data-combination diagnostics pipeline.
 
-This package provides the refactored pipeline formerly implemented in notebooks.
-It exposes a small public API for running the full pipeline, running parameter
-scans, and applying FixDataset operations programmatically.
+This package exposes a small public API for running the full pipeline,
+running parameter scans, and applying FixDataset operations programmatically.
+The implementation is refactored from the original notebooks and designed to
+import quickly; heavy dependencies (GitPython, libstempo/pqc) are imported
+lazily by entry points.
 
-The package is intentionally light to import. Heavy dependencies (for example
-GitPython or libstempo/pqc) are imported lazily by the entry points.
+Examples:
+    Run the pipeline programmatically::
+
+        from pathlib import Path
+        from pleb import PipelineConfig, run_pipeline
+
+        cfg = PipelineConfig(
+            home_dir=Path("/data/epta"),
+            singularity_image=Path("/images/tempo2.sif"),
+            dataset_name="EPTA",
+        )
+        outputs = run_pipeline(cfg)
+
+    Run a parameter scan::
+
+        from pleb import PipelineConfig, run_param_scan
+
+        cfg = PipelineConfig(
+            home_dir=Path("/data/epta"),
+            singularity_image=Path("/images/tempo2.sif"),
+            dataset_name="EPTA",
+            param_scan_typical=True,
+        )
+        results = run_param_scan(cfg)
 
 See Also:
     pleb.pipeline.run_pipeline: Full pipeline implementation.
@@ -31,6 +55,9 @@ def run_pipeline(cfg: PipelineConfig):
     Returns:
         A dictionary of output paths as returned by
         :func:`pleb.pipeline.run_pipeline`.
+
+    See Also:
+        pleb.pipeline.run_pipeline: Full pipeline implementation.
     """
     from .pipeline import run_pipeline as _run
 
@@ -49,6 +76,9 @@ def run_param_scan(cfg: PipelineConfig, **kwargs):
 
     Returns:
         A dictionary of output paths produced by the scan.
+
+    See Also:
+        pleb.param_scan.run_param_scan: Full scan implementation.
     """
     from .param_scan import run_param_scan as _run
 

@@ -1,4 +1,11 @@
-"""Legacy robust .tim parsing utilities (kept for compatibility)."""
+"""Legacy robust `.tim` parsing utilities (kept for compatibility).
+
+This module mirrors :mod:`pleb.tim_reader` and is retained to preserve older
+import paths.
+
+See Also:
+    pleb.tim_reader.read_tim_file_robust: Preferred robust `.tim` reader.
+"""
 
 from __future__ import annotations
 
@@ -138,6 +145,11 @@ def read_tim_file_robust(
     Returns:
         DataFrame with columns 0..N-1 holding tokens. Numeric columns are
         converted where possible without destroying string columns.
+
+    Examples:
+        Parse a `.tim` file (legacy path)::
+
+            df = read_tim_file_robust(Path("J1234+5678_all.tim"))
     """
     timfile = Path(timfile)
     if not timfile.exists():

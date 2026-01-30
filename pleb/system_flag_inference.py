@@ -1,5 +1,5 @@
 """
-System flag inference for EPTA-style tempo2 FORMAT 1 .tim files.
+Infer system flags for EPTA-style tempo2 FORMAT 1 `.tim` files.
 
 Goal:
 
@@ -20,6 +20,8 @@ Design choices (cheap + robust):
 - Second pass canonicalisation across pulsars:
     Use canonicalise_centres() on a combined table of inferred centres to "snap" them across pulsars
     within a tolerance (default 1 MHz).
+See Also:
+    pleb.dataset_fix.infer_and_apply_system_flags: Integration point for FixDataset.
 """
 
 from __future__ import annotations
@@ -73,7 +75,15 @@ class BackendMissingError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SystemInferenceConfig:
-    """Configuration for system flag inference from .tim files."""
+    """Configuration for system flag inference from `.tim` files.
+
+    Attributes:
+        backend_flag: Flag key used for backend inference (default: ``-be``).
+        bandwidth_flags: Flag keys containing bandwidth values.
+        nband_flags: Flag keys containing sub-band counts.
+        canonical_tol_mhz: Frequency tolerance for snapping centers.
+        round_mhz: Decimal rounding for inferred centers.
+    """
     # flag keys to consult for backend/bw/nband if present on TOA lines
     backend_flag: str = "-be"
     bandwidth_flags: Tuple[str, ...] = ("-bw", "-BW", "-bandwidth", "-bwidth")
@@ -85,7 +95,14 @@ class SystemInferenceConfig:
 
 
 def is_toa_line(raw: str) -> bool:
-    """Return True if a raw line appears to be a TOA data line."""
+    """Return True if a raw line appears to be a TOA data line.
+
+    Args:
+        raw: Raw line from a `.tim` file.
+
+    Returns:
+        True if the line looks like a TOA row.
+    """
     s = raw.strip()
     if not s:
         return False
@@ -137,6 +154,18 @@ def parse_tim_toa_table(timfile: Path, cfg: SystemInferenceConfig = SystemInfere
       - be: backend if present on that TOA line via cfg.backend_flag
       - bw_mhz: bandwidth value if present
       - nband: number of bands if present
+
+    Args:
+        timfile: Path to a `.tim` file.
+        cfg: System inference configuration.
+
+    Returns:
+        DataFrame with TOA metadata extracted from the `.tim` file.
+
+    Examples:
+        Parse TOA metadata::
+
+            df = parse_tim_toa_table(Path("EFF.P200.1380.tim"))
     """
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     rows = []
@@ -240,6 +269,9 @@ def infer_subband_centres(
 
     Returns:
         Tuple of (subband_index, centre_mhz_rounded).
+
+    Raises:
+        ValueError: If ``bw_mhz`` or ``nband`` are non-positive.
     """
     if nband <= 0 or bw_mhz <= 0:
         raise ValueError("bw_mhz and nband must be positive")
@@ -274,6 +306,11 @@ def infer_sys_group_pta(
     Returns:
         DataFrame with columns: ``line_idx``, ``sys``, ``group``, ``pta``,
         ``backend``, ``tel``, ``centre_mhz``, ``bw_mhz``, ``nband``.
+
+    Examples:
+        Infer flags for a tim file::
+
+            df = infer_sys_group_pta(Path("EFF.P200.1380.tim"))
     """
     df = parse_tim_toa_table(timfile, cfg=cfg)
     if df.empty:
@@ -343,6 +380,12 @@ def apply_flags_to_timfile(
 
     Returns:
         Stats dictionary containing counts and file path.
+
+    Examples:
+        Apply inferred flags to a tim file::
+
+            inferred = infer_sys_group_pta(Path("EFF.P200.1380.tim"))
+            stats = apply_flags_to_timfile(Path("EFF.P200.1380.tim"), inferred, apply=True)
     """
     if inferred.empty:
         return {"timfile": str(timfile), "changed": False, "added": 0, "overwritten": 0}
@@ -410,6 +453,11 @@ def canonicalise_centres(assignments: pd.DataFrame, tol_mhz: float = 1.0) -> pd.
 
     Returns:
         Updated assignments with canonicalized center frequencies.
+
+    Examples:
+        Snap centers across pulsars::
+
+            snapped = canonicalise_centres(assignments, tol_mhz=1.0)
     """
     required = {"tel", "backend", "bw_mhz", "nband", "centre_mhz", "sys", "group"}
     missing = required - set(assignments.columns)
@@ -464,6 +512,11 @@ def update_mapping_table(mapping_path: Path, inferred: pd.DataFrame) -> Dict[str
 
     Returns:
         Mapping dictionary written to disk.
+
+    Examples:
+        Update a mapping JSON table::
+
+            table = update_mapping_table(Path("system_flag_table.json"), inferred)
     """
     mapping_path.parent.mkdir(parents=True, exist_ok=True)
     if mapping_path.exists():

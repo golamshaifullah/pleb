@@ -12,9 +12,9 @@ Usage:
   python scripts/plot_transients.py --csv out.csv --backend-col group --backend NRT.NUPPI.1484
 
 Notes:
-- One PNG per (backend, transient_id).
-- Plots residuals vs time with +/-1 sigma errorbars.
-- Overlays fitted exponential recovery curve using the stored amplitude and t0 plus --tau-rec-days.
+    - One PNG per (backend, transient_id).
+    - Plots residuals vs time with +/-1 sigma errorbars.
+    - Overlays fitted exponential recovery curve using the stored amplitude and t0 plus --tau-rec-days.
 """
 
 from __future__ import annotations

@@ -11,6 +11,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
+    "sphinx.ext.mathjax",
 ]
 
 napoleon_google_docstring = True

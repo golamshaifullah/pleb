@@ -1,4 +1,12 @@
-"""Plotting helpers for pipeline outputs."""
+"""Plotting helpers for pipeline outputs.
+
+This module renders summary plots and tables from tempo2 outputs and pipeline
+metadata. It relies on Matplotlib and optionally Seaborn for styling.
+
+See Also:
+    pleb.reports: Tabular report generation.
+    pleb.parsers: Parsing helpers used by plots.
+"""
 
 from __future__ import annotations
 
@@ -32,6 +40,11 @@ def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
 
     Returns:
         Suggested number of bins.
+
+    Examples:
+        Estimate bins for a histogram::
+
+            bins = freedman_diaconis_bins(np.random.randn(1000))
     """
     x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x)]
@@ -48,6 +61,11 @@ def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
     return int(np.clip(bins, 5, max_bins))
 
 class MathTextSciFormatter(ScalarFormatter):
+    """Matplotlib scalar formatter using MathText scientific notation.
+
+    Args:
+        fmt: Format string passed to Matplotlib.
+    """
     def __init__(self, fmt: str = "%1.1e"):
         """Create a scalar formatter using MathText scientific notation."""
         super().__init__(useMathText=True)
@@ -63,6 +81,11 @@ def savefig(fig: plt.Figure, path: Path, dpi: int) -> None:
         fig: Matplotlib figure.
         path: Output file path.
         dpi: Resolution in dots-per-inch.
+
+    Examples:
+        Save a figure::
+
+            savefig(fig, Path("plot.png"), dpi=150)
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -78,6 +101,11 @@ def plot_systems_per_pulsar(home_dir: Path, dataset_name: Path, out_paths: Dict[
         pulsars: Pulsar names to include.
         branch: Branch name for labeling.
         dpi: Output resolution.
+
+    Examples:
+        Plot systems per pulsar::
+
+            plot_systems_per_pulsar(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
     """
     fig, axes = plt.subplots(nrows=len(pulsars), ncols=1, sharex=True, figsize=(12, max(2, 3*len(pulsars))))
     if len(pulsars) == 1:
@@ -146,6 +174,11 @@ def plot_pulsars_per_system(home_dir: Path, dataset_name: Path, out_paths: Dict[
         pulsars: Pulsar names to include.
         branch: Branch name for labeling.
         dpi: Output resolution.
+
+    Examples:
+        Plot pulsars per system::
+
+            plot_pulsars_per_system(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
     """
     system_to_data = {}  # system -> list of (pulsar_index, mjd_array)
     for p_idx, pulsar in enumerate(pulsars):
@@ -195,6 +228,11 @@ def plot_covmat_heatmaps(out_paths: Dict[str, Path], pulsars: List[str], branche
         branches: Branches to include.
         dpi: Output resolution.
         max_params: Optional maximum number of parameters to display.
+
+    Examples:
+        Plot covariance heatmaps::
+
+            plot_covmat_heatmaps(out_paths, ["J1234+5678"], ["main"], dpi=120, max_params=50)
     """
     for pulsar in pulsars:
         for branch in branches:
@@ -235,6 +273,11 @@ def plot_residuals(out_paths: Dict[str, Path], pulsars: List[str], branches: Lis
         pulsars: Pulsar names to include.
         branches: Branches to include.
         dpi: Output resolution.
+
+    Examples:
+        Plot residuals for two branches::
+
+            plot_residuals(out_paths, ["J1234+5678"], ["main", "EPTA"], dpi=120)
     """
     summary_path = out_paths["tag"] / "residual_summary.tsv"
     with open(summary_path, "w", encoding="utf-8") as f:

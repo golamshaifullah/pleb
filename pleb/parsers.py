@@ -1,4 +1,12 @@
-"""Parsers for tempo2 outputs and pipeline text formats."""
+"""Parse tempo2 outputs and pipeline text formats.
+
+This module provides small, resilient parsers for tempo2 logs and output
+artifacts such as ``plk`` logs, covariance matrices, and general2 output.
+
+See Also:
+    pleb.reports: Utilities that consume parsed outputs.
+    pleb.tim_reader.read_tim_file_robust: Robust `.tim` reader used here.
+"""
 
 from __future__ import annotations
 
@@ -41,6 +49,11 @@ def read_plklog(file: Path) -> pd.DataFrame:
     Raises:
         FileNotFoundError: If the log file does not exist.
         PlkParseError: If the log is empty or the table cannot be parsed.
+
+    Examples:
+        Parse a tempo2 plk log::
+
+            df = read_plklog(Path("J1234+5678_plk.log"))
     """
     if not file.exists():
         raise FileNotFoundError(str(file))
@@ -148,6 +161,11 @@ def read_general2(file: Path) -> pd.DataFrame:
 
     Raises:
         ValueError: If general2 start/end markers are missing.
+
+    Examples:
+        Parse a general2 log file::
+
+            df = read_general2(Path("J1234+5678_general2.log"))
     """
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
@@ -201,5 +219,12 @@ def read_general2(file: Path) -> pd.DataFrame:
     return df
 
 def read_tim_file(timfile: Path) -> pd.DataFrame:
-    """Read a tempo2 .tim file using the robust reader."""
+    """Read a tempo2 `.tim` file using the robust reader.
+
+    Args:
+        timfile: Path to a `.tim` file.
+
+    Returns:
+        DataFrame of parsed TOA rows.
+    """
     return read_tim_file_robust(timfile)

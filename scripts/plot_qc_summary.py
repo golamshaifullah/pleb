@@ -39,6 +39,7 @@ MARKERS = ["o", "s", "^", "v", "D", "P", "X", "<", ">", "h", "8", "*"]
 
 
 def _shade(color, factor):
+    """Lighten or darken an RGB color by a factor."""
     r, g, b = to_rgb(color)
     h, l, s = colorsys.rgb_to_hls(r, g, b)
     l = min(1.0, max(0.1, l * factor))
@@ -47,6 +48,7 @@ def _shade(color, factor):
 
 
 def _feature_spline(x, y, s=None):
+    """Fit a smoothing spline for a feature trendline."""
     # x must be sorted
     if len(x) < 6:
         return None
@@ -58,6 +60,7 @@ def _feature_spline(x, y, s=None):
 
 
 def _rolling_std(y, window):
+    """Compute a rolling standard deviation for confidence bands."""
     if len(y) < window:
         return np.full_like(y, np.nan)
     s = pd.Series(y).rolling(window=window, center=True, min_periods=max(3, window // 3)).std()
@@ -65,6 +68,7 @@ def _rolling_std(y, window):
 
 
 def main() -> None:
+    """Generate a QC residual summary plot from a PQC CSV file."""
     ap = argparse.ArgumentParser(description="QC summary residual plot")
     ap.add_argument("--csv", required=True, help="QC output CSV")
     ap.add_argument("--out", required=True, help="Output PNG path")

@@ -1,4 +1,12 @@
-"""Binary/orbital analysis helpers for pulsar .par files."""
+"""Binary/orbital analysis helpers for pulsar `.par` files.
+
+This module provides lightweight parsing and derived-parameter calculations
+intended for summary reports, not full timing-model validation.
+
+See Also:
+    pleb.kepler_orbits: Orbital mechanics helpers used in derived quantities.
+    pleb.config.PipelineConfig: Enables binary analysis in the pipeline.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +31,11 @@ class BinaryAnalysisConfig:
     Attributes:
         only_models: If set, only report pulsars whose ``BINARY`` parameter
             matches one of these model names.
+
+    Examples:
+        Limit output to BTX binaries::
+
+            cfg = BinaryAnalysisConfig(only_models=["BTX"])
     """
 
     # If set, only write rows for pulsars with these BINARY models
@@ -32,8 +45,12 @@ class BinaryAnalysisConfig:
 def read_parfile(parfile: Path) -> Dict[str, str]:
     """Very lightweight tempo2 .par reader.
 
-    Returns a dict of KEY -> VALUE (as strings). Comments and blank lines are ignored.
-    If a key appears multiple times, the last one wins.
+    Args:
+        parfile: Path to a `.par` file.
+
+    Returns:
+        Dict of ``KEY -> VALUE`` (as strings). Comments and blank lines are
+        ignored; if a key appears multiple times, the last one wins.
     """
     params: Dict[str, str] = {}
     if not parfile.exists():
@@ -67,6 +84,15 @@ def analyse_binary_from_par(parfile: Path) -> Dict[str, object]:
 
     This is intentionally conservative: it will only compute ELL1->BTX conversion
     if EPS1/EPS2/TASC are present.
+
+    Args:
+        parfile: Path to a `.par` file.
+
+    Returns:
+        Mapping of extracted/derived parameters, including ``BINARY`` when present.
+
+    Notes:
+        Derived ELL1 quantities are reported as ``ELL1_*`` keys.
     """
     p = read_parfile(parfile)
     out: Dict[str, object] = {"parfile": str(parfile)}
@@ -121,6 +147,16 @@ def write_binary_analysis(
 
     Returns:
         Path to the written TSV file.
+
+    Examples:
+        Write a binary analysis table for two branches::
+
+            out_path = write_binary_analysis(
+                home_dir=Path("/data/epta/EPTA"),
+                out_dir=Path("results/binary"),
+                pulsars=["J1234+5678"],
+                branches=["main", "EPTA"],
+            )
     """
     cfg = config or BinaryAnalysisConfig()
     out_dir.mkdir(parents=True, exist_ok=True)

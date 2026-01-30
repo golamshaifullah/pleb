@@ -1,4 +1,8 @@
-"""Helpers to generate PQC report artifacts from pipeline outputs."""
+"""Generate PQC report artifacts from pipeline outputs.
+
+This module wraps helper scripts that produce diagnostic text, transient plots,
+feature plots, and structure summaries from PQC CSV outputs.
+"""
 
 from __future__ import annotations
 
@@ -36,6 +40,7 @@ def _find_qc_csvs(run_dir: Path) -> list[Path]:
 
 
 def _run_script(script: Path, args: list[str], capture: bool = False) -> subprocess.CompletedProcess:
+    """Run a helper script as a subprocess."""
     cmd = [sys.executable, str(script)] + args
     return subprocess.run(cmd, capture_output=capture, text=True)
 
@@ -57,9 +62,20 @@ def generate_qc_report(
         backend: Optional backend key filter for plotting.
         report_dir: Output directory (default: <run_dir>/qc_report).
         no_plots: If True, skip transient plots.
+        structure_group_cols: Optional grouping columns for structure summaries.
+        no_feature_plots: If True, skip feature plots.
 
     Returns:
         Path to the report directory.
+
+    Raises:
+        FileNotFoundError: If the run directory does not exist.
+        RuntimeError: If required PQC CSVs or helper scripts are missing.
+
+    Examples:
+        Generate a QC report from a run directory::
+
+            report_dir = generate_qc_report(Path("results/run_2024-01-01"))
     """
     run_dir = Path(run_dir).expanduser().resolve()
     report_dir = Path(report_dir).expanduser().resolve() if report_dir else run_dir / "qc_report"

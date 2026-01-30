@@ -1,4 +1,13 @@
-"""Parameter-scan utilities for rapid fit diagnostics."""
+"""Parameter-scan utilities for rapid fit diagnostics.
+
+This module implements a fit-only workflow that evaluates candidate parameter
+additions or edits by running tempo2 on temporary `.par` variants. It is used
+by the CLI ``--param-scan`` mode.
+
+See Also:
+    pleb.pipeline.run_pipeline: Full pipeline workflow.
+    pleb.reports.write_new_param_significance: Related reporting utilities.
+"""
 
 from __future__ import annotations
 
@@ -26,7 +35,13 @@ logger = get_logger("pleb.param_scan")
 class Candidate:
     """A candidate model modification.
 
-    Each candidate is expressed as a set of parameter edits/inserts applied to a base .par.
+    Each candidate is expressed as a set of parameter edits/inserts applied to a
+    base `.par` file, plus optional raw lines that are inserted verbatim.
+
+    Attributes:
+        label: Human- and filesystem-safe label for the candidate.
+        params: Tuples of ``(PARAM, optional value)`` to add or modify.
+        raw_lines: Raw `.par` lines to append verbatim.
     """
 
     label: str
@@ -53,6 +68,18 @@ def parse_candidate_specs(specs: Sequence[str]) -> List[Candidate]:
       * "F2=0" -> set/start value and fit it
       * "F2+F3" or "F2,F3" -> group candidate (adds both)
       * "raw:..." -> insert raw par line verbatim (label derived from first token)
+
+    Args:
+        specs: Candidate specification strings.
+
+    Returns:
+        A list of parsed :class:`Candidate` objects.
+
+    Examples:
+        Parse a mix of candidates::
+
+            specs = ["F2", "F2=0", "F2+F3", "raw:JUMP -sys P200 0 1"]
+            candidates = parse_candidate_specs(specs)
     """
 
     out: List[Candidate] = []
@@ -86,9 +113,9 @@ def _parse_par_params(par_text: str) -> Dict[str, List[str]]:
     """Parse a .par text into a dict of PARAM -> tokens.
 
     Notes:
-      * Only the first occurrence of a given PARAM is retained.
-      * Comment lines starting with '#', 'C ' or 'c ' are ignored.
-      * Inline '#' comments are stripped.
+        * Only the first occurrence of a given PARAM is retained.
+        * Comment lines starting with '#', 'C ' or 'c ' are ignored.
+        * Inline '#' comments are stripped.
     """
     out: Dict[str, List[str]] = {}
     for raw in par_text.splitlines():
@@ -134,6 +161,10 @@ def build_typical_candidates(
 
     Returns:
         List of candidate model modifications.
+
+    Notes:
+        The typical profile only considers deterministic timing parameters and
+        intentionally avoids noise-model terms.
     """
     # User-intent profile implemented:
     #   1) Always test Parallax (PX) if missing or not fitted.
@@ -207,6 +238,11 @@ def apply_candidate_to_par_text(par_text: str, cand: Candidate) -> str:
 
     Returns:
         Modified .par text.
+
+    Notes:
+        This function is conservative. If you need to insert complex lines
+        (e.g., ``JUMP`` with flags), use ``raw:`` specifications so the line is
+        inserted verbatim.
     """
     # Heuristics:
     #   * If a parameter exists as the first token of a non-comment line, edit its value (optional)
@@ -357,6 +393,11 @@ def summarize_plk_only(plk_path: Path) -> Dict[str, Optional[float]]:
 
     Returns:
         Dict with ``chisq``, ``redchisq``, ``n_toas``, and ``k_fit`` where available.
+
+    Examples:
+        Summarize a plk log to drive candidate selection::
+
+            stats = summarize_plk_only(Path("J1234+5678_plk.log"))
     """
     # Summarize a tempo2 fit from just the captured stdout (plk log).
     text = plk_path.read_text(encoding="utf-8", errors="ignore") if plk_path.exists() else ""
@@ -448,6 +489,19 @@ def run_param_scan(
         FileNotFoundError: If required paths are missing.
         RuntimeError: If no pulsars are selected or dependencies are missing.
         ValueError: If no candidates are specified.
+
+    Examples:
+        Run a typical parameter scan on the reference branch::
+
+            from pleb.config import PipelineConfig
+            from pleb.param_scan import run_param_scan
+
+            cfg = PipelineConfig(
+                home_dir=Path("/data/epta"),
+                singularity_image=Path("/images/tempo2.sif"),
+                dataset_name="EPTA",
+            )
+            outputs = run_param_scan(cfg, scan_typical=True)
     """
     cfg = cfg.resolved()
     if not cfg.home_dir.exists():

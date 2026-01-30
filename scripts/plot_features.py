@@ -30,6 +30,16 @@ KNOWN_FEATURES = [
 
 
 def _bin_stats(x: np.ndarray, y: np.ndarray, nbins: int = 20):
+    """Compute median y-values in evenly spaced x-bins.
+
+    Args:
+        x: X values.
+        y: Y values aligned with ``x``.
+        nbins: Number of bins.
+
+    Returns:
+        Tuple of (bin_centers, median_values) or ``None`` if insufficient data.
+    """
     if len(x) < 2:
         return None
     edges = np.linspace(np.nanmin(x), np.nanmax(x), nbins + 1)
@@ -43,6 +53,7 @@ def _bin_stats(x: np.ndarray, y: np.ndarray, nbins: int = 20):
 
 
 def main() -> None:
+    """Generate feature-structure plots from a PQC CSV file."""
     ap = argparse.ArgumentParser(description="Plot feature-structure diagnostics from pqc CSV")
     ap.add_argument("--csv", required=True, help="QC output CSV")
     ap.add_argument("--outdir", default="feature_plots", help="Directory for PNGs")

@@ -1,4 +1,8 @@
-"""Robust .tim file parsing utilities."""
+"""Robust `.tim` file parsing utilities.
+
+These helpers implement tolerant parsing and filtering for tempo2 `.tim` files
+that contain mixed headers, directives, and TOA rows.
+"""
 
 from __future__ import annotations
 
@@ -138,6 +142,11 @@ def read_tim_file_robust(
     Returns:
         DataFrame with columns 0..N-1 holding tokens. Numeric columns are
         converted where possible without destroying string columns.
+
+    Examples:
+        Parse a `.tim` file into a dataframe::
+
+            df = read_tim_file_robust(Path("J1234+5678_all.tim"))
     """
     timfile = Path(timfile)
     if not timfile.exists():

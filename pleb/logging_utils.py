@@ -1,4 +1,8 @@
-"""Logging helpers for the pipeline package."""
+"""Logging helpers for the pipeline package.
+
+This module provides a small logger factory that writes to stdout and a
+timestamped log file under ``logs/`` (or ``$PLEB_LOG_DIR``).
+"""
 
 import logging
 import os
@@ -9,7 +13,11 @@ _LOG_FILE: Path | None = None
 
 
 def _default_log_file() -> Path:
-    """Return the default log file path under the logs directory."""
+    """Return the default log file path under the logs directory.
+
+    Returns:
+        Path to the log file used by :func:`get_logger`.
+    """
     global _LOG_FILE
     if _LOG_FILE is not None:
         return _LOG_FILE
@@ -35,6 +43,11 @@ def get_logger(name: str = "pleb", level: int = logging.INFO) -> logging.Logger:
     Notes:
         This helper mutates global logger state. Call it early in module import
         to ensure consistent formatting across modules.
+
+    Examples:
+        Get a module logger::
+
+            logger = get_logger("pleb.pipeline")
     """
     logger = logging.getLogger(name)
     if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):

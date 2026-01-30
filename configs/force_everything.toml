@@ -4,18 +4,17 @@
 #  - Every path string MUST be quoted in TOML (otherwise tomllib will throw "Invalid value").
 #  - Edit the 4 path-ish fields below to match your checkout + container + output directory.
 
-home_dir = "/ABS/PATH/TO/EPTA_data_processing_pipeline"      # repo root (git working tree)
-dataset_name = "DATASET_DIRNAME_OR_REL_PATH"                # e.g. "datasets/EPTA_DR2" (relative to home_dir)
-singularity_image = "/ABS/PATH/TO/tempo2_container.sif"     # your tempo2 container (.sif/.simg)
-results_dir = "/ABS/PATH/TO/output_dir"                     # where plots/reports go
-
+home_dir = "/work/git_projects/data-eptadr3/"
+dataset_name = "DR3full"
+results_dir = "results"
+singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 outdir_name = "run_fixdataset_all_fixes"
 pulsars = "ALL"
 
 # Branch workflow:
 #  - base branch: where you start (usually main/master)
 #  - fix branch: created from base, fixes applied + committed, then pipeline runs on both branches
-branches = ["main", "fixdataset_all_fixes"]
+branches = ["main"]
 reference_branch = "main"
 make_change_reports = true
 
@@ -25,10 +24,60 @@ force_rerun = true
 jobs = 8
 epoch = "auto"   # if your PipelineConfig expects an int/MJD, replace with e.g. "58000"
 
-# ---- FixDataset: APPLY + COMMIT ----
-# This is the switch that actually creates the new branch and commits .par/.tim changes.
+pqc_backend_col = "group"
+pqc_drop_unmatched = false
+qc_report = true
+qc_report_backend_col = "group"
+qc_report_no_plots = false
+qc_report_structure_group_cols = "group;sys;freq_bin"
+qc_report_no_feature_plots = false
+
+pqc_add_orbital_phase = true
+pqc_add_solar_elongation = true
+pqc_add_elevation = true
+pqc_add_airmass = true
+pqc_add_parallactic_angle = true
+pqc_add_freq_bin = true
+pqc_freq_bins = 20
+
+pqc_structure_mode = "both"
+pqc_structure_detrend_features = ["solar_elongation_deg", "orbital_phase", "freq_bin"]
+pqc_structure_test_features = ["orbital_phase", "solar_elongation_deg", "freq_bin"]
+pqc_structure_nbins = 20
+pqc_structure_min_per_bin = 2
+pqc_structure_p_thresh = 0.01
+pqc_structure_circular_features = ["orbital_phase"]
+pqc_structure_group_cols = ["group"]
+pqc_outlier_gate_enabled = true
+pqc_outlier_gate_sigma = 3.0
+pqc_event_instrument = true
+
+pqc_dm_step_enabled = false
+pqc_dm_step_min_points = 20
+pqc_dm_step_delta_chi2_thresh = 25.0
+pqc_dm_step_scope = "both"
+
+pqc_robust_enabled = true
+pqc_robust_z_thresh = 2.0
+pqc_robust_scope = "both"
+
+# QC -> FixDataset application (comment out by default)
+fix_qc_remove_outliers = false
+fix_qc_action = "comment"
+fix_qc_comment_prefix = "C QC_OUTLIER"
+fix_qc_remove_bad = true
+fix_qc_remove_transients = false
+fix_qc_merge_tol_days = 2.3148148148148147e-05
+#2.0 / 86400.0
+# If you want to point to a specific run, set these (otherwise auto from fix_branch_name):
+# fix_qc_results_dir = "results/run_fixdataset_all_fixes/main-fixdataset_test_5/qc"
+# fix_qc_branch = "fixdataset_test_5"
+
+
+# ---- FixDataset APPLY + COMMIT ----
+# These are the settings that should force the apply path (branch + commit) if your pipeline.py supports it.
 fix_apply = true
-fix_branch_name = "fixdataset_all_fixes"
+fix_branch_name = "" 
 fix_base_branch = "main"
 fix_commit_message = "FixDataset: apply all automated fixes"
 
@@ -37,9 +86,6 @@ fix_backup = false
 fix_dry_run = false
 
 # ---- FixDataset options: turn on every safe fix step ----
-# 1) Remove known-bad backend strings in *.par and *_all.tim (default patterns shown)
-fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
-
 # 2) Ensure *_all.tim includes every per-backend tim under <psr>/tims/ (dropping tiny ones)
 fix_update_alltim_includes = true
 fix_min_toas_per_backend_tim = 10
@@ -83,3 +129,5 @@ make_binary_analysis = true
 dpi = 150
 max_covmat_params = 60
 binary_only_models = []  # e.g. ["ELL1","BTX"] to filter
+
+

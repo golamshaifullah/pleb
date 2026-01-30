@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convenience wrapper for running the PTA QC CLI.
 
-Example:
+Examples:
     python scripts/run_qc.py --par ... --out ...
 """
 

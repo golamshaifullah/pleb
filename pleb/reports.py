@@ -1,4 +1,12 @@
-"""Report generation utilities for pipeline outputs."""
+"""Generate comparison and QC reports from pipeline outputs.
+
+This module builds change reports, model-comparison summaries, and outlier
+tables from tempo2 outputs parsed by :mod:`pleb.parsers`.
+
+See Also:
+    pleb.parsers: Parsing helpers for tempo2 logs.
+    pleb.pipeline.run_pipeline: Orchestrates report generation.
+"""
 
 from __future__ import annotations
 
@@ -229,6 +237,11 @@ def write_change_reports(out_paths: Dict[str, Path], pulsars: List[str], branche
         pulsars: Pulsar names to include.
         branches: Branches to compare (includes the reference branch).
         reference_branch: Reference branch name.
+
+    Examples:
+        Write change reports for two branches::
+
+            write_change_reports(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
     combined = []
     skipped = 0
@@ -286,6 +299,9 @@ def summarize_run(out_paths: Dict[str, Path], pulsar: str, branch: str) -> Dict[
 
     Returns:
         Summary dictionary containing fit statistics and derived model metrics.
+
+    Notes:
+        WRMS is computed from general2 ``post``/``err`` columns when available.
     """
     plk_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
     gen_path = out_paths["general2"] / f"{pulsar}_{branch}.general2"
@@ -351,6 +367,11 @@ def write_model_comparison_summary(out_paths: Dict[str, Path], pulsars: List[str
         pulsars: Pulsar names to include.
         branches: Branches to compare (includes the reference branch).
         reference_branch: Reference branch name.
+
+    Examples:
+        Write a model-comparison table::
+
+            write_model_comparison_summary(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
     rows = []
     for pulsar in pulsars:
@@ -411,6 +432,11 @@ def write_new_param_significance(out_paths: Dict[str, Path], pulsars: List[str],
         branches: Branches to compare (includes the reference branch).
         reference_branch: Reference branch name.
         z_threshold: Significance threshold for reporting counts.
+
+    Examples:
+        Summarize significance for newly added parameters::
+
+            write_new_param_significance(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
     rows = []
     for pulsar in pulsars:
@@ -481,6 +507,11 @@ def write_outlier_tables(home_dir: Path, dataset_name: Path, out_paths: Dict[str
         out_paths: Output directory mapping from :func:`make_output_tree`.
         pulsars: Pulsar names to include.
         branches: Branches to include.
+
+    Examples:
+        Write outlier tables for a set of pulsars::
+
+            write_outlier_tables(Path("/data/epta/EPTA"), Path("EPTA"), out_paths, ["J1234+5678"], ["main"])
     """
     for pulsar in pulsars:
         tim_dir = home_dir / pulsar / "tims"

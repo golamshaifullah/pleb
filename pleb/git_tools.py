@@ -1,4 +1,7 @@
-"""Lightweight Git helpers used by the pipeline."""
+"""Lightweight Git helpers used by the pipeline.
+
+These helpers wrap common GitPython operations with minimal logging.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +19,11 @@ def checkout(repo: Repo, branch: str) -> None:
     Args:
         repo: GitPython repository object.
         branch: Branch name to check out.
+
+    Examples:
+        Check out a branch::
+
+            checkout(repo, "main")
     """
     repo.git.checkout(branch)
 
@@ -24,6 +32,9 @@ def require_clean_repo(repo: Repo) -> None:
 
     Args:
         repo: GitPython repository object.
+
+    Notes:
+        This function only logs a warning; it does not raise.
     """
     if repo.is_dirty(untracked_files=True):
         logger.warning("Repo has uncommitted changes. Results may be non-reproducible.")

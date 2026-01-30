@@ -1,4 +1,13 @@
-"""FixDataset utilities for cleaning and normalizing EPTA datasets."""
+"""FixDataset utilities for cleaning and normalizing EPTA datasets.
+
+This module provides lightweight, file-based cleanup utilities for `.par` and
+`.tim` data, adapted from the FixDataset notebook workflow. It can run in a
+report-only mode (default) or apply edits with backups.
+
+See Also:
+    pleb.config.PipelineConfig: Pipeline settings for FixDataset integration.
+    pleb.pipeline.run_pipeline: Orchestrates FixDataset in the full pipeline.
+"""
 
 from __future__ import annotations
 
@@ -39,8 +48,50 @@ _TIM_DIRECTIVES = {
 class FixDatasetConfig:
     """Controls for dataset fixing utilities.
 
-    These features are adapted from the FixDataset.ipynb notebook. They are *disabled by default*
-    because automatic edits can be repo-specific.
+    These features are adapted from the FixDataset notebook. They are disabled
+    by default because automatic edits can be repo-specific.
+
+    Notes:
+        Use ``apply=False`` for report-only runs. When ``apply=True``, this
+        module will modify `.par`/`.tim` files and optionally create backups.
+
+    Attributes:
+        apply: Apply changes when True; otherwise run report-only.
+        backup: Create ``.orig`` backups when applying.
+        dry_run: Compute changes without writing to disk.
+        update_alltim_includes: Update ``INCLUDE`` lines in ``*_all.tim``.
+        min_toas_per_backend_tim: Minimum TOAs for a backend tim to be included.
+        required_tim_flags: Flags to ensure on each TOA line.
+        infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
+        system_flag_table_path: Path to the system-flag table (JSON/TOML).
+        system_flag_overwrite_existing: Overwrite existing system flags.
+        backend_overrides: Map tim basename to backend name override.
+        raise_on_backend_missing: Raise when backend cannot be inferred.
+        dedupe_toas_within_tim: Remove duplicate TOAs within each tim.
+        check_duplicate_backend_tims: Detect duplicated backend tims.
+        remove_overlaps_exact: Remove known overlapping TOAs across backends.
+        insert_missing_jumps: Insert missing JUMP lines into par files.
+        jump_flag: Flag used to label inserted jumps.
+        ensure_ephem: Ensure EPHEM param exists (optional value).
+        ensure_clk: Ensure CLK param exists (optional value).
+        ensure_ne_sw: Ensure NE_SW param exists (optional value).
+        remove_patterns: Remove lines matching these patterns.
+        coord_convert: Coordinate conversion mode (``equ2ecl`` or ``ecl2equ``).
+        qc_remove_outliers: Apply/remove outliers flagged by PQC.
+        qc_action: ``comment`` or ``delete`` for flagged TOAs.
+        qc_comment_prefix: Prefix for commented-out TOAs.
+        qc_backend_col: Backend column for matching QC results.
+        qc_remove_bad: Apply bad/bad_day flags from QC.
+        qc_remove_transients: Apply transient flags from QC.
+        qc_merge_tol_days: MJD tolerance for QC matching.
+        qc_results_dir: Directory containing QC CSV outputs.
+        qc_branch: Subdirectory for QC results (optional).
+
+    Examples:
+        Run a report-only pass for a pulsar::
+
+            cfg = FixDatasetConfig()
+            report = fix_pulsar_dataset(Path("/data/epta/J1234+5678"), cfg)
     """
 
     apply: bool = False
@@ -880,6 +931,14 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
 
     Returns:
         Report dictionary with per-step results.
+
+    Examples:
+        Run a report-only pass::
+
+            report = fix_pulsar_dataset(Path("/data/epta/J1234+5678"), FixDatasetConfig())
+
+    See Also:
+        write_fix_report: Write aggregated reports to disk.
     """
     psr = psr_dir.name
     parfile = psr_dir / f"{psr}.par"
@@ -1015,6 +1074,11 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
 
     Returns:
         Path to the detailed JSON report file.
+
+    Examples:
+        Save reports for multiple pulsars::
+
+            detail_path = write_fix_report(reports, Path("results/fix_dataset"))
     """
     import json
     out_dir.mkdir(parents=True, exist_ok=True)

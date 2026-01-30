@@ -268,8 +268,8 @@ def _make_gen(reader):
     Args:
         reader: Callable that returns bytes when called.
 
-    Yields:
-        Raw byte chunks from the reader.
+    Returns:
+        Iterator over raw byte chunks from the reader.
     """
     b = reader(1024 * 1024)
     while b:
@@ -529,7 +529,7 @@ def skipper(timfilepath):
         Sorted list of zero-based row indices to skip.
     """
     rowstoskip=[0]
-    badstarts=["TIME", "MODE", "FORMAT", "-padd", "Er", "C\ ", "C ", "CC", "end", "#", "c\ ", "c "]
+    badstarts=["TIME", "MODE", "FORMAT", "-padd", "Er", "C\\ ", "C ", "CC", "end", "#", "c\\ ", "c "]
     badstarts=badstarts.extend([" "+x for x in badstarts])
     print(badstarts)
     for searchstring in badstarts:
@@ -561,7 +561,7 @@ def read_tamfile(timfile, separator=r'\s+', rowstoskip=1, time_skip_array=None, 
     """
     if type(rowstoskip) == int:
         rowstoskip=list(range(rowstoskip))
-    badstarts=["MODE", "FORMAT", "-padd", "Er", "C\ ", "C ", "CC", "end", "#", "c\ ", "c "]
+    badstarts=["MODE", "FORMAT", "-padd", "Er", "C\\ ", "C ", "CC", "end", "#", "c\\ ", "c "]
     badstarts.extend([" "+x for x in badstarts])
 
     for searchstring in badstarts:
@@ -838,7 +838,7 @@ def comment_overlapped_toa(homepath, psr, retain_backend, drop_backends, time_wi
                                                 else:
                                                     #Print unmatched lines
                                                     print(modline, file=newfile)
-                                            os.system("\cp -f {}/{}/tims/{} {}/{}/tims/{}".format(homepath, psr, timfile, homepath, psr, timfile.replace(".tim", ".orig")))
+                                            os.system(r"\cp -f {}/{}/tims/{} {}/{}/tims/{}".format(homepath, psr, timfile, homepath, psr, timfile.replace(".tim", ".orig")))
                                             os.system("mv {}/{}/tims/{} {}/{}/tims/{}".format(homepath, psr, timfile.replace(".tim", "_mod.tim"), homepath, psr, timfile))
 
     return None
@@ -910,7 +910,7 @@ def remove_nuppi_fromParTimfiles(homepath, psr_info, use_newfile=False):
         try:
             remove_nuppi_big(os.path.join(homepath,psr,parfile),os.path.join(homepath,psr,timfile))
             if use_newfile:
-                os.system("\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
+                os.system(r"\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
                 os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, parfile.replace(".par", ".new"), homepath, psr, parfile))
         except Exception as e:
             print(e)
@@ -1178,7 +1178,7 @@ def update_alltims(homepath, psr_info, use_newfile=False):
         try:
             insert_missing_timfiles(psr, alltimfilepath=os.path.join(homepath, psr, alltim), psr_info=psr_info)
             if use_newfile:
-                os.system("\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, alltim, homepath, psr, alltim.replace("_all.tim", "_all.orig")))
+                os.system(r"\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, alltim, homepath, psr, alltim.replace("_all.tim", "_all.orig")))
                 os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, alltim.replace("_all.tim", "_all.new"), homepath, psr, alltim))
         except Exception as e:
             print(e)
@@ -1245,7 +1245,7 @@ def update_parfiles(homepath, psr_info, use_newfile=False):
         try:
             insert_missing_jumps(psr, parfilepath=os.path.join(homepath, psr, parfile), psr_info=psr_info)
             if use_newfile:
-                os.system("\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
+                os.system(r"\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
                 os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, parfile.replace(".par", ".new"), homepath, psr, parfile))
         except Exception as e:
             print(e)
@@ -1269,7 +1269,7 @@ def edit_parfiles(homepath, psr_info, use_newfile=False):
         parfile = psr+".par"
         insert_missing_jumps(psr, parfilepath=os.path.join(homepath, psr, parfile), psr_info=psr_info)
         if use_newfile:
-            os.system("\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
+            os.system(r"\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
 
             os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, parfile.replace(".par", ".new"), homepath, psr, parfile))
 
@@ -1330,7 +1330,7 @@ def create_ecliptic_par(parfile, use_newfile):
                 print(line, file=eqpar)
 
         if use_newfile:
-            os.system("\cp -f {} {}".format(parfile, parfile.replace(".par", "_dr1eqecl.par")))
+            os.system(r"\cp -f {} {}".format(parfile, parfile.replace(".par", "_dr1eqecl.par")))
             os.system("mv {} {}".format(parfile.replace(".par", "_eq.par"), parfile))
 
     except Exception as e:
@@ -1476,7 +1476,7 @@ def add_params_to_parfile(homepath, psr_info, newpars, use_newfile=False, branch
         added_params = add_params(psr, parfilepath=os.path.join(homepath, psr, parfile), psr_info=psr_info, params=list(newpars), start_line=start_line)
 
         if use_newfile:
-            os.system("\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
+            os.system(r"\cp -f {}/{}/{} {}/{}/{}".format(homepath, psr, parfile, homepath, psr, parfile.replace(".par", ".orig")))
             os.system("mv {}/{}/{} {}/{}/{}".format(homepath, psr, parfile.replace(".par", "_addpar.par"), homepath, psr, parfile))
             git.add(update=True)
             git.commit(message="{} Added {} for {}".format(branch_message, " and ".join(", ".join(added_params).rsplit(", ", 1)), psr))

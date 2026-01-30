@@ -1,4 +1,8 @@
-"""General utility helpers for the pipeline."""
+"""General utility helpers for the pipeline.
+
+These helpers provide small filesystem utilities and shared path conventions
+used across pipeline modules.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +32,11 @@ def which_or_raise(cmd: str, hint: str = "") -> str:
 
 
 def safe_mkdir(p: Path) -> None:
-    """Create a directory tree if it does not exist."""
+    """Create a directory tree if it does not exist.
+
+    Args:
+        p: Directory path to create.
+    """
     p.mkdir(parents=True, exist_ok=True)
 
 
@@ -40,6 +48,11 @@ def discover_pulsars(home_dir: Path) -> List[str]:
 
     Returns:
         Sorted list of pulsar names (directory names starting with "J").
+
+    Examples:
+        List pulsars under a dataset root::
+
+            pulsars = discover_pulsars(Path("/data/epta/EPTA"))
     """
     pulsars: List[str] = []
     for entry in home_dir.iterdir():
@@ -58,6 +71,11 @@ def make_output_tree(results_dir: Path, branches: List[str], outdir_name: Option
 
     Returns:
         Mapping from output labels to created paths.
+
+    Examples:
+        Create a results tree for two branches::
+
+            paths = make_output_tree(Path("results"), ["main", "EPTA"], None)
     """
     if outdir_name is None:
         outdir_name = "EPTA_combination_report_" + datetime.now().strftime("%Y%m%dT%H%M")

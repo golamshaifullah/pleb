@@ -1,7 +1,14 @@
-"""Configuration models for the data-combination pipeline.
+"""Define configuration models for the data-combination pipeline.
 
-This module defines the :class:`PipelineConfig` dataclass and helpers for
-loading/saving configuration from JSON and TOML files.
+This module provides :class:`PipelineConfig`, a flattened dataclass used by the
+CLI and pipeline entry points to control data ingestion, fitting, reporting,
+and optional FixDataset or parameter-scan stages. The config is intentionally
+flat to simplify JSON/TOML serialization and CLI overrides.
+
+See Also:
+    pleb.pipeline.run_pipeline: Main pipeline entry point.
+    pleb.param_scan.run_param_scan: Parameter scan entry point.
+    pleb.cli: Command-line interface that consumes :class:`PipelineConfig`.
 """
 
 from __future__ import annotations
@@ -22,10 +29,27 @@ PulsarSelection = Union[str, List[str]]  # "ALL" or explicit list
 
 @dataclass(slots=True)
 class PipelineConfig:
-    """Configuration for the data-combination pipeline.
+    """Configure the data-combination pipeline.
 
-    The configuration is intentionally flat to make it easy to serialize to
-    JSON/TOML and to override via CLI flags.
+    The configuration is intentionally flat so that it can be serialized to
+    JSON/TOML and overridden via CLI flags without nested structures. Most
+    fields correspond directly to CLI options and pipeline stages.
+
+    Notes:
+        The ``dataset_name`` field is interpreted by :meth:`resolved` as a
+        filesystem path when it contains a path separator (``/`` or ``\\``) or
+        starts with ``.``; otherwise it is treated as a directory name under
+        ``home_dir``.
+
+    Examples:
+        Basic construction and JSON save::
+
+            cfg = PipelineConfig(
+                home_dir=Path("/data/epta"),
+                singularity_image=Path("/images/tempo2.sif"),
+                dataset_name="EPTA",
+            )
+            cfg.save_json(Path("pipeline.json"))
 
     Attributes:
         home_dir: Root of the data repository containing pulsar folders.
@@ -92,7 +116,8 @@ class PipelineConfig:
         param_scan_dm_max_order: Max DM derivative order.
         param_scan_btx_max_fb: Max FB derivative order.
         fix_apply: Whether FixDataset applies changes and commits.
-        fix_branch_name: Name of FixDataset branch.
+        fix_branch_name: Name of FixDataset branch. If unset and fix_apply is true,
+            a name is auto-generated as ``branch_run_ddmmyyhhmm``.
         fix_base_branch: Base branch for FixDataset.
         fix_commit_message: Commit message for FixDataset.
         fix_backup: Create backup before FixDataset modifications.
@@ -114,8 +139,10 @@ class PipelineConfig:
         fix_qc_remove_bad: Act on bad/bad_day flags.
         fix_qc_remove_transients: Act on transient flags.
         fix_qc_merge_tol_days: MJD tolerance when matching TOAs.
-        fix_qc_results_dir: Directory containing pqc CSV outputs.
-        fix_qc_branch: Branch subdir for pqc CSV outputs.
+        fix_qc_results_dir: Directory containing pqc CSV outputs. If unset and
+            fix_apply is true, defaults to ``<results>/qc/<fix_branch_name>``.
+        fix_qc_branch: Branch subdir for pqc CSV outputs. If unset and
+            fix_qc_results_dir is set, defaults to ``fix_branch_name``.
         binary_only_models: Limit binary analysis to model names.
         dpi: Plot resolution.
         max_covmat_params: Max params in covariance heatmaps.
@@ -273,7 +300,7 @@ class PipelineConfig:
     max_covmat_params: Optional[int] = None
 
     def resolved(self) -> "PipelineConfig":
-        """Return a copy with paths expanded/resolved.
+        """Return a copy with paths expanded and resolved.
 
         The ``dataset_name`` field is interpreted as:
 
@@ -283,6 +310,21 @@ class PipelineConfig:
 
         Returns:
             A new :class:`PipelineConfig` with resolved paths.
+
+        Raises:
+            TypeError: If ``dataset_name`` is ``None`` (it must be a string or
+                path-like value when resolving).
+
+        Examples:
+            Resolve a dataset by name relative to ``home_dir``::
+
+                cfg = PipelineConfig(
+                    home_dir=Path("/data/epta"),
+                    singularity_image=Path("/images/tempo2.sif"),
+                    dataset_name="EPTA",
+                )
+                resolved = cfg.resolved()
+                assert resolved.dataset_name == Path("/data/epta/EPTA")
         """
         c = PipelineConfig(
             **{
@@ -323,6 +365,16 @@ class PipelineConfig:
         Returns:
             Dictionary representation of the config with :class:`Path` values
             converted to strings.
+
+        Examples:
+            Convert to a dict suitable for JSON serialization::
+
+                cfg = PipelineConfig(
+                    home_dir=Path("/data/epta"),
+                    singularity_image=Path("/images/tempo2.sif"),
+                    dataset_name="EPTA",
+                )
+                payload = cfg.to_dict()
         """
         d = asdict(self)
         # serialize Paths
@@ -343,6 +395,21 @@ class PipelineConfig:
 
         Returns:
             A new :class:`PipelineConfig` instance.
+
+        Raises:
+            KeyError: If required keys (``home_dir`` or ``singularity_image``)
+                are missing.
+
+        Examples:
+            Load from a dict (e.g., parsed JSON/TOML)::
+
+                cfg = PipelineConfig.from_dict(
+                    {
+                        "home_dir": "/data/epta",
+                        "singularity_image": "/images/tempo2.sif",
+                        "dataset_name": "EPTA",
+                    }
+                )
         """
         def p(x: Any) -> Path:
             return Path(x) if x is not None else Path(".")
@@ -489,6 +556,15 @@ class PipelineConfig:
             FileNotFoundError: If the path does not exist.
             RuntimeError: If TOML is requested but ``tomllib`` is unavailable.
             ValueError: If the file extension is unsupported.
+
+        Examples:
+            Load from JSON::
+
+                cfg = PipelineConfig.load(Path("pipeline.json"))
+
+            Load from TOML (``[pipeline]`` table supported)::
+
+                cfg = PipelineConfig.load(Path("pipeline.toml"))
         """
         path = Path(path)
         if not path.exists():
@@ -514,6 +590,11 @@ class PipelineConfig:
 
         Args:
             path: Output file path.
+
+        Examples:
+            Save to disk::
+
+                cfg.save_json(Path("pipeline.json"))
         """
         path = Path(path)
         path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")

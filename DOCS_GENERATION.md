@@ -4,8 +4,9 @@ This repository is documented directly from docstrings (Google-style) and type h
 
 ## Recommended toolchain
 
-- **Sphinx** with autodoc + napoleon
+- **Sphinx** with autodoc + napoleon (recommended for API docs)
 - Optional: **sphinx-autobuild** for live reload
+- Optional: **sphinx-autodoc-typehints** for richer type rendering
 
 ## Install (example)
 
@@ -39,6 +40,7 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 
 autosummary_generate = True
+autosummary_imported_members = True
 
 autodoc_typehints = "description"
 
@@ -47,6 +49,9 @@ autodoc_default_options = {
     "undoc-members": False,
     "show-inheritance": True,
 }
+
+# Prefer module-level docstrings for summaries
+autodoc_docstring_signature = True
 ```
 
 ### `docs/index.rst`
@@ -72,6 +77,10 @@ API Reference
    :recursive:
 
    pleb
+
+.. note::
+   The ``:recursive:`` option ensures submodules are discovered automatically.
+   For finer control, list submodules explicitly (as in ``docs/api.rst``).
 ```
 
 ## Build docs locally
@@ -90,6 +99,29 @@ sphinx-autobuild docs docs/_build/html
 
 If you prefer MkDocs, install `mkdocs` and `mkdocstrings[python]` and configure
 `mkdocs.yml` with the `mkdocstrings` plugin to pull Google-style docstrings.
+
+Example `mkdocs.yml` snippet:
+
+```yaml
+site_name: EPTA Data Combination Pipeline
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+nav:
+  - API: api.md
+```
+
+Then create an `api.md` page that includes:
+
+```markdown
+::: pleb
+    options:
+      show_source: false
+```
 
 ## Hosting
 

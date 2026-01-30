@@ -1,4 +1,13 @@
-"""Optional pqc integration for outlier detection."""
+"""Optional PQC integration for outlier detection.
+
+This module wraps the external ``pqc`` package to generate per-TOA quality
+control flags and summary statistics. It is designed to fail gracefully when
+``pqc`` or its dependencies are not installed.
+
+See Also:
+    pleb.pipeline.run_pipeline: Pipeline stage that invokes PQC.
+    pleb.dataset_fix: Optional application of PQC flags to data.
+"""
 
 from __future__ import annotations
 
@@ -22,8 +31,53 @@ logger = get_logger("pleb.qc")
 class PTAQCConfig:
     """Configuration for the optional pqc outlier detection stage.
 
-    This stage is intentionally optional: the pipeline runs without pqc
+    This stage is intentionally optional: the pipeline runs without ``pqc``
     installed and will skip QC if dependencies are missing.
+
+    Attributes:
+        backend_col: Backend grouping column used by PQC.
+        drop_unmatched: Drop TOAs without matching tim metadata.
+        merge_tol_seconds: Merge tolerance for matching (seconds).
+        tau_corr_minutes: OU correlation time for bad-measurement detection.
+        fdr_q: FDR threshold for bad-measurement detection.
+        mark_only_worst_per_day: Mark only the worst TOA per day.
+        tau_rec_days: Recovery time for transient scan (days).
+        window_mult: Window multiplier for transient scan.
+        min_points: Minimum points for transient scan.
+        delta_chi2_thresh: Delta-chi2 threshold for transient scan.
+        suppress_overlap: Suppress overlapping transient windows.
+        step_enabled: Enable step-change detection.
+        step_min_points: Minimum points for step detection.
+        step_delta_chi2_thresh: Delta-chi2 threshold for step detection.
+        step_scope: Scope for step detection (global/branch/both).
+        dm_step_enabled: Enable DM-like step detection.
+        dm_step_min_points: Minimum points for DM step detection.
+        dm_step_delta_chi2_thresh: Delta-chi2 threshold for DM step detection.
+        dm_step_scope: Scope for DM step detection.
+        robust_enabled: Enable robust MAD-based outlier detection.
+        robust_z_thresh: Z threshold for robust outliers.
+        robust_scope: Scope for robust outlier detection.
+        add_orbital_phase: Add orbital-phase feature.
+        add_solar_elongation: Add solar-elongation feature.
+        add_elevation: Add elevation feature.
+        add_airmass: Add airmass feature.
+        add_parallactic_angle: Add parallactic-angle feature.
+        add_freq_bin: Add frequency-bin feature.
+        freq_bins: Number of frequency bins.
+        observatory_path: Observatory file path for alt/az features.
+        structure_mode: Feature-structure mode.
+        structure_detrend_features: Features to detrend against.
+        structure_test_features: Features to test for structure.
+        structure_nbins: Bin count for structure tests.
+        structure_min_per_bin: Minimum points per bin.
+        structure_p_thresh: p-value threshold for structure detection.
+        structure_circular_features: Features with circular topology.
+        structure_group_cols: Grouping columns for structure tests.
+        outlier_gate_enabled: Enable hard sigma gate for outliers.
+        outlier_gate_sigma: Sigma threshold for outlier gate.
+        outlier_gate_resid_col: Residual column for outlier gate.
+        outlier_gate_sigma_col: Sigma column for outlier gate.
+        event_instrument: Enable per-event membership diagnostics.
     """
 
     backend_col: str = "group"
@@ -115,6 +169,11 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
 
     Raises:
         RuntimeError: If pqc cannot be imported.
+
+    Examples:
+        Run PQC for a pulsar and write CSV output::
+
+            df = run_pqc_for_parfile(Path("J1234+5678.par"), Path("qc.csv"), PTAQCConfig())
     """
     parfile = Path(parfile)
     out_csv = Path(out_csv)
@@ -224,7 +283,17 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
 def run_pqc_for_parfile_subprocess(parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None) -> pd.DataFrame:
     """Run pqc in a subprocess to isolate segfaults from libstempo.
 
-    If the subprocess fails, raise RuntimeError with stderr for logging.
+    Args:
+        parfile: Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
+        out_csv: Output CSV path.
+        cfg: pqc configuration.
+        timeout: Optional timeout in seconds.
+
+    Returns:
+        QC dataframe read back from the CSV.
+
+    Raises:
+        RuntimeError: If the subprocess fails or does not write an output CSV.
     """
     parfile = Path(parfile)
     out_csv = Path(out_csv)
@@ -285,6 +354,11 @@ def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
 
     Returns:
         Summary dictionary with counts of TOAs and flagged items.
+
+    Examples:
+        Summarize PQC output::
+
+            summary = summarize_pqc(df)
     """
     out: Dict[str, Any] = {"n_toas": int(len(df))}
     if "bad" in df.columns:
