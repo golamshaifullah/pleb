@@ -10,6 +10,7 @@ EPTA Data Combination Pipeline
    quickstart
    concepts
    cli
+   ingest
    examples
    faq
 

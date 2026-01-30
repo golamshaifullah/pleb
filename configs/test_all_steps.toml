@@ -319,6 +319,12 @@ dpi = 150
 # max_covmat_params: max params in covmat heatmaps. allowed: int or empty. default: "" -> None
 max_covmat_params = ""
 
+# ---- Ingest mode (mapping-driven) ----
+# ingest_mapping_file: JSON mapping file path. allowed: string or empty. default: "" -> None
+ingest_mapping_file = ""
+# ingest_output_dir: output root for ingest. allowed: string or empty. default: "" -> None
+ingest_output_dir = ""
+
 # ---------------------------------------------------------------------
 # pqc internal defaults (not used by pleb directly; for documentation only)
 # ---------------------------------------------------------------------

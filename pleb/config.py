@@ -146,6 +146,8 @@ class PipelineConfig:
         binary_only_models: Limit binary analysis to model names.
         dpi: Plot resolution.
         max_covmat_params: Max params in covariance heatmaps.
+        ingest_mapping_file: JSON mapping file for ingest mode (optional).
+        ingest_output_dir: Output root directory for ingest mode (optional).
     """
 
     # Root of the data repository (contains pulsar folders like Jxxxx+xxxx/)
@@ -299,6 +301,10 @@ class PipelineConfig:
     dpi: int = 120
     max_covmat_params: Optional[int] = None
 
+    # ---- Ingest mode (mapping-driven) ----
+    ingest_mapping_file: Optional[Path] = None
+    ingest_output_dir: Optional[Path] = None
+
     def resolved(self) -> "PipelineConfig":
         """Return a copy with paths expanded and resolved.
 
@@ -357,6 +363,10 @@ class PipelineConfig:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
             c.fix_qc_results_dir = Path(c.fix_qc_results_dir).expanduser().resolve()
+        if c.ingest_mapping_file is not None:
+            c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
+        if c.ingest_output_dir is not None:
+            c.ingest_output_dir = Path(c.ingest_output_dir).expanduser().resolve()
         return c
 
     def to_dict(self) -> Dict[str, Any]:
@@ -384,6 +394,10 @@ class PipelineConfig:
             d["qc_report_dir"] = str(d["qc_report_dir"])
         if d.get("fix_qc_results_dir") is not None:
             d["fix_qc_results_dir"] = str(d["fix_qc_results_dir"])
+        if d.get("ingest_mapping_file") is not None:
+            d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
+        if d.get("ingest_output_dir") is not None:
+            d["ingest_output_dir"] = str(d["ingest_output_dir"])
         return d
 
     @staticmethod
@@ -540,6 +554,8 @@ class PipelineConfig:
 
             dpi=int(d.get("dpi", 120)),
             max_covmat_params=(None if d.get("max_covmat_params") in (None, "") else d.get("max_covmat_params")),
+            ingest_mapping_file=(Path(d["ingest_mapping_file"]) if d.get("ingest_mapping_file") else None),
+            ingest_output_dir=(Path(d["ingest_output_dir"]) if d.get("ingest_output_dir") else None),
         )
 
     @staticmethod

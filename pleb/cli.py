@@ -42,6 +42,7 @@ except Exception:  # pragma: no cover
 from tomlkit import document, table, dumps as toml_dumps
 
 from .config import PipelineConfig
+from .ingest import ingest_dataset, IngestError
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
@@ -159,6 +160,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write a binary/orbital analysis table derived from .par files.",
     )
+    # Ingest mode (mapping-driven)
+    p.add_argument("--ingest-mapping", dest="ingest_mapping_file", default=None, help="JSON mapping file to run ingest mode.")
+    p.add_argument("--ingest-output-dir", dest="ingest_output_dir", default=None, help="Output root directory for ingest mode.")
     return p
 
 
@@ -177,6 +181,16 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-feature-plots", action="store_true", help="Skip feature (e.g., orbital phase/solar) plots.")
     p.add_argument("--report-dir", type=Path, default=None, help="Output directory for report artifacts (default: <run-dir>/qc_report).")
     p.add_argument("--no-plots", action="store_true", help="Skip transient plot generation.")
+    return p
+
+
+def build_ingest_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for the ingest subcommand."""
+    p = argparse.ArgumentParser(description="Ingest pulsar timing files into canonical layout.")
+    p.add_argument("ingest", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument("--mapping", dest="ingest_mapping_file", required=False, help="JSON mapping file (required unless provided in config).")
+    p.add_argument("--output-dir", dest="ingest_output_dir", default=None, help="Output root directory (required if no config).")
+    p.add_argument("--config", default=None, help="Optional config file to supply output root defaults.")
     return p
 
 
@@ -200,6 +214,28 @@ def run_qc_report(argv: list[str] | None) -> int:
         no_feature_plots=bool(args.no_feature_plots),
     )
     print(str(report_dir))
+    return 0
+
+
+def run_ingest(argv: list[str] | None) -> int:
+    """Run mapping-driven ingest mode."""
+    args = build_ingest_parser().parse_args(argv)
+    cfg = None
+    if args.config:
+        cfg = PipelineConfig.load(args.config)
+    mapping_file = args.ingest_mapping_file or (cfg.ingest_mapping_file if cfg else None)
+    if not mapping_file:
+        raise SystemExit("Ingest mode requires --mapping or ingest_mapping_file in config.")
+    output_root = args.ingest_output_dir or (cfg.ingest_output_dir if cfg else None)
+    if output_root is None and cfg is not None:
+        output_root = Path(cfg.home_dir) / Path(cfg.dataset_name)
+    if output_root is None or str(output_root).strip() == "":
+        raise SystemExit("Ingest mode requires --output-dir (or ingest_output_dir/home_dir+dataset_name in config).")
+    try:
+        report = ingest_dataset(Path(mapping_file), Path(output_root))
+    except IngestError as e:
+        raise SystemExit(str(e)) from e
+    print(str(report["output_root"]))
     return 0
 
 def _parse_value_as_toml_literal(raw: str):
@@ -337,6 +373,8 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "qc-report":
         return run_qc_report(argv)
+    if argv and argv[0] == "ingest":
+        return run_ingest(argv)
     args = build_parser().parse_args(argv)
 
     cfg = PipelineConfig.load(args.config)
@@ -437,6 +475,19 @@ def main(argv=None) -> int:
 
     if args.binary_analysis:
         cfg.make_binary_analysis = True
+
+    if args.ingest_mapping_file:
+        cfg.ingest_mapping_file = Path(args.ingest_mapping_file)
+    if args.ingest_output_dir:
+        cfg.ingest_output_dir = Path(args.ingest_output_dir)
+
+    if getattr(cfg, "ingest_mapping_file", None):
+        mapping_arg = ["--mapping", str(cfg.ingest_mapping_file)]
+        output_arg = []
+        if getattr(cfg, "ingest_output_dir", None):
+            output_arg = ["--output-dir", str(cfg.ingest_output_dir)]
+        config_arg = ["--config", str(args.config)] if args.config else []
+        return run_ingest(mapping_arg + output_arg + config_arg)
 
     if args.param_scan:
         specs: list[str] = []
