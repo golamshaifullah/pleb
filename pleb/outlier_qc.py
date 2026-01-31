@@ -142,12 +142,20 @@ class PTAQCConfig:
     outlier_gate_sigma_col: str | None = None
     event_instrument: bool = False
 
-    # Solar-elongation based flagging
-    solar_cut_enabled: bool = False
-    solar_cut_deg: float | None = None
-    solar_cut_sigma: float = 3.0
-    solar_cut_nbins: int = 18
-    solar_cut_min_points: int = 20
+    # Solar-elongation events
+    solar_events_enabled: bool = False
+    solar_approach_max_deg: float = 30.0
+    solar_min_points_global: int = 30
+    solar_min_points_year: int = 10
+    solar_min_points_near_zero: int = 3
+    solar_tau_min_deg: float = 2.0
+    solar_tau_max_deg: float = 60.0
+    solar_member_eta: float = 1.0
+    solar_freq_dependence: bool = True
+    solar_freq_alpha_min: float = 0.0
+    solar_freq_alpha_max: float = 4.0
+    solar_freq_alpha_tol: float = 1e-3
+    solar_freq_alpha_max_iter: int = 64
 
     # Orbital-phase based flagging
     orbital_phase_cut_enabled: bool = False
@@ -308,11 +316,19 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         ),
     )
     solar_cfg = SolarCutConfig(
-        enabled=bool(cfg.solar_cut_enabled),
-        limit_deg=(float(cfg.solar_cut_deg) if cfg.solar_cut_deg is not None else None),
-        sigma_thresh=float(cfg.solar_cut_sigma),
-        nbins=int(cfg.solar_cut_nbins),
-        min_points=int(cfg.solar_cut_min_points),
+        enabled=bool(cfg.solar_events_enabled),
+        approach_max_deg=float(cfg.solar_approach_max_deg),
+        min_points_global=int(cfg.solar_min_points_global),
+        min_points_year=int(cfg.solar_min_points_year),
+        min_points_near_zero=int(cfg.solar_min_points_near_zero),
+        tau_min_deg=float(cfg.solar_tau_min_deg),
+        tau_max_deg=float(cfg.solar_tau_max_deg),
+        member_eta=float(cfg.solar_member_eta),
+        freq_dependence=bool(cfg.solar_freq_dependence),
+        freq_alpha_min=float(cfg.solar_freq_alpha_min),
+        freq_alpha_max=float(cfg.solar_freq_alpha_max),
+        freq_alpha_tol=float(cfg.solar_freq_alpha_tol),
+        freq_alpha_max_iter=int(cfg.solar_freq_alpha_max_iter),
     )
     orbital_cfg = OrbitalPhaseCutConfig(
         enabled=bool(cfg.orbital_phase_cut_enabled),
@@ -470,8 +486,8 @@ def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
                 df["transient_id"].fillna(-1).astype(int) != -1, "transient_id"
             ].nunique()
         )
-    if "solar_bad" in df.columns:
-        out["n_solar_bad"] = int(df["solar_bad"].fillna(False).sum())
+    if "solar_event_member" in df.columns:
+        out["n_solar_events"] = int(df["solar_event_member"].fillna(False).sum())
     if "orbital_phase_bad" in df.columns:
         out["n_orbital_phase_bad"] = int(df["orbital_phase_bad"].fillna(False).sum())
     return out

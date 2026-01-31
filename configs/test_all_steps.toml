@@ -248,6 +248,41 @@ pqc_outlier_gate_sigma_col = ""
 # pqc_event_instrument: include per-event membership diagnostics. allowed: true/false. default: false
 #   If true, pqc adds per-event membership diagnostics to outputs.
 pqc_event_instrument = true
+
+# pqc_solar_events_enabled: enable solar event detection. allowed: true/false. default: false
+#   Detect exponential solar-elongation events (global).
+pqc_solar_events_enabled = false
+# pqc_solar_approach_max_deg: approach region max elongation (deg). allowed: float. default: 30.0
+pqc_solar_approach_max_deg = 30.0
+# pqc_solar_min_points_global: min points for global fit. allowed: int. default: 30
+pqc_solar_min_points_global = 30
+# pqc_solar_min_points_year: min points for per-year fit. allowed: int. default: 10
+pqc_solar_min_points_year = 10
+# pqc_solar_min_points_near_zero: min points in approach region. allowed: int. default: 3
+pqc_solar_min_points_near_zero = 3
+# pqc_solar_tau_min_deg: min elongation scale (deg). allowed: float. default: 2.0
+pqc_solar_tau_min_deg = 2.0
+# pqc_solar_tau_max_deg: max elongation scale (deg). allowed: float. default: 60.0
+pqc_solar_tau_max_deg = 60.0
+# pqc_solar_member_eta: membership SNR threshold. allowed: float. default: 1.0
+pqc_solar_member_eta = 1.0
+# pqc_solar_freq_dependence: fit 1/f^alpha dependence. allowed: true/false. default: true
+pqc_solar_freq_dependence = true
+# pqc_solar_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
+pqc_solar_freq_alpha_min = 0.0
+# pqc_solar_freq_alpha_max: upper bound for alpha. allowed: float. default: 4.0
+pqc_solar_freq_alpha_max = 4.0
+# pqc_solar_freq_alpha_tol: optimization tolerance for alpha. allowed: float. default: 1e-3
+pqc_solar_freq_alpha_tol = 1e-3
+# pqc_solar_freq_alpha_max_iter: max iterations for alpha optimizer. allowed: int. default: 64
+pqc_solar_freq_alpha_max_iter = 64
+
+# Deprecated solar cut fields (kept for backward compatibility)
+# pqc_solar_cut_enabled: enable solar-elongation cutoff flagging. allowed: true/false. default: false
+# pqc_solar_cut_deg: fixed solar cutoff angle (deg). allowed: float or empty. default: "" -> None (auto)
+# pqc_solar_cut_sigma: sigma threshold for auto cutoff. allowed: float. default: 3.0
+# pqc_solar_cut_nbins: bins for auto cutoff. allowed: int. default: 18
+# pqc_solar_cut_min_points: min points for auto cutoff. allowed: int. default: 20
 # pqc_solar_cut_enabled: enable solar-elongation cutoff flagging. allowed: true/false. default: false
 #   When enabled, pqc adds solar_bad and a cutoff value used for marking TOAs.
 pqc_solar_cut_enabled = false
