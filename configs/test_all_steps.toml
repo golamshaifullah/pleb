@@ -311,6 +311,30 @@ pqc_orbital_phase_cut_nbins = 18
 # pqc_orbital_phase_cut_min_points: min points for auto cutoff. allowed: int. default: 20
 pqc_orbital_phase_cut_min_points = 20
 
+
+# pqc_eclipse_events_enabled: enable eclipse event detection. allowed: true/false. default: false
+pqc_eclipse_events_enabled = false
+# pqc_eclipse_center_phase: eclipse center phase (0..1). allowed: float. default: 0.25
+pqc_eclipse_center_phase = 0.25
+# pqc_eclipse_min_points: min points for global fit. allowed: int. default: 30
+pqc_eclipse_min_points = 30
+# pqc_eclipse_width_min: min eclipse width in phase. allowed: float. default: 0.01
+pqc_eclipse_width_min = 0.01
+# pqc_eclipse_width_max: max eclipse width in phase. allowed: float. default: 0.5
+pqc_eclipse_width_max = 0.5
+# pqc_eclipse_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
+pqc_eclipse_member_eta = 1.0
+# pqc_eclipse_freq_dependence: fit 1/f^alpha dependence. allowed: true/false. default: true
+pqc_eclipse_freq_dependence = true
+# pqc_eclipse_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
+pqc_eclipse_freq_alpha_min = 0.0
+# pqc_eclipse_freq_alpha_max: upper bound for alpha. allowed: float. default: 4.0
+pqc_eclipse_freq_alpha_max = 4.0
+# pqc_eclipse_freq_alpha_tol: optimization tolerance for alpha. allowed: float. default: 1e-3
+pqc_eclipse_freq_alpha_tol = 1e-3
+# pqc_eclipse_freq_alpha_max_iter: max iterations for alpha optimizer. allowed: int. default: 64
+pqc_eclipse_freq_alpha_max_iter = 64
+
 # ---- Optional QC report artifacts ----
 # qc_report: generate QC report artifacts. allowed: true/false. default: false
 #   Creates plots and summary tables from pqc outputs.

@@ -121,6 +121,17 @@ class PipelineConfig:
         pqc_orbital_phase_cut_sigma: Sigma threshold for automatic cutoff estimation.
         pqc_orbital_phase_cut_nbins: Number of bins for cutoff estimation.
         pqc_orbital_phase_cut_min_points: Minimum points for cutoff estimation.
+        pqc_eclipse_events_enabled: Enable eclipse event detection.
+        pqc_eclipse_center_phase: Eclipse center phase (0..1).
+        pqc_eclipse_min_points: Min points for global fit.
+        pqc_eclipse_width_min: Min eclipse width in phase.
+        pqc_eclipse_width_max: Max eclipse width in phase.
+        pqc_eclipse_member_eta: Per-point membership SNR threshold.
+        pqc_eclipse_freq_dependence: Fit 1/f^alpha dependence.
+        pqc_eclipse_freq_alpha_min: Lower bound for alpha.
+        pqc_eclipse_freq_alpha_max: Upper bound for alpha.
+        pqc_eclipse_freq_alpha_tol: Optimization tolerance for alpha.
+        pqc_eclipse_freq_alpha_max_iter: Max iterations for alpha optimizer.
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -618,6 +629,17 @@ class PipelineConfig:
             pqc_orbital_phase_cut_min_points=int(
                 d.get("pqc_orbital_phase_cut_min_points", 20)
             ),
+            pqc_eclipse_events_enabled=bool(d.get("pqc_eclipse_events_enabled", False)),
+            pqc_eclipse_center_phase=float(d.get("pqc_eclipse_center_phase", 0.25)),
+            pqc_eclipse_min_points=int(d.get("pqc_eclipse_min_points", 30)),
+            pqc_eclipse_width_min=float(d.get("pqc_eclipse_width_min", 0.01)),
+            pqc_eclipse_width_max=float(d.get("pqc_eclipse_width_max", 0.5)),
+            pqc_eclipse_member_eta=float(d.get("pqc_eclipse_member_eta", 1.0)),
+            pqc_eclipse_freq_dependence=bool(d.get("pqc_eclipse_freq_dependence", True)),
+            pqc_eclipse_freq_alpha_min=float(d.get("pqc_eclipse_freq_alpha_min", 0.0)),
+            pqc_eclipse_freq_alpha_max=float(d.get("pqc_eclipse_freq_alpha_max", 4.0)),
+            pqc_eclipse_freq_alpha_tol=float(d.get("pqc_eclipse_freq_alpha_tol", 1e-3)),
+            pqc_eclipse_freq_alpha_max_iter=int(d.get("pqc_eclipse_freq_alpha_max_iter", 64)),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),

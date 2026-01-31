@@ -156,7 +156,6 @@ class PTAQCConfig:
     solar_freq_alpha_max: float = 4.0
     solar_freq_alpha_tol: float = 1e-3
     solar_freq_alpha_max_iter: int = 64
-
     # Orbital-phase based flagging
     orbital_phase_cut_enabled: bool = False
     orbital_phase_cut_center: float = 0.25
@@ -164,6 +163,19 @@ class PTAQCConfig:
     orbital_phase_cut_sigma: float = 3.0
     orbital_phase_cut_nbins: int = 18
     orbital_phase_cut_min_points: int = 20
+
+    # Eclipse events
+    eclipse_events_enabled: bool = False
+    eclipse_center_phase: float = 0.25
+    eclipse_min_points: int = 30
+    eclipse_width_min: float = 0.01
+    eclipse_width_max: float = 0.5
+    eclipse_member_eta: float = 1.0
+    eclipse_freq_dependence: bool = True
+    eclipse_freq_alpha_min: float = 0.0
+    eclipse_freq_alpha_max: float = 4.0
+    eclipse_freq_alpha_tol: float = 1e-3
+    eclipse_freq_alpha_max_iter: int = 64
 
 
 @contextmanager
@@ -215,6 +227,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             OutlierGateConfig,
             SolarCutConfig,
             OrbitalPhaseCutConfig,
+            EclipseConfig,
         )
 
         # Sanity check: ensure pqc config classes are importable
@@ -229,6 +242,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             OutlierGateConfig,
             SolarCutConfig,
             OrbitalPhaseCutConfig,
+            EclipseConfig,
         )
         logger.info("pqc config classes loaded: %s", ",".join([c.__name__ for c in _]))
     except Exception as e:  # pragma: no cover
@@ -340,6 +354,19 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         nbins=int(cfg.orbital_phase_cut_nbins),
         min_points=int(cfg.orbital_phase_cut_min_points),
     )
+    eclipse_cfg = EclipseConfig(
+        enabled=bool(cfg.eclipse_events_enabled),
+        center_phase=float(cfg.eclipse_center_phase),
+        min_points=int(cfg.eclipse_min_points),
+        width_min=float(cfg.eclipse_width_min),
+        width_max=float(cfg.eclipse_width_max),
+        member_eta=float(cfg.eclipse_member_eta),
+        freq_dependence=bool(cfg.eclipse_freq_dependence),
+        freq_alpha_min=float(cfg.eclipse_freq_alpha_min),
+        freq_alpha_max=float(cfg.eclipse_freq_alpha_max),
+        freq_alpha_tol=float(cfg.eclipse_freq_alpha_tol),
+        freq_alpha_max_iter=int(cfg.eclipse_freq_alpha_max_iter),
+    )
 
     # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
     with _pushd(out_csv.parent):
@@ -357,6 +384,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             gate_cfg=gate_cfg,
             solar_cfg=solar_cfg,
             orbital_cfg=orbital_cfg,
+            eclipse_cfg=eclipse_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
         )
 
