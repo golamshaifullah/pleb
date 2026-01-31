@@ -727,14 +727,44 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         cfg, "pqc_outlier_gate_sigma_col", None
                     ),
                     event_instrument=bool(getattr(cfg, "pqc_event_instrument", False)),
-                    solar_cut_enabled=bool(
-                        getattr(cfg, "pqc_solar_cut_enabled", False)
+                    solar_events_enabled=bool(
+                        getattr(cfg, "pqc_solar_events_enabled", False)
                     ),
-                    solar_cut_deg=getattr(cfg, "pqc_solar_cut_deg", None),
-                    solar_cut_sigma=float(getattr(cfg, "pqc_solar_cut_sigma", 3.0)),
-                    solar_cut_nbins=int(getattr(cfg, "pqc_solar_cut_nbins", 18)),
-                    solar_cut_min_points=int(
-                        getattr(cfg, "pqc_solar_cut_min_points", 20)
+                    solar_approach_max_deg=float(
+                        getattr(cfg, "pqc_solar_approach_max_deg", 30.0)
+                    ),
+                    solar_min_points_global=int(
+                        getattr(cfg, "pqc_solar_min_points_global", 30)
+                    ),
+                    solar_min_points_year=int(
+                        getattr(cfg, "pqc_solar_min_points_year", 10)
+                    ),
+                    solar_min_points_near_zero=int(
+                        getattr(cfg, "pqc_solar_min_points_near_zero", 3)
+                    ),
+                    solar_tau_min_deg=float(
+                        getattr(cfg, "pqc_solar_tau_min_deg", 2.0)
+                    ),
+                    solar_tau_max_deg=float(
+                        getattr(cfg, "pqc_solar_tau_max_deg", 60.0)
+                    ),
+                    solar_member_eta=float(
+                        getattr(cfg, "pqc_solar_member_eta", 1.0)
+                    ),
+                    solar_freq_dependence=bool(
+                        getattr(cfg, "pqc_solar_freq_dependence", True)
+                    ),
+                    solar_freq_alpha_min=float(
+                        getattr(cfg, "pqc_solar_freq_alpha_min", 0.0)
+                    ),
+                    solar_freq_alpha_max=float(
+                        getattr(cfg, "pqc_solar_freq_alpha_max", 4.0)
+                    ),
+                    solar_freq_alpha_tol=float(
+                        getattr(cfg, "pqc_solar_freq_alpha_tol", 1e-3)
+                    ),
+                    solar_freq_alpha_max_iter=int(
+                        getattr(cfg, "pqc_solar_freq_alpha_max_iter", 64)
                     ),
                     orbital_phase_cut_enabled=bool(
                         getattr(cfg, "pqc_orbital_phase_cut_enabled", False)

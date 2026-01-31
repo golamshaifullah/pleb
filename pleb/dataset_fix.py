@@ -627,8 +627,8 @@ def _collect_qc_mjds(
         standard |= df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
 
     solar = np.zeros(len(df), dtype=bool)
-    if cfg.qc_remove_solar and "solar_bad" in df.columns:
-        solar |= df["solar_bad"].fillna(False).astype(bool).to_numpy()
+    if cfg.qc_remove_solar and "solar_event_member" in df.columns:
+        solar |= df["solar_event_member"].fillna(False).astype(bool).to_numpy()
 
     orbital = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_orbital_phase and "orbital_phase_bad" in df.columns:

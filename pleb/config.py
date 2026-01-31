@@ -102,11 +102,19 @@ class PipelineConfig:
         pqc_outlier_gate_resid_col: Residual column to gate on (optional).
         pqc_outlier_gate_sigma_col: Sigma column to gate on (optional).
         pqc_event_instrument: Enable per-event membership diagnostics.
-        pqc_solar_cut_enabled: Enable solar-elongation based flagging.
-        pqc_solar_cut_deg: Fixed solar-elongation cutoff (deg), or None for auto.
-        pqc_solar_cut_sigma: Sigma threshold for automatic cutoff estimation.
-        pqc_solar_cut_nbins: Number of bins for cutoff estimation.
-        pqc_solar_cut_min_points: Minimum points for cutoff estimation.
+        pqc_solar_events_enabled: Enable solar event detection.
+        pqc_solar_approach_max_deg: Max elongation for solar approach region.
+        pqc_solar_min_points_global: Min points for global fit.
+        pqc_solar_min_points_year: Min points for per-year fit.
+        pqc_solar_min_points_near_zero: Min points near zero elongation.
+        pqc_solar_tau_min_deg: Min elongation scale for exponential.
+        pqc_solar_tau_max_deg: Max elongation scale for exponential.
+        pqc_solar_member_eta: Per-point membership SNR threshold.
+        pqc_solar_freq_dependence: Fit 1/f^alpha dependence.
+        pqc_solar_freq_alpha_min: Lower bound for alpha.
+        pqc_solar_freq_alpha_max: Upper bound for alpha.
+        pqc_solar_freq_alpha_tol: Optimization tolerance for alpha.
+        pqc_solar_freq_alpha_max_iter: Max iterations for alpha optimizer.
         pqc_orbital_phase_cut_enabled: Enable orbital-phase based flagging.
         pqc_orbital_phase_cut_center: Eclipse center phase (0..1).
         pqc_orbital_phase_cut: Fixed orbital-phase cutoff (0..0.5), or None for auto.
@@ -265,11 +273,19 @@ class PipelineConfig:
     pqc_outlier_gate_resid_col: Optional[str] = None
     pqc_outlier_gate_sigma_col: Optional[str] = None
     pqc_event_instrument: bool = False
-    pqc_solar_cut_enabled: bool = False
-    pqc_solar_cut_deg: Optional[float] = None
-    pqc_solar_cut_sigma: float = 3.0
-    pqc_solar_cut_nbins: int = 18
-    pqc_solar_cut_min_points: int = 20
+    pqc_solar_events_enabled: bool = False
+    pqc_solar_approach_max_deg: float = 30.0
+    pqc_solar_min_points_global: int = 30
+    pqc_solar_min_points_year: int = 10
+    pqc_solar_min_points_near_zero: int = 3
+    pqc_solar_tau_min_deg: float = 2.0
+    pqc_solar_tau_max_deg: float = 60.0
+    pqc_solar_member_eta: float = 1.0
+    pqc_solar_freq_dependence: bool = True
+    pqc_solar_freq_alpha_min: float = 0.0
+    pqc_solar_freq_alpha_max: float = 4.0
+    pqc_solar_freq_alpha_tol: float = 1e-3
+    pqc_solar_freq_alpha_max_iter: int = 64
     pqc_orbital_phase_cut_enabled: bool = False
     pqc_orbital_phase_cut_center: float = 0.25
     pqc_orbital_phase_cut: Optional[float] = None
@@ -571,15 +587,19 @@ class PipelineConfig:
             pqc_outlier_gate_resid_col=opt_str("pqc_outlier_gate_resid_col"),
             pqc_outlier_gate_sigma_col=opt_str("pqc_outlier_gate_sigma_col"),
             pqc_event_instrument=bool(d.get("pqc_event_instrument", False)),
-            pqc_solar_cut_enabled=bool(d.get("pqc_solar_cut_enabled", False)),
-            pqc_solar_cut_deg=(
-                None
-                if d.get("pqc_solar_cut_deg") in (None, "")
-                else float(d.get("pqc_solar_cut_deg"))
-            ),
-            pqc_solar_cut_sigma=float(d.get("pqc_solar_cut_sigma", 3.0)),
-            pqc_solar_cut_nbins=int(d.get("pqc_solar_cut_nbins", 18)),
-            pqc_solar_cut_min_points=int(d.get("pqc_solar_cut_min_points", 20)),
+            pqc_solar_events_enabled=bool(d.get("pqc_solar_events_enabled", False)),
+            pqc_solar_approach_max_deg=float(d.get("pqc_solar_approach_max_deg", 30.0)),
+            pqc_solar_min_points_global=int(d.get("pqc_solar_min_points_global", 30)),
+            pqc_solar_min_points_year=int(d.get("pqc_solar_min_points_year", 10)),
+            pqc_solar_min_points_near_zero=int(d.get("pqc_solar_min_points_near_zero", 3)),
+            pqc_solar_tau_min_deg=float(d.get("pqc_solar_tau_min_deg", 2.0)),
+            pqc_solar_tau_max_deg=float(d.get("pqc_solar_tau_max_deg", 60.0)),
+            pqc_solar_member_eta=float(d.get("pqc_solar_member_eta", 1.0)),
+            pqc_solar_freq_dependence=bool(d.get("pqc_solar_freq_dependence", True)),
+            pqc_solar_freq_alpha_min=float(d.get("pqc_solar_freq_alpha_min", 0.0)),
+            pqc_solar_freq_alpha_max=float(d.get("pqc_solar_freq_alpha_max", 4.0)),
+            pqc_solar_freq_alpha_tol=float(d.get("pqc_solar_freq_alpha_tol", 1e-3)),
+            pqc_solar_freq_alpha_max_iter=int(d.get("pqc_solar_freq_alpha_max_iter", 64)),
             pqc_orbital_phase_cut_enabled=bool(
                 d.get("pqc_orbital_phase_cut_enabled", False)
             ),
