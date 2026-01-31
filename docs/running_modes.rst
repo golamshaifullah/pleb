@@ -30,54 +30,66 @@ If you want a new entry point (for example, a minimal QC-only CLI), add a
 workflow step or wrap the Python API in your own script.
 
 
-Mode 1: Direct CLI
------------------
+Mode 1: Direct CLI (no settings file)
+-------------------------------------
 
-The CLI executes a single pipeline run (optionally with QC or param-scan),
-using a settings file plus any inline overrides.
+You can run the CLI without a settings file by supplying the core parameters
+via flags. This is best for quick, one-off runs.
 
-Minimal run:
-
-.. code-block:: bash
-
-   pleb --config configs/settings/test_all_steps.toml
-
-Override selected values:
+Minimal run (CLI-only):
 
 .. code-block:: bash
 
-   pleb --config configs/settings/test_all_steps.toml \
-     --set results_dir="results" \
-     --set jobs=8 \
-     --set pulsars='["J1713+0747","J1909-3744"]'
+   pleb \
+     --results-dir /work/git_projects/data-eptadr3/results \
+     --outdir-name run_cli_only \
+     --set home_dir="/work/git_projects/data-eptadr3" \
+     --set dataset_name="DR3full" \
+     --set pulsars='["J1713+0747","J1909-3744"]' \
+     --set branches='["main"]'
 
-Run QC during the pipeline:
-
-.. code-block:: bash
-
-   pleb --config configs/settings/test_all_steps.toml --qc
-
-Run a parameter scan (separate execution path):
+Enable QC and change options:
 
 .. code-block:: bash
 
-   pleb --config configs/settings/test_all_steps.toml \
+   pleb \
+     --results-dir /work/git_projects/data-eptadr3/results \
+     --outdir-name run_cli_qc \
+     --set home_dir="/work/git_projects/data-eptadr3" \
+     --set dataset_name="DR3full" \
+     --set pulsars='["J1713+0747"]' \
+     --set branches='["main"]' \
+     --qc \
+     --qc-structure-mode both \
+     --qc-outlier-gate
+
+Parameter scan (CLI-only):
+
+.. code-block:: bash
+
+   pleb \
+     --results-dir /work/git_projects/data-eptadr3/results \
+     --outdir-name run_cli_scan \
+     --set home_dir="/work/git_projects/data-eptadr3" \
+     --set dataset_name="DR3full" \
+     --set pulsars='["J1713+0747"]' \
+     --set branches='["main"]' \
      --param-scan --scan-typical
 
-Generate a QC report from an existing run directory:
+Generate a QC report (CLI-only):
 
 .. code-block:: bash
 
    pleb qc-report --run-dir results/run_2024-01-01
 
-Run mapping-driven ingest (separate mode):
+Run mapping-driven ingest (CLI-only):
 
 .. code-block:: bash
 
    pleb ingest --mapping configs/settings/system_flag_mapping.example.json \
      --output-dir /data/pulsars
 
-Compatibility notes (CLI):
+Compatibility notes (CLI-only):
 
 - ``--param-scan`` runs only the parameter scan; it does not run the full
   pipeline in the same invocation.
@@ -86,8 +98,8 @@ Compatibility notes (CLI):
 - ``pleb ingest`` is a standalone mode and does not run the pipeline.
 
 
-Mode 2: Settings files
-----------------------
+Mode 2: CLI with a settings file
+--------------------------------
 
 Settings files (TOML or JSON) are the primary way to configure runs. They map
 directly to :class:`pleb.config.PipelineConfig` and can be overridden with
@@ -143,6 +155,10 @@ Override in place:
    pleb --config configs/settings/qc.toml \
      --set outdir_name="run_qc_debug" \
      --set pqc_outlier_gate_sigma=4.5
+
+You can also take any CLI-only example from Mode 1 and move those values into
+the settings file, then keep only the high-level CLI switches (for example
+``--qc`` or ``--param-scan``).
 
 
 Mode 3: Workflow files
