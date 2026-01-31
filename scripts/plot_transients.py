@@ -106,6 +106,8 @@ def main() -> None:
             if "robust_outlier" in sub.columns:
                 bad_point |= sub["robust_outlier"].fillna(False).astype(bool).to_numpy()
 
+        bad_point = bad_point[mask]
+
         if np.any(bad_point):
             plt.plot(
                 t[bad_point],

@@ -344,6 +344,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             drop_unmatched=bool(cfg.drop_unmatched),
         )
 
+    _assert_timfile_metadata(df, source=str(parfile))
     df.to_csv(out_csv, index=False)
     return df
 
@@ -413,7 +414,32 @@ def run_pqc_for_parfile_subprocess(
 
     string_cols = ["be", "fe", "f", "tmplt", "flag", "B", "g", "h"]
     dtype_map = {c: "string" for c in string_cols}
-    return pd.read_csv(out_csv, dtype=dtype_map)
+    df = pd.read_csv(out_csv, dtype=dtype_map)
+    _assert_timfile_metadata(df, source=str(parfile))
+    return df
+
+
+def _assert_timfile_metadata(df: pd.DataFrame, source: str) -> None:
+    """Ensure every row has timfile metadata."""
+    if "_timfile" in df.columns:
+        missing = int(df["_timfile"].isna().sum())
+        if missing:
+            sample = df.loc[df["_timfile"].isna(), ["mjd", "freq"]].head(5)
+            raise RuntimeError(
+                f"{source}: {missing} rows missing _timfile metadata. Sample:\n"
+                f"{sample.to_string(index=False)}"
+            )
+        return
+    if "filename" in df.columns:
+        missing = int(df["filename"].isna().sum())
+        if missing:
+            sample = df.loc[df["filename"].isna(), ["mjd", "freq"]].head(5)
+            raise RuntimeError(
+                f"{source}: {missing} rows missing filename metadata. Sample:\n"
+                f"{sample.to_string(index=False)}"
+            )
+        return
+    raise RuntimeError(f"{source}: no timfile metadata columns found (_timfile/filename).")
 
 
 def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:

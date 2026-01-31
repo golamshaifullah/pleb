@@ -19,7 +19,9 @@
 # - If fix_qc_results_dir is empty during fix_apply, it uses <results>/qc/<fix_branch_name>.
 #
 # pqc internal defaults not exposed by pleb (from /work/git_projects/pqc/src/pqc/config.py):
-# - TransientConfig: suppress_overlap = true, member_eta = 1.0, instrument = false, scope = "backend"
+# - TransientConfig: suppress_overlap = true, member_eta = 1.0, instrument = false, scope = "global"
+# - ExpDipConfig: tau_rec_days = 30.0, window_mult = 5.0, min_points = 6, delta_chi2_thresh = 25.0,
+#   suppress_overlap = true, member_eta = 1.0, scope = "global"
 # - StepConfig: member_eta = 1.0, member_tmax_days = 3650.0, instrument = false
 # - RobustOutlierConfig: scope = "global" (pleb overrides with pqc_robust_scope)
 # - PreprocConfig: detrend_features = (), rescale_feature = "", condition_on = ("group",),
@@ -82,7 +84,7 @@ pqc_backend_col = "sys"
 pqc_drop_unmatched = false
 # pqc_merge_tol_seconds: tim/TOA match tolerance (sec). allowed: float. default: 2.0
 #   Matching tolerance between TOAs and timfile metadata.
-pqc_merge_tol_seconds = 2.0
+pqc_merge_tol_seconds = 10.0
 # pqc_tau_corr_minutes: OU corr timescale for bad-measurement detection (min). allowed: float. default: 30.0
 #   Used in OU model for identifying isolated bad measurements.
 pqc_tau_corr_minutes = 30.0
@@ -104,6 +106,41 @@ pqc_min_points = 6
 # pqc_delta_chi2_thresh: transient Δχ² threshold. allowed: float. default: 25.0
 #   Threshold for declaring a transient.
 pqc_delta_chi2_thresh = 10000.0
+
+
+# pqc_dip_tau_rec_days: exponential dip recovery timescale (days). allowed: float. default: 30.0
+#   Controls recovery of dip model in time.
+pqc_dip_tau_rec_days = 30.0
+# pqc_dip_window_mult: dip scan window multiplier. allowed: float. default: 5.0
+#   Search window width as a multiple of tau_rec.
+pqc_dip_window_mult = 5.0
+# pqc_dip_min_points: min points per dip window. allowed: int. default: 6
+#   Minimum number of points required to test a dip window.
+pqc_dip_min_points = 6
+# pqc_dip_delta_chi2_thresh: dip Δχ² threshold. allowed: float. default: 25.0
+#   Threshold for declaring a dip event.
+pqc_dip_delta_chi2_thresh = 25.0
+# pqc_dip_member_eta: dip membership SNR threshold. allowed: float. default: 1.0
+#   Per-point SNR threshold for dip membership.
+pqc_dip_member_eta = 1.0
+
+# pqc_dip_freq_dependence: fit 1/f^alpha index. allowed: true/false. default: true
+#   If false, dips are fit directly in residual units.
+pqc_dip_freq_dependence = true
+# pqc_dip_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
+pqc_dip_freq_alpha_min = 0.0
+# pqc_dip_freq_alpha_max: upper bound for alpha. allowed: float. default: 4.0
+pqc_dip_freq_alpha_max = 4.0
+
+# pqc_dip_freq_alpha_tol: optimization tolerance for alpha. allowed: float. default: 1e-3
+pqc_dip_freq_alpha_tol = 1e-3
+# pqc_dip_freq_alpha_max_iter: max iterations for alpha optimizer. allowed: int. default: 64
+pqc_dip_freq_alpha_max_iter = 64
+
+
+# pqc_dip_scope: scope for dip detection. allowed: "backend"|"global"|"both". default: "backend"
+#   Where to look for dips: within backend, across all data, or both.
+pqc_dip_scope = "global"
 
 # Step and DM-step detection
 # pqc_step_enabled: enable step detection. allowed: true/false. default: true
@@ -483,7 +520,7 @@ ingest_output_dir = ""
 transient_suppress_overlap = true
 transient_member_eta = 1.0
 transient_instrument = false
-transient_scope = "backend"
+transient_scope = "global"
 
 # StepConfig defaults
 step_member_eta = 1.0
