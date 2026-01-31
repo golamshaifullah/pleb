@@ -1,0 +1,18 @@
+{
+  "backend_allowlist": ["P200", "P217", "CPSR2", "NUPPI", "NUXPI"],
+  "telescope_allowlist": ["EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR"],
+  "backend_aliases": {
+    "NUPPI1": "NUPPI",
+    "NUPPI2": "NUPPI"
+  },
+  "telescope_aliases": {
+    "EF": "EFF"
+  },
+  "backend_by_timfile": {
+    "EFF.P200.1380.tim": "P200",
+    "NRT.NUPPI.1484.tim": "NUPPI"
+  },
+  "telescope_by_timfile": {
+    "pulsar_X.tim": "EFF"
+  }
+}

@@ -31,21 +31,19 @@ from pathlib import Path
 
 import os
 import sys
-import json
 import tempfile
-
-try:
-    import tomllib  # py3.11+
-except Exception:  # pragma: no cover
-    import tomli as tomllib  # type: ignore
-
-from tomlkit import document, table, dumps as toml_dumps
 
 from .config import PipelineConfig
 from .ingest import ingest_dataset, IngestError
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
+from .config_io import (
+    _dump_toml_no_nulls,
+    _load_config_dict,
+    _parse_value_as_toml_literal,
+    _set_dotted_key,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -421,6 +419,19 @@ def build_ingest_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_workflow_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for the workflow subcommand."""
+    p = argparse.ArgumentParser(description="Run a multi-step workflow file.")
+    p.add_argument("workflow", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument(
+        "--file",
+        dest="workflow_file",
+        required=True,
+        help="Workflow file (.toml or .json).",
+    )
+    return p
+
+
 def run_qc_report(argv: list[str] | None) -> int:
     """Generate QC diagnostics and plots for PQC CSVs in a run directory.
 
@@ -443,6 +454,17 @@ def run_qc_report(argv: list[str] | None) -> int:
         no_feature_plots=bool(args.no_feature_plots),
     )
     print(str(report_dir))
+    return 0
+
+
+def run_workflow(argv: list[str] | None) -> int:
+    """Run a workflow file and print the last run directory."""
+    args = build_workflow_parser().parse_args(argv)
+    from .workflow import run_workflow as _run
+
+    ctx = _run(Path(args.workflow_file))
+    if ctx.last_run_dir:
+        print(str(ctx.last_run_dir))
     return 0
 
 
@@ -474,27 +496,6 @@ def run_ingest(argv: list[str] | None) -> int:
     return 0
 
 
-def _parse_value_as_toml_literal(raw: str):
-    """Parse a TOML literal from a CLI override.
-
-    Args:
-        raw: Raw string value from ``--set KEY=VALUE``.
-
-    Returns:
-        Parsed TOML value when possible; otherwise the raw string.
-    """
-    raw = raw.strip()
-    if raw == "":
-        return ""
-    try:
-        # tomllib only parses full TOML docs; wrap as a key/value
-        doc = tomllib.loads(f"v = {raw}")
-        return doc["v"]
-    except Exception:
-        # fallback string (strip surrounding quotes if user provided them badly)
-        return raw
-
-
 def _parse_csv_list(raw: str | None) -> list[str] | None:
     """Parse a comma-separated list string.
 
@@ -509,91 +510,6 @@ def _parse_csv_list(raw: str | None) -> list[str] | None:
     items = [p.strip() for p in str(raw).split(",")]
     items = [p for p in items if p]
     return items or None
-
-
-def _set_dotted_key(d: dict, key: str, value):
-    """Set a nested value in a dict using dotted-key notation.
-
-    Args:
-        d: Dictionary to update in-place.
-        key: Dotted key path (e.g., ``"fix.required_tim_flags.-pta"``).
-        value: Value to set.
-    """
-    parts = [p for p in key.split(".") if p]
-    cur = d
-    for p in parts[:-1]:
-        if p not in cur or not isinstance(cur[p], dict):
-            cur[p] = {}
-        cur = cur[p]
-    cur[parts[-1]] = value
-
-
-def _load_config_dict(config_arg: str | None) -> dict:
-    """Load a raw config dictionary from a file or stdin.
-
-    Args:
-        config_arg: Path to a config file or "-" to read from stdin.
-
-    Returns:
-        The raw configuration dictionary (top-level keys).
-
-    Raises:
-        FileNotFoundError: If the specified config file does not exist.
-        ValueError: If the file extension is unsupported.
-    """
-    if not config_arg:
-        return {}
-    if config_arg == "-":
-        text = sys.stdin.read()
-        text = text.strip()
-        if not text:
-            return {}
-        # Assume TOML if it doesn't look like JSON
-        if text.lstrip().startswith("{") or text.lstrip().startswith("["):
-            return json.loads(text)
-        return tomllib.loads(text)
-
-    path = Path(config_arg).expanduser().resolve()
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-    suf = path.suffix.lower()
-    text = path.read_text(encoding="utf-8")
-    if suf == ".json":
-        return json.loads(text)
-    if suf == ".toml":
-        return tomllib.loads(text)
-    raise ValueError("Config must be .toml or .json")
-
-
-def _dump_toml_no_nulls(data: dict) -> str:
-    """Serialize a dict to TOML, omitting ``None`` values.
-
-    Args:
-        data: Data to serialize.
-
-    Returns:
-        TOML string with ``None`` values omitted.
-    """
-
-    def to_tomlkit(obj):
-        if isinstance(obj, dict):
-            t = table()
-            for k, v in obj.items():
-                if v is None:
-                    continue
-                t[k] = to_tomlkit(v)
-            return t
-        if isinstance(obj, list):
-            return [to_tomlkit(x) for x in obj]
-        return obj
-
-    doc = document()
-    for k in sorted(data.keys()):
-        v = data[k]
-        if v is None:
-            continue
-        doc[k] = to_tomlkit(v)
-    return toml_dumps(doc)
 
 
 def main(argv=None) -> int:
@@ -613,6 +529,8 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "qc-report":
         return run_qc_report(argv)
+    if argv and argv[0] == "workflow":
+        return run_workflow(argv)
     if argv and argv[0] == "ingest":
         return run_ingest(argv)
     args = build_parser().parse_args(argv)

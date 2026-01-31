@@ -128,6 +128,8 @@ def main() -> None:
             pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy()
             >= 0
         )
+    if "exp_dip_member" in df.columns:
+        event_masks["exp_dip"] = df["exp_dip_member"].fillna(False).astype(bool).to_numpy()
     if "step_id" in df.columns:
         event_masks["step"] = (
             pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
@@ -149,6 +151,14 @@ def main() -> None:
             .fillna(-1)
             .to_numpy()
             >= 0
+        )
+    if "solar_event_member" in df.columns:
+        event_masks["solar_event"] = (
+            df["solar_event_member"].fillna(False).astype(bool).to_numpy()
+        )
+    if "eclipse_event_member" in df.columns:
+        event_masks["eclipse_event"] = (
+            df["eclipse_event_member"].fillna(False).astype(bool).to_numpy()
         )
     event_member = np.zeros(len(df), dtype=bool)
     for m in event_masks.values():
@@ -227,6 +237,9 @@ def main() -> None:
     # Event members: unique markers by event type
     event_styles = {
         "transient": ("o", "red"),
+        "exp_dip": ("v", "black"),
+        "solar_event": ("^", "orange"),
+        "eclipse_event": ("h", "blue"),
         "step": ("s", "purple"),
         "dm_step": ("D", "green"),
         "step_global": ("P", "brown"),
@@ -366,7 +379,6 @@ def main() -> None:
                     label=str(s),
                 )
             bad_only = bad_point & (~event_member) & valid
-            event_only = event_member & (~bad_point) & valid
             both = bad_point & event_member & valid
             if bad_only.any():
                 plt.scatter(
@@ -378,37 +390,31 @@ def main() -> None:
                     alpha=0.9,
                     label="bad_point",
                 )
-            if event_only.any():
+            for name, mask in event_masks.items():
+                mask = mask & valid
+                if not mask.any():
+                    continue
+                marker, color = event_styles.get(name, ("o", "red"))
                 plt.scatter(
-                    x[event_only],
-                    y[event_only],
+                    x[mask],
+                    y[mask],
                     s=36,
-                    marker="o",
+                    marker=marker,
                     facecolors="none",
-                    edgecolors="red",
+                    edgecolors=color,
                     alpha=0.9,
-                    label="event_member",
+                    label=name,
                 )
-            if both.any():
-                plt.scatter(
-                    x[both],
-                    y[both],
-                    s=28,
-                    marker="x",
-                    color="grey",
-                    alpha=0.9,
-                    label="bad_point+event_member",
-                )
-                plt.scatter(
-                    x[both],
-                    y[both],
-                    s=36,
-                    marker="o",
-                    facecolors="none",
-                    edgecolors="red",
-                    alpha=0.9,
-                    label=None,
-                )
+                if (mask & bad_point).any():
+                    plt.scatter(
+                        x[mask & bad_point],
+                        y[mask & bad_point],
+                        s=24,
+                        marker="x",
+                        color="grey",
+                        alpha=0.9,
+                        label=None,
+                    )
             plt.xlabel(feat)
             plt.ylabel(resid_col)
             plt.title(f"{Path(args.csv).name} | {feat}")

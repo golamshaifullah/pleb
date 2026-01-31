@@ -366,7 +366,7 @@ make_binary_analysis = true
 
 # ---- Param scan defaults ----
 # param_scan_typical: enable typical scan profile. allowed: true/false. default: false
-param_scan_typical = false
+param_scan_typical = true
 # param_scan_dm_redchisq_threshold: reduced chi2 threshold for DM scan. allowed: float. default: 2.0
 param_scan_dm_redchisq_threshold = 2.0
 # param_scan_dm_max_order: max DM derivative order. allowed: int >=0. default: 4
@@ -377,7 +377,7 @@ param_scan_btx_max_fb = 3
 # ---- FixDataset apply/commit ----
 # fix_apply: apply and commit dataset fixes. allowed: true/false. default: false
 #   If true, modifies files in-place and commits to a branch.
-fix_apply = false
+fix_apply = true
 # fix_branch_name: branch name for apply. allowed: string or empty. default: "" -> None (auto)
 #   If empty, a timestamped branch name is generated.
 fix_branch_name = ""
@@ -553,7 +553,7 @@ fix_qc_branch = ""
 
 # ---- Binary analysis settings ----
 # binary_only_models: restrict binary models. allowed: list of strings or empty. default: "" -> None
-binary_only_models = ""
+binary_only_models = ["BT", "BTX", "ELL1", "DD", "DDK"]
 
 # ---- Plotting controls ----
 # dpi: plot resolution. allowed: int. default: 120

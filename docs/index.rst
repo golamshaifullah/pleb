@@ -8,6 +8,7 @@ EPTA Data Combination Pipeline
    overview
    installation
    quickstart
+   running_modes
    concepts
    cli
    ingest

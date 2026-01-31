@@ -75,4 +75,24 @@ If you already ran QC, you can generate report plots from a run directory:
 
    pleb qc-report --run-dir results/run_2024-01-01
 
-See :doc:`examples` for complete workflows.
+Ingest subcommand
+-----------------
+
+Run mapping-driven ingest:
+
+.. code-block:: bash
+
+   pleb ingest --mapping configs/settings/system_flag_mapping.example.json \
+     --output-dir /data/pulsars
+
+Workflow subcommand
+-------------------
+
+Run a workflow file (TOML or JSON) with steps and loops:
+
+.. code-block:: bash
+
+   pleb workflow --file configs/workflows/example_iterative.toml
+
+See :doc:`running_modes` for detailed compatibility notes and workflow
+examples, and :doc:`examples` for end-to-end runs.

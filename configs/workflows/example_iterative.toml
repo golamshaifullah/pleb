@@ -1,0 +1,24 @@
+config = "configs/settings/test_all_steps.toml"
+
+[[loops]]
+name = "get_jumps"
+max_iters = 1
+steps = ["ingest", "qc_report", "fix_apply"]
+stop_if = [{ no_changes = true }, { qc_ok = true }]
+
+[[loops]]
+name = "get_jumps"
+max_iters = 5
+steps = ["pipeline", "qc_report", "fix_apply"]
+stop_if = [{ no_changes = true }, { qc_ok = true }]
+
+[[loops]]
+name = "check_params"
+max_iters = 1
+steps = ["param_scan", "qc_report", "fix_apply"]
+stop_if = [{ no_changes = true }, { qc_ok = true }]
+
+[[loops]]
+max_iters = 1
+steps = ["param_scan", "qc_report", "fix_apply"]
+stop_if = [{ no_changes = true }, { qc_ok = true }]
