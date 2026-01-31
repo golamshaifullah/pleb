@@ -122,24 +122,37 @@ def main() -> None:
         if "robust_outlier" in df.columns:
             bad_point |= df["robust_outlier"].fillna(False).astype(bool).to_numpy()
 
-    if "event_member" in df.columns:
-        event_member = df["event_member"].fillna(False).astype(bool).to_numpy()
-    else:
-        event_member = np.zeros(len(df), dtype=bool)
-        if "transient_id" in df.columns:
-            event_member |= (
-                pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy()
-                >= 0
-            )
-        if "step_id" in df.columns:
-            event_member |= (
-                pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
-            )
-        if "dm_step_id" in df.columns:
-            event_member |= (
-                pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy()
-                >= 0
-            )
+    event_masks = {}
+    if "transient_id" in df.columns:
+        event_masks["transient"] = (
+            pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1).to_numpy()
+            >= 0
+        )
+    if "step_id" in df.columns:
+        event_masks["step"] = (
+            pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+        )
+    if "dm_step_id" in df.columns:
+        event_masks["dm_step"] = (
+            pd.to_numeric(df["dm_step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
+        )
+    if "step_global_id" in df.columns:
+        event_masks["step_global"] = (
+            pd.to_numeric(df["step_global_id"], errors="coerce")
+            .fillna(-1)
+            .to_numpy()
+            >= 0
+        )
+    if "dm_step_global_id" in df.columns:
+        event_masks["dm_step_global"] = (
+            pd.to_numeric(df["dm_step_global_id"], errors="coerce")
+            .fillna(-1)
+            .to_numpy()
+            >= 0
+        )
+    event_member = np.zeros(len(df), dtype=bool)
+    for m in event_masks.values():
+        event_member |= m
 
     if "solar_bad" in df.columns:
         solar_bad = df["solar_bad"].fillna(False).astype(bool).to_numpy()
@@ -198,7 +211,6 @@ def main() -> None:
 
     both = bad_point & event_member
     bad_only = bad_point & (~event_member)
-    event_only = event_member & (~bad_point)
 
     # Bad points: grey X
     if bad_only.any():
@@ -212,40 +224,39 @@ def main() -> None:
             label="bad_point",
         )
 
-    # Event members: open red circles
-    if event_only.any():
+    # Event members: unique markers by event type
+    event_styles = {
+        "transient": ("o", "red"),
+        "step": ("s", "purple"),
+        "dm_step": ("D", "green"),
+        "step_global": ("P", "brown"),
+        "dm_step_global": ("X", "darkorange"),
+    }
+    for name, mask in event_masks.items():
+        if not mask.any():
+            continue
+        marker, color = event_styles.get(name, ("o", "red"))
         plt.scatter(
-            df.loc[event_only, "mjd"],
-            df.loc[event_only, resid_col],
+            df.loc[mask, "mjd"],
+            df.loc[mask, resid_col],
             s=36,
-            marker="o",
+            marker=marker,
             facecolors="none",
-            edgecolors="red",
+            edgecolors=color,
             alpha=0.9,
-            label="event_member",
+            label=name,
         )
-
-    # Both: layered marker
-    if both.any():
-        plt.scatter(
-            df.loc[both, "mjd"],
-            df.loc[both, resid_col],
-            s=28,
-            marker="x",
-            color="grey",
-            alpha=0.9,
-            label="bad_point+event_member",
-        )
-        plt.scatter(
-            df.loc[both, "mjd"],
-            df.loc[both, resid_col],
-            s=36,
-            marker="o",
-            facecolors="none",
-            edgecolors="red",
-            alpha=0.9,
-            label=None,
-        )
+        # Overlay bad-point marker for event points that are also bad
+        if (mask & bad_point).any():
+            plt.scatter(
+                df.loc[mask & bad_point, "mjd"],
+                df.loc[mask & bad_point, resid_col],
+                s=24,
+                marker="x",
+                color="grey",
+                alpha=0.9,
+                label=None,
+            )
 
     # Solar-flagged: open orange triangles
     if solar_bad.any():

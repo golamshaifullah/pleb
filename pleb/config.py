@@ -304,6 +304,18 @@ class PipelineConfig:
     pqc_orbital_phase_cut_nbins: int = 18
     pqc_orbital_phase_cut_min_points: int = 20
 
+    pqc_eclipse_events_enabled: bool = False
+    pqc_eclipse_center_phase: float = 0.25
+    pqc_eclipse_min_points: int = 30
+    pqc_eclipse_width_min: float = 0.01
+    pqc_eclipse_width_max: float = 0.5
+    pqc_eclipse_member_eta: float = 1.0
+    pqc_eclipse_freq_dependence: bool = True
+    pqc_eclipse_freq_alpha_min: float = 0.0
+    pqc_eclipse_freq_alpha_max: float = 4.0
+    pqc_eclipse_freq_alpha_tol: float = 1e-3
+    pqc_eclipse_freq_alpha_max_iter: int = 64
+
     # Optional reporting for pqc outputs
     qc_report: bool = False
     qc_report_backend_col: Optional[str] = None
