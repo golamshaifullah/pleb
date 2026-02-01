@@ -176,7 +176,8 @@ def main() -> None:
 
         for feat in features:
             for _, row in struct[struct["feature"] == feat].iterrows():
-                if only_present and not bool(row.get("present", False)):
+                force_all = feat in ("solar_elongation_deg", "orbital_phase")
+                if only_present and not force_all and not bool(row.get("present", False)):
                     continue
 
                 # filter df for this group

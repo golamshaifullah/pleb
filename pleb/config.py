@@ -132,6 +132,25 @@ class PipelineConfig:
         pqc_eclipse_freq_alpha_max: Upper bound for alpha.
         pqc_eclipse_freq_alpha_tol: Optimization tolerance for alpha.
         pqc_eclipse_freq_alpha_max_iter: Max iterations for alpha optimizer.
+        pqc_gaussian_bump_enabled: Enable Gaussian-bump event detection.
+        pqc_gaussian_bump_min_duration_days: Minimum bump duration in days.
+        pqc_gaussian_bump_max_duration_days: Maximum bump duration in days.
+        pqc_gaussian_bump_n_durations: Number of duration grid points.
+        pqc_gaussian_bump_min_points: Minimum points for bump detection.
+        pqc_gaussian_bump_delta_chi2_thresh: Delta-chi2 threshold for bump detection.
+        pqc_gaussian_bump_suppress_overlap: Suppress overlapping bumps.
+        pqc_gaussian_bump_member_eta: Per-point membership SNR threshold.
+        pqc_gaussian_bump_freq_dependence: Fit 1/f^alpha dependence.
+        pqc_gaussian_bump_freq_alpha_min: Lower bound for alpha.
+        pqc_gaussian_bump_freq_alpha_max: Upper bound for alpha.
+        pqc_gaussian_bump_freq_alpha_tol: Optimization tolerance for alpha.
+        pqc_gaussian_bump_freq_alpha_max_iter: Max iterations for alpha optimizer.
+        pqc_glitch_enabled: Enable glitch event detection.
+        pqc_glitch_min_points: Minimum points for glitch detection.
+        pqc_glitch_delta_chi2_thresh: Delta-chi2 threshold for glitch detection.
+        pqc_glitch_suppress_overlap: Suppress overlapping glitches.
+        pqc_glitch_member_eta: Per-point membership SNR threshold.
+        pqc_glitch_peak_tau_days: Peak exponential timescale for glitch model.
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -321,6 +340,27 @@ class PipelineConfig:
     pqc_eclipse_freq_alpha_max: float = 4.0
     pqc_eclipse_freq_alpha_tol: float = 1e-3
     pqc_eclipse_freq_alpha_max_iter: int = 64
+
+    pqc_gaussian_bump_enabled: bool = False
+    pqc_gaussian_bump_min_duration_days: float = 60.0
+    pqc_gaussian_bump_max_duration_days: float = 1500.0
+    pqc_gaussian_bump_n_durations: int = 6
+    pqc_gaussian_bump_min_points: int = 20
+    pqc_gaussian_bump_delta_chi2_thresh: float = 25.0
+    pqc_gaussian_bump_suppress_overlap: bool = True
+    pqc_gaussian_bump_member_eta: float = 1.0
+    pqc_gaussian_bump_freq_dependence: bool = True
+    pqc_gaussian_bump_freq_alpha_min: float = 0.0
+    pqc_gaussian_bump_freq_alpha_max: float = 4.0
+    pqc_gaussian_bump_freq_alpha_tol: float = 1e-3
+    pqc_gaussian_bump_freq_alpha_max_iter: int = 64
+
+    pqc_glitch_enabled: bool = False
+    pqc_glitch_min_points: int = 30
+    pqc_glitch_delta_chi2_thresh: float = 25.0
+    pqc_glitch_suppress_overlap: bool = True
+    pqc_glitch_member_eta: float = 1.0
+    pqc_glitch_peak_tau_days: float = 30.0
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -658,6 +698,47 @@ class PipelineConfig:
             pqc_eclipse_freq_alpha_max=float(d.get("pqc_eclipse_freq_alpha_max", 4.0)),
             pqc_eclipse_freq_alpha_tol=float(d.get("pqc_eclipse_freq_alpha_tol", 1e-3)),
             pqc_eclipse_freq_alpha_max_iter=int(d.get("pqc_eclipse_freq_alpha_max_iter", 64)),
+            pqc_gaussian_bump_enabled=bool(d.get("pqc_gaussian_bump_enabled", False)),
+            pqc_gaussian_bump_min_duration_days=float(
+                d.get("pqc_gaussian_bump_min_duration_days", 60.0)
+            ),
+            pqc_gaussian_bump_max_duration_days=float(
+                d.get("pqc_gaussian_bump_max_duration_days", 1500.0)
+            ),
+            pqc_gaussian_bump_n_durations=int(
+                d.get("pqc_gaussian_bump_n_durations", 6)
+            ),
+            pqc_gaussian_bump_min_points=int(d.get("pqc_gaussian_bump_min_points", 20)),
+            pqc_gaussian_bump_delta_chi2_thresh=float(
+                d.get("pqc_gaussian_bump_delta_chi2_thresh", 25.0)
+            ),
+            pqc_gaussian_bump_suppress_overlap=bool(
+                d.get("pqc_gaussian_bump_suppress_overlap", True)
+            ),
+            pqc_gaussian_bump_member_eta=float(d.get("pqc_gaussian_bump_member_eta", 1.0)),
+            pqc_gaussian_bump_freq_dependence=bool(
+                d.get("pqc_gaussian_bump_freq_dependence", True)
+            ),
+            pqc_gaussian_bump_freq_alpha_min=float(
+                d.get("pqc_gaussian_bump_freq_alpha_min", 0.0)
+            ),
+            pqc_gaussian_bump_freq_alpha_max=float(
+                d.get("pqc_gaussian_bump_freq_alpha_max", 4.0)
+            ),
+            pqc_gaussian_bump_freq_alpha_tol=float(
+                d.get("pqc_gaussian_bump_freq_alpha_tol", 1e-3)
+            ),
+            pqc_gaussian_bump_freq_alpha_max_iter=int(
+                d.get("pqc_gaussian_bump_freq_alpha_max_iter", 64)
+            ),
+            pqc_glitch_enabled=bool(d.get("pqc_glitch_enabled", False)),
+            pqc_glitch_min_points=int(d.get("pqc_glitch_min_points", 30)),
+            pqc_glitch_delta_chi2_thresh=float(
+                d.get("pqc_glitch_delta_chi2_thresh", 25.0)
+            ),
+            pqc_glitch_suppress_overlap=bool(d.get("pqc_glitch_suppress_overlap", True)),
+            pqc_glitch_member_eta=float(d.get("pqc_glitch_member_eta", 1.0)),
+            pqc_glitch_peak_tau_days=float(d.get("pqc_glitch_peak_tau_days", 30.0)),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),

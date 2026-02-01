@@ -335,6 +335,46 @@ pqc_eclipse_freq_alpha_tol = 1e-3
 # pqc_eclipse_freq_alpha_max_iter: max iterations for alpha optimizer. allowed: int. default: 64
 pqc_eclipse_freq_alpha_max_iter = 64
 
+# pqc_gaussian_bump_enabled: enable Gaussian-bump event detection. allowed: true/false. default: false
+pqc_gaussian_bump_enabled = false
+# pqc_gaussian_bump_min_duration_days: minimum bump duration (days). allowed: float. default: 60.0
+pqc_gaussian_bump_min_duration_days = 60.0
+# pqc_gaussian_bump_max_duration_days: maximum bump duration (days). allowed: float. default: 1500.0
+pqc_gaussian_bump_max_duration_days = 1500.0
+# pqc_gaussian_bump_n_durations: number of duration grid points. allowed: int. default: 6
+pqc_gaussian_bump_n_durations = 6
+# pqc_gaussian_bump_min_points: minimum points for bump detection. allowed: int. default: 20
+pqc_gaussian_bump_min_points = 20
+# pqc_gaussian_bump_delta_chi2_thresh: delta-chi2 threshold for bump detection. allowed: float. default: 25.0
+pqc_gaussian_bump_delta_chi2_thresh = 25.0
+# pqc_gaussian_bump_suppress_overlap: suppress overlapping bumps. allowed: true/false. default: true
+pqc_gaussian_bump_suppress_overlap = true
+# pqc_gaussian_bump_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
+pqc_gaussian_bump_member_eta = 1.0
+# pqc_gaussian_bump_freq_dependence: fit 1/f^alpha dependence. allowed: true/false. default: true
+pqc_gaussian_bump_freq_dependence = true
+# pqc_gaussian_bump_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
+pqc_gaussian_bump_freq_alpha_min = 0.0
+# pqc_gaussian_bump_freq_alpha_max: upper bound for alpha. allowed: float. default: 4.0
+pqc_gaussian_bump_freq_alpha_max = 4.0
+# pqc_gaussian_bump_freq_alpha_tol: optimization tolerance for alpha. allowed: float. default: 1e-3
+pqc_gaussian_bump_freq_alpha_tol = 1e-3
+# pqc_gaussian_bump_freq_alpha_max_iter: max iterations for alpha optimizer. allowed: int. default: 64
+pqc_gaussian_bump_freq_alpha_max_iter = 64
+
+# pqc_glitch_enabled: enable glitch event detection. allowed: true/false. default: false
+pqc_glitch_enabled = false
+# pqc_glitch_min_points: minimum points for glitch detection. allowed: int. default: 30
+pqc_glitch_min_points = 30
+# pqc_glitch_delta_chi2_thresh: delta-chi2 threshold for glitch detection. allowed: float. default: 25.0
+pqc_glitch_delta_chi2_thresh = 25.0
+# pqc_glitch_suppress_overlap: suppress overlapping glitches. allowed: true/false. default: true
+pqc_glitch_suppress_overlap = true
+# pqc_glitch_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
+pqc_glitch_member_eta = 1.0
+# pqc_glitch_peak_tau_days: peak exponential timescale for glitch model (days). allowed: float. default: 30.0
+pqc_glitch_peak_tau_days = 30.0
+
 # ---- Optional QC report artifacts ----
 # qc_report: generate QC report artifacts. allowed: true/false. default: false
 #   Creates plots and summary tables from pqc outputs.

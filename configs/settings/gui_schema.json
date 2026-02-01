@@ -502,6 +502,101 @@
       "default": 64
     },
     {
+      "name": "pqc_gaussian_bump_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_gaussian_bump_min_duration_days",
+      "type": "float",
+      "default": 60.0
+    },
+    {
+      "name": "pqc_gaussian_bump_max_duration_days",
+      "type": "float",
+      "default": 1500.0
+    },
+    {
+      "name": "pqc_gaussian_bump_n_durations",
+      "type": "int",
+      "default": 6
+    },
+    {
+      "name": "pqc_gaussian_bump_min_points",
+      "type": "int",
+      "default": 20
+    },
+    {
+      "name": "pqc_gaussian_bump_delta_chi2_thresh",
+      "type": "float",
+      "default": 25.0
+    },
+    {
+      "name": "pqc_gaussian_bump_suppress_overlap",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_gaussian_bump_member_eta",
+      "type": "float",
+      "default": 1.0
+    },
+    {
+      "name": "pqc_gaussian_bump_freq_dependence",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_gaussian_bump_freq_alpha_min",
+      "type": "float",
+      "default": 0.0
+    },
+    {
+      "name": "pqc_gaussian_bump_freq_alpha_max",
+      "type": "float",
+      "default": 4.0
+    },
+    {
+      "name": "pqc_gaussian_bump_freq_alpha_tol",
+      "type": "float",
+      "default": 0.001
+    },
+    {
+      "name": "pqc_gaussian_bump_freq_alpha_max_iter",
+      "type": "int",
+      "default": 64
+    },
+    {
+      "name": "pqc_glitch_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_glitch_min_points",
+      "type": "int",
+      "default": 30
+    },
+    {
+      "name": "pqc_glitch_delta_chi2_thresh",
+      "type": "float",
+      "default": 25.0
+    },
+    {
+      "name": "pqc_glitch_suppress_overlap",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_glitch_member_eta",
+      "type": "float",
+      "default": 1.0
+    },
+    {
+      "name": "pqc_glitch_peak_tau_days",
+      "type": "float",
+      "default": 30.0
+    },
+    {
       "name": "qc_report",
       "type": "bool",
       "default": false

@@ -788,6 +788,59 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     orbital_phase_cut_min_points=int(
                         getattr(cfg, "pqc_orbital_phase_cut_min_points", 20)
                     ),
+                    gaussian_bump_enabled=bool(
+                        getattr(cfg, "pqc_gaussian_bump_enabled", False)
+                    ),
+                    gaussian_bump_min_duration_days=float(
+                        getattr(cfg, "pqc_gaussian_bump_min_duration_days", 60.0)
+                    ),
+                    gaussian_bump_max_duration_days=float(
+                        getattr(cfg, "pqc_gaussian_bump_max_duration_days", 1500.0)
+                    ),
+                    gaussian_bump_n_durations=int(
+                        getattr(cfg, "pqc_gaussian_bump_n_durations", 6)
+                    ),
+                    gaussian_bump_min_points=int(
+                        getattr(cfg, "pqc_gaussian_bump_min_points", 20)
+                    ),
+                    gaussian_bump_delta_chi2_thresh=float(
+                        getattr(cfg, "pqc_gaussian_bump_delta_chi2_thresh", 25.0)
+                    ),
+                    gaussian_bump_suppress_overlap=bool(
+                        getattr(cfg, "pqc_gaussian_bump_suppress_overlap", True)
+                    ),
+                    gaussian_bump_member_eta=float(
+                        getattr(cfg, "pqc_gaussian_bump_member_eta", 1.0)
+                    ),
+                    gaussian_bump_freq_dependence=bool(
+                        getattr(cfg, "pqc_gaussian_bump_freq_dependence", True)
+                    ),
+                    gaussian_bump_freq_alpha_min=float(
+                        getattr(cfg, "pqc_gaussian_bump_freq_alpha_min", 0.0)
+                    ),
+                    gaussian_bump_freq_alpha_max=float(
+                        getattr(cfg, "pqc_gaussian_bump_freq_alpha_max", 4.0)
+                    ),
+                    gaussian_bump_freq_alpha_tol=float(
+                        getattr(cfg, "pqc_gaussian_bump_freq_alpha_tol", 1e-3)
+                    ),
+                    gaussian_bump_freq_alpha_max_iter=int(
+                        getattr(cfg, "pqc_gaussian_bump_freq_alpha_max_iter", 64)
+                    ),
+                    glitch_enabled=bool(getattr(cfg, "pqc_glitch_enabled", False)),
+                    glitch_min_points=int(getattr(cfg, "pqc_glitch_min_points", 30)),
+                    glitch_delta_chi2_thresh=float(
+                        getattr(cfg, "pqc_glitch_delta_chi2_thresh", 25.0)
+                    ),
+                    glitch_suppress_overlap=bool(
+                        getattr(cfg, "pqc_glitch_suppress_overlap", True)
+                    ),
+                    glitch_member_eta=float(
+                        getattr(cfg, "pqc_glitch_member_eta", 1.0)
+                    ),
+                    glitch_peak_tau_days=float(
+                        getattr(cfg, "pqc_glitch_peak_tau_days", 30.0)
+                    ),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)

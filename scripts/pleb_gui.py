@@ -396,6 +396,34 @@ def _ingest_form() -> Dict[str, Any]:
             st.rerun()
         return [r for r in rows if str(r).strip()]
 
+    if "ingest_text__sync" in st.session_state:
+        try:
+            parsed = _parse_text(
+                st.session_state.get("ingest_text__sync", "{}"),
+                _detect_format(None, st.session_state.get("ingest_text__sync", "")),
+            )
+        except Exception:
+            parsed = {}
+        st.session_state.pop("ingest_text__sync", None)
+        for key in ("sources", "par_roots", "template_roots"):
+            items_key = f"ingest_{key}_items"
+            st.session_state[items_key] = list(parsed.get(key, []) or [])
+        st.session_state["ingest_ignore_backends"] = ",".join(parsed.get("ignore_backends", []) or [])
+        aliases = parsed.get("pulsar_aliases", {}) or {}
+        st.session_state["ingest_aliases"] = "\n".join([f"{k}={v}" for k, v in aliases.items()])
+        back_rows = []
+        for name, cfg in (parsed.get("backends", {}) or {}).items():
+            back_rows.append(
+                {
+                    "name": name,
+                    "root": cfg.get("root", ""),
+                    "ignore": bool(cfg.get("ignore", False)),
+                    "tim_glob": cfg.get("tim_glob", "*.tim"),
+                    "ignore_suffixes": cfg.get("ignore_suffixes", ["_all.tim"]),
+                }
+            )
+        st.session_state["ingest_backends_rows"] = back_rows
+
     data["sources"] = list_paths("sources", "sources", "Root folders to scan")
     data["par_roots"] = list_paths("par_roots", "par_roots", "PAR file roots (optional)")
     data["template_roots"] = list_paths("template_roots", "template_roots", "Template roots (optional)")
@@ -602,11 +630,17 @@ def main() -> None:
 
     tabs = st.tabs(["Ingest Mapping", "Settings Config", "Workflow Config", "Runner"])
 
+    if "ingest_text__pending" in st.session_state:
+        st.session_state["ingest_text"] = st.session_state.pop("ingest_text__pending")
+
     with tabs[0]:
         _editor_block("ingest", "Ingest Mapping")
         ingest_data = _ingest_form()
+        if st.button("Load builder fields from ingest text"):
+            st.session_state["ingest_text__sync"] = st.session_state.get("ingest_text", "{}")
+            st.rerun()
         if st.button("Update ingest text view from fields"):
-            st.session_state["ingest_text"] = _serialize_data(ingest_data, "json")
+            st.session_state["ingest_text__pending"] = _serialize_data(ingest_data, "json")
             st.rerun()
 
     with tabs[1]:

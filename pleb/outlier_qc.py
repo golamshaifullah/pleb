@@ -78,6 +78,25 @@ class PTAQCConfig:
         outlier_gate_resid_col: Residual column for outlier gate.
         outlier_gate_sigma_col: Sigma column for outlier gate.
         event_instrument: Enable per-event membership diagnostics.
+        gaussian_bump_enabled: Enable Gaussian-bump event detection.
+        gaussian_bump_min_duration_days: Minimum bump duration in days.
+        gaussian_bump_max_duration_days: Maximum bump duration in days.
+        gaussian_bump_n_durations: Number of duration grid points.
+        gaussian_bump_min_points: Minimum points for bump detection.
+        gaussian_bump_delta_chi2_thresh: Delta-chi2 threshold for bump detection.
+        gaussian_bump_suppress_overlap: Suppress overlapping bumps.
+        gaussian_bump_member_eta: Per-point membership SNR threshold.
+        gaussian_bump_freq_dependence: Fit 1/f^alpha dependence.
+        gaussian_bump_freq_alpha_min: Lower bound for alpha.
+        gaussian_bump_freq_alpha_max: Upper bound for alpha.
+        gaussian_bump_freq_alpha_tol: Optimization tolerance for alpha.
+        gaussian_bump_freq_alpha_max_iter: Max iterations for alpha optimizer.
+        glitch_enabled: Enable glitch event detection.
+        glitch_min_points: Minimum points for glitch detection.
+        glitch_delta_chi2_thresh: Delta-chi2 threshold for glitch detection.
+        glitch_suppress_overlap: Suppress overlapping glitches.
+        glitch_member_eta: Per-point membership SNR threshold.
+        glitch_peak_tau_days: Peak exponential timescale for glitch model.
     """
 
     backend_col: str = "group"
@@ -177,6 +196,29 @@ class PTAQCConfig:
     eclipse_freq_alpha_tol: float = 1e-3
     eclipse_freq_alpha_max_iter: int = 64
 
+    # Gaussian-bump events
+    gaussian_bump_enabled: bool = False
+    gaussian_bump_min_duration_days: float = 60.0
+    gaussian_bump_max_duration_days: float = 1500.0
+    gaussian_bump_n_durations: int = 6
+    gaussian_bump_min_points: int = 20
+    gaussian_bump_delta_chi2_thresh: float = 25.0
+    gaussian_bump_suppress_overlap: bool = True
+    gaussian_bump_member_eta: float = 1.0
+    gaussian_bump_freq_dependence: bool = True
+    gaussian_bump_freq_alpha_min: float = 0.0
+    gaussian_bump_freq_alpha_max: float = 4.0
+    gaussian_bump_freq_alpha_tol: float = 1e-3
+    gaussian_bump_freq_alpha_max_iter: int = 64
+
+    # Glitch events
+    glitch_enabled: bool = False
+    glitch_min_points: int = 30
+    glitch_delta_chi2_thresh: float = 25.0
+    glitch_suppress_overlap: bool = True
+    glitch_member_eta: float = 1.0
+    glitch_peak_tau_days: float = 30.0
+
 
 @contextmanager
 def _pushd(path: Path):
@@ -233,6 +275,8 @@ def run_pqc_for_parfile(
             SolarCutConfig,
             OrbitalPhaseCutConfig,
             EclipseConfig,
+            GaussianBumpConfig,
+            GlitchConfig,
         )
 
         # Sanity check: ensure pqc config classes are importable
@@ -248,6 +292,8 @@ def run_pqc_for_parfile(
             SolarCutConfig,
             OrbitalPhaseCutConfig,
             EclipseConfig,
+            GaussianBumpConfig,
+            GlitchConfig,
         )
         logger.info("pqc config classes loaded: %s", ",".join([c.__name__ for c in _]))
     except Exception as e:  # pragma: no cover
@@ -372,6 +418,29 @@ def run_pqc_for_parfile(
         freq_alpha_tol=float(cfg.eclipse_freq_alpha_tol),
         freq_alpha_max_iter=int(cfg.eclipse_freq_alpha_max_iter),
     )
+    bump_cfg = GaussianBumpConfig(
+        enabled=bool(cfg.gaussian_bump_enabled),
+        min_duration_days=float(cfg.gaussian_bump_min_duration_days),
+        max_duration_days=float(cfg.gaussian_bump_max_duration_days),
+        n_durations=int(cfg.gaussian_bump_n_durations),
+        min_points=int(cfg.gaussian_bump_min_points),
+        delta_chi2_thresh=float(cfg.gaussian_bump_delta_chi2_thresh),
+        suppress_overlap=bool(cfg.gaussian_bump_suppress_overlap),
+        member_eta=float(cfg.gaussian_bump_member_eta),
+        freq_dependence=bool(cfg.gaussian_bump_freq_dependence),
+        freq_alpha_min=float(cfg.gaussian_bump_freq_alpha_min),
+        freq_alpha_max=float(cfg.gaussian_bump_freq_alpha_max),
+        freq_alpha_tol=float(cfg.gaussian_bump_freq_alpha_tol),
+        freq_alpha_max_iter=int(cfg.gaussian_bump_freq_alpha_max_iter),
+    )
+    glitch_cfg = GlitchConfig(
+        enabled=bool(cfg.glitch_enabled),
+        min_points=int(cfg.glitch_min_points),
+        delta_chi2_thresh=float(cfg.glitch_delta_chi2_thresh),
+        suppress_overlap=bool(cfg.glitch_suppress_overlap),
+        member_eta=float(cfg.glitch_member_eta),
+        peak_tau_days=float(cfg.glitch_peak_tau_days),
+    )
 
     if settings_out is None:
         settings_out = out_csv.parent / "run_settings" / f"{parfile.stem}.pqc_settings.toml"
@@ -395,6 +464,8 @@ def run_pqc_for_parfile(
             solar_cfg=solar_cfg,
             orbital_cfg=orbital_cfg,
             eclipse_cfg=eclipse_cfg,
+            bump_cfg=bump_cfg,
+            glitch_cfg=glitch_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
             settings_out=settings_out,
         )
