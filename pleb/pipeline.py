@@ -785,11 +785,19 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
+                qc_settings_dir = out_paths["tag"] / "run_settings"
+                qc_settings_dir.mkdir(parents=True, exist_ok=True)
                 for pulsar in tqdm(pulsars, desc=f"pqc ({branch})"):
                     parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
                     out_csv = qc_out_dir / f"{pulsar}_qc.csv"
+                    settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
                     try:
-                        df = run_pqc_for_parfile_subprocess(parfile, out_csv, qc_cfg)
+                        df = run_pqc_for_parfile_subprocess(
+                            parfile,
+                            out_csv,
+                            qc_cfg,
+                            settings_out=settings_out,
+                        )
                     except Exception as e:
                         logger.warning(
                             "pqc failed for %s (%s); skipping QC for this pulsar: %s",

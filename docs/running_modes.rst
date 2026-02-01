@@ -41,9 +41,9 @@ Minimal run (CLI-only):
 .. code-block:: bash
 
    pleb \
-     --results-dir /work/git_projects/data-eptadr3/results \
+     --results-dir /data/pulsar_results \
      --outdir-name run_cli_only \
-     --set home_dir="/work/git_projects/data-eptadr3" \
+     --set home_dir="/data/pulsars" \
      --set dataset_name="DR3full" \
      --set pulsars='["J1713+0747","J1909-3744"]' \
      --set branches='["main"]'
@@ -53,9 +53,9 @@ Enable QC and change options:
 .. code-block:: bash
 
    pleb \
-     --results-dir /work/git_projects/data-eptadr3/results \
+     --results-dir /data/pulsar_results \
      --outdir-name run_cli_qc \
-     --set home_dir="/work/git_projects/data-eptadr3" \
+     --set home_dir="/data/pulsars" \
      --set dataset_name="DR3full" \
      --set pulsars='["J1713+0747"]' \
      --set branches='["main"]' \
@@ -68,9 +68,9 @@ Parameter scan (CLI-only):
 .. code-block:: bash
 
    pleb \
-     --results-dir /work/git_projects/data-eptadr3/results \
+     --results-dir /data/pulsar_results \
      --outdir-name run_cli_scan \
-     --set home_dir="/work/git_projects/data-eptadr3" \
+     --set home_dir="/data/pulsars" \
      --set dataset_name="DR3full" \
      --set pulsars='["J1713+0747"]' \
      --set branches='["main"]' \
@@ -111,8 +111,8 @@ Typical settings file (minimal):
 
    # configs/settings/minimal.toml
    dataset_name = "DR3full"
-   home_dir = "/work/git_projects/data-eptadr3"
-   results_dir = "/work/git_projects/data-eptadr3/results"
+   home_dir = "/data/pulsars"
+   results_dir = "/data/pulsar_results"
    outdir_name = "run_minimal"
 
    pulsars = ["J1713+0747", "J1909-3744"]
@@ -128,8 +128,8 @@ Settings with QC and reporting:
 
    # configs/settings/qc.toml
    dataset_name = "DR3full"
-   home_dir = "/work/git_projects/data-eptadr3"
-   results_dir = "/work/git_projects/data-eptadr3/results"
+   home_dir = "/data/pulsars"
+   results_dir = "/data/pulsar_results"
    outdir_name = "run_qc"
 
    pulsars = ["J1713+0747"]

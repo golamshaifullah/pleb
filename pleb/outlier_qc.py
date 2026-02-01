@@ -191,7 +191,12 @@ def _pushd(path: Path):
         os.chdir(old)
 
 
-def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.DataFrame:
+def run_pqc_for_parfile(
+    parfile: Path,
+    out_csv: Path,
+    cfg: PTAQCConfig,
+    settings_out: Optional[Path] = None,
+) -> pd.DataFrame:
     """Run pqc on a pulsar parfile and write a CSV.
 
     Args:
@@ -368,6 +373,11 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
         freq_alpha_max_iter=int(cfg.eclipse_freq_alpha_max_iter),
     )
 
+    if settings_out is None:
+        settings_out = out_csv.parent / "run_settings" / f"{parfile.stem}.pqc_settings.toml"
+    settings_out = Path(settings_out)
+    settings_out.parent.mkdir(parents=True, exist_ok=True)
+
     # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
     with _pushd(out_csv.parent):
         df = qc_run(
@@ -386,6 +396,7 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
             orbital_cfg=orbital_cfg,
             eclipse_cfg=eclipse_cfg,
             drop_unmatched=bool(cfg.drop_unmatched),
+            settings_out=settings_out,
         )
 
     _assert_timfile_metadata(df, source=str(parfile))
@@ -394,7 +405,11 @@ def run_pqc_for_parfile(parfile: Path, out_csv: Path, cfg: PTAQCConfig) -> pd.Da
 
 
 def run_pqc_for_parfile_subprocess(
-    parfile: Path, out_csv: Path, cfg: PTAQCConfig, timeout: Optional[float] = None
+    parfile: Path,
+    out_csv: Path,
+    cfg: PTAQCConfig,
+    timeout: Optional[float] = None,
+    settings_out: Optional[Path] = None,
 ) -> pd.DataFrame:
     """Run pqc in a subprocess to isolate segfaults from libstempo.
 
@@ -418,6 +433,7 @@ def run_pqc_for_parfile_subprocess(
         "parfile": str(parfile),
         "out_csv": str(out_csv),
         "cfg": asdict(cfg),
+        "settings_out": (str(settings_out) if settings_out is not None else None),
     }
     payload_path = out_csv.parent / f".pqc_{parfile.stem}.json"
     payload_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -428,7 +444,9 @@ def run_pqc_for_parfile_subprocess(
         "from pleb.outlier_qc import PTAQCConfig, run_pqc_for_parfile\n"
         "payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\n"
         "cfg = PTAQCConfig(**payload['cfg'])\n"
-        "run_pqc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg)\n"
+        "settings_out = payload.get('settings_out')\n"
+        "run_pqc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg, "
+        "settings_out=(Path(settings_out) if settings_out else None))\n"
     )
     try:
         proc = subprocess.run(
@@ -484,6 +502,8 @@ def _assert_timfile_metadata(df: pd.DataFrame, source: str) -> None:
             )
         return
     raise RuntimeError(f"{source}: no timfile metadata columns found (_timfile/filename).")
+
+
 
 
 def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
