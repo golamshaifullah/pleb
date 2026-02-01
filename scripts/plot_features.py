@@ -19,6 +19,16 @@ import matplotlib.pyplot as plt
 from pqc.utils.diagnostics import export_structure_table
 from plot_styles import EVENT_STYLES, BAD_POINT_STYLE
 
+
+def _dim_alpha(base_alpha: float) -> float:
+    lo, hi = 0.02, 0.1
+    a = float(base_alpha)
+    if a < 0.0:
+        a = 0.0
+    if a > 1.0:
+        a = 1.0
+    return lo + (hi - lo) * a
+
 CIRCULAR_FEATURES = {"orbital_phase"}
 KNOWN_FEATURES = [
     "orbital_phase",
@@ -199,7 +209,9 @@ def main() -> None:
 
                 plt.figure(figsize=(6, 4))
                 good = np.isfinite(x) & np.isfinite(y)
-                normal = good & (~bad_sub) & (~event_sub)
+                dim_sub = bad_sub | event_sub
+                normal = good & (~dim_sub)
+                dim = good & dim_sub
                 bad_only = good & bad_sub & (~event_sub)
                 event_only = good & event_sub & (~bad_sub)
                 both = good & bad_sub & event_sub
@@ -207,6 +219,7 @@ def main() -> None:
                 solar_only = good & solar_bad[idx]
                 orbital_only = good & orbital_bad[idx]
 
+                dim_alpha = _dim_alpha(0.4)
                 if s is not None:
                     plt.errorbar(
                         x[normal],
@@ -216,8 +229,12 @@ def main() -> None:
                         alpha=0.4,
                         capsize=0,
                     )
+                    if dim.any():
+                        plt.plot(x[dim], y[dim], ".", alpha=dim_alpha)
                 else:
                     plt.plot(x[normal], y[normal], ".", alpha=0.5)
+                    if dim.any():
+                        plt.plot(x[dim], y[dim], ".", alpha=_dim_alpha(0.5))
 
                 if bad_only.any():
                     bad_marker, bad_color = BAD_POINT_STYLE

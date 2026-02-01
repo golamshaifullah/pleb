@@ -61,6 +61,17 @@ def _feature_spline(x, y, s=None):
         return None
 
 
+def _dim_alpha(base_alpha: float) -> float:
+    """Map base alpha into a dim range for flagged points."""
+    lo, hi = 0.02, 0.1
+    a = float(base_alpha)
+    if a < 0.0:
+        a = 0.0
+    if a > 1.0:
+        a = 1.0
+    return lo + (hi - lo) * a
+
+
 def _rolling_std(y, window):
     """Compute a rolling standard deviation for confidence bands."""
     if len(y) < window:
@@ -363,19 +374,32 @@ def main() -> None:
                 continue
             plt.figure(figsize=(7, 5))
             for s in dict.fromkeys(systems):
-                mask = (systems == s) & (~bad_point) & (~event_member) & valid
+                mask = (systems == s) & valid
                 if not mask.any():
                     continue
                 marker, color = sys_map.get(s, ("o", "C0"))
-                plt.scatter(
-                    x[mask],
-                    y[mask],
-                    s=14,
-                    marker=marker,
-                    color=color,
-                    alpha=args.alpha,
-                    label=str(s),
-                )
+                dim_mask = mask & (bad_point | event_member)
+                ok_mask = mask & (~dim_mask)
+                if ok_mask.any():
+                    plt.scatter(
+                        x[ok_mask],
+                        y[ok_mask],
+                        s=14,
+                        marker=marker,
+                        color=color,
+                        alpha=args.alpha,
+                        label=str(s),
+                    )
+                if dim_mask.any():
+                    plt.scatter(
+                        x[dim_mask],
+                        y[dim_mask],
+                        s=14,
+                        marker=marker,
+                        color=color,
+                        alpha=_dim_alpha(args.alpha),
+                        label=None if ok_mask.any() else str(s),
+                    )
             bad_only = bad_point & (~event_member) & valid
             both = bad_point & event_member & valid
             if bad_only.any():

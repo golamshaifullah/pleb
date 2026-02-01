@@ -892,6 +892,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
         if cfg.make_binary_analysis and binary_rows:
             df = pd.DataFrame(binary_rows)
+            out_paths["binary_analysis"].mkdir(parents=True, exist_ok=True)
             df.to_csv(
                 out_paths["binary_analysis"] / "binary_analysis.tsv",
                 sep="\t",
