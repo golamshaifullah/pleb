@@ -128,7 +128,7 @@ pqc_dip_member_eta = 1.0
 #   If false, dips are fit directly in residual units.
 pqc_dip_freq_dependence = true
 # pqc_dip_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
-pqc_dip_freq_alpha_min = 0.0
+pqc_dip_freq_alpha_min = 2.0
 # pqc_dip_freq_alpha_max: upper bound for alpha. allowed: float. default: 4.0
 pqc_dip_freq_alpha_max = 4.0
 
