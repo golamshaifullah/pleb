@@ -4,6 +4,8 @@ EVENT_STYLES = {
     "event_member": ("o", "red"),
     "transient": ("o", "red"),
     "exp_dip": ("v", "black"),
+    "glitch": ("*", "magenta"),
+    "gaussian_bump": ("H", "teal"),
     "solar_event": ("^", "orange"),
     "eclipse_event": ("h", "blue"),
     "step": ("s", "purple"),

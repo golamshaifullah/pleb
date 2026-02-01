@@ -20,6 +20,47 @@ make_outlier_reports = true
 run_fix_dataset = false
 make_binary_analysis = false
 
+# --- pqc event detectors (optional) ---
+# pqc_gaussian_bump_enabled: enable Gaussian-bump event detection
+pqc_gaussian_bump_enabled = false
+# pqc_gaussian_bump_min_duration_days: minimum bump duration (days)
+pqc_gaussian_bump_min_duration_days = 60.0
+# pqc_gaussian_bump_max_duration_days: maximum bump duration (days)
+pqc_gaussian_bump_max_duration_days = 1500.0
+# pqc_gaussian_bump_n_durations: number of duration grid points
+pqc_gaussian_bump_n_durations = 6
+# pqc_gaussian_bump_min_points: minimum points for bump detection
+pqc_gaussian_bump_min_points = 20
+# pqc_gaussian_bump_delta_chi2_thresh: delta-chi2 threshold for bump detection
+pqc_gaussian_bump_delta_chi2_thresh = 25.0
+# pqc_gaussian_bump_suppress_overlap: suppress overlapping bumps
+pqc_gaussian_bump_suppress_overlap = true
+# pqc_gaussian_bump_member_eta: per-point membership SNR threshold
+pqc_gaussian_bump_member_eta = 1.0
+# pqc_gaussian_bump_freq_dependence: fit 1/f^alpha dependence
+pqc_gaussian_bump_freq_dependence = true
+# pqc_gaussian_bump_freq_alpha_min: lower bound for alpha
+pqc_gaussian_bump_freq_alpha_min = 0.0
+# pqc_gaussian_bump_freq_alpha_max: upper bound for alpha
+pqc_gaussian_bump_freq_alpha_max = 4.0
+# pqc_gaussian_bump_freq_alpha_tol: optimization tolerance for alpha
+pqc_gaussian_bump_freq_alpha_tol = 1e-3
+# pqc_gaussian_bump_freq_alpha_max_iter: max iterations for alpha optimizer
+pqc_gaussian_bump_freq_alpha_max_iter = 64
+
+# pqc_glitch_enabled: enable glitch event detection
+pqc_glitch_enabled = false
+# pqc_glitch_min_points: minimum points for glitch detection
+pqc_glitch_min_points = 30
+# pqc_glitch_delta_chi2_thresh: delta-chi2 threshold for glitch detection
+pqc_glitch_delta_chi2_thresh = 25.0
+# pqc_glitch_suppress_overlap: suppress overlapping glitches
+pqc_glitch_suppress_overlap = true
+# pqc_glitch_member_eta: per-point membership SNR threshold
+pqc_glitch_member_eta = 1.0
+# pqc_glitch_peak_tau_days: peak exponential timescale for glitch model (days)
+pqc_glitch_peak_tau_days = 30.0
+
 # Dataset fix/report knobs (only used if run_fix_dataset=true)
 fix_update_alltim_includes = true
 fix_min_toas_per_backend_tim = 10

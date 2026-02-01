@@ -143,6 +143,12 @@ def main() -> None:
         )
     if "exp_dip_member" in df.columns:
         event_masks["exp_dip"] = df["exp_dip_member"].fillna(False).astype(bool).to_numpy()
+    if "glitch_member" in df.columns:
+        event_masks["glitch"] = df["glitch_member"].fillna(False).astype(bool).to_numpy()
+    if "gaussian_bump_member" in df.columns:
+        event_masks["gaussian_bump"] = (
+            df["gaussian_bump_member"].fillna(False).astype(bool).to_numpy()
+        )
     if "step_id" in df.columns:
         event_masks["step"] = (
             pd.to_numeric(df["step_id"], errors="coerce").fillna(-1).to_numpy() >= 0
