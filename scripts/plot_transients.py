@@ -24,6 +24,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from plot_styles import EVENT_STYLES, BAD_POINT_STYLE
+
 
 def main() -> None:
     """Plot transient detections from a QC CSV into per-event PNGs."""
@@ -93,7 +95,16 @@ def main() -> None:
             continue
 
         plt.figure()
-        plt.errorbar(t, y, yerr=s, fmt="o", capsize=2, label="event_member")
+        ev_marker, ev_color = EVENT_STYLES.get("transient", ("o", "red"))
+        plt.errorbar(
+            t,
+            y,
+            yerr=s,
+            fmt=ev_marker,
+            color=ev_color,
+            capsize=2,
+            label="event_member",
+        )
 
         if "bad_point" in sub.columns:
             bad_point = sub["bad_point"].fillna(False).astype(bool).to_numpy()
@@ -109,11 +120,12 @@ def main() -> None:
         bad_point = bad_point[mask]
 
         if np.any(bad_point):
+            bad_marker, bad_color = BAD_POINT_STYLE
             plt.plot(
                 t[bad_point],
                 y[bad_point],
-                "x",
-                color="grey",
+                bad_marker,
+                color=bad_color,
                 alpha=0.9,
                 label="bad_point",
             )

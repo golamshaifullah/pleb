@@ -17,6 +17,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from pqc.utils.diagnostics import export_structure_table
+from plot_styles import EVENT_STYLES, BAD_POINT_STYLE
 
 CIRCULAR_FEATURES = {"orbital_phase"}
 KNOWN_FEATURES = [
@@ -186,8 +187,8 @@ def main() -> None:
                 event_sub = event_member[sub.index.to_numpy()]
 
                 if feat == "solar_elongation_deg":
-                    # Wrap to [-180, 180] to avoid cutoff and center at 0.
-                    x = ((x + 180.0) % 360.0) - 180.0
+                    # Clamp to [0, 180] for solar elongation in reports.
+                    x = np.where(np.isfinite(x), np.clip(x, 0.0, 180.0), x)
 
                 # handle circular feature
                 if feat in CIRCULAR_FEATURES:
@@ -219,63 +220,69 @@ def main() -> None:
                     plt.plot(x[normal], y[normal], ".", alpha=0.5)
 
                 if bad_only.any():
+                    bad_marker, bad_color = BAD_POINT_STYLE
                     plt.plot(
                         x[bad_only],
                         y[bad_only],
-                        "x",
-                        color="grey",
+                        bad_marker,
+                        color=bad_color,
                         alpha=0.9,
                         label="bad_point",
                     )
                 if event_only.any():
+                    marker, color = EVENT_STYLES.get("event_member", ("o", "red"))
                     plt.scatter(
                         x[event_only],
                         y[event_only],
                         s=30,
-                        marker="o",
+                        marker=marker,
                         facecolors="none",
-                        edgecolors="red",
+                        edgecolors=color,
                         alpha=0.9,
                         label="event_member",
                     )
                 if both.any():
+                    bad_marker, bad_color = BAD_POINT_STYLE
                     plt.plot(
                         x[both],
                         y[both],
-                        "x",
-                        color="grey",
+                        bad_marker,
+                        color=bad_color,
                         alpha=0.9,
                         label="bad_point+event_member",
                     )
+                    marker, color = EVENT_STYLES.get("event_member", ("o", "red"))
                     plt.scatter(
                         x[both],
                         y[both],
                         s=30,
-                        marker="o",
+                        marker=marker,
                         facecolors="none",
-                        edgecolors="red",
+                        edgecolors=color,
                         alpha=0.9,
                         label=None,
                     )
                 if solar_only.any():
+                    marker, color = EVENT_STYLES["solar_bad"]
                     plt.scatter(
                         x[solar_only],
                         y[solar_only],
                         s=30,
-                        marker="^",
+                        marker=marker,
                         facecolors="none",
-                        edgecolors="orange",
+                        edgecolors=color,
                         alpha=0.9,
                         label="solar_bad",
                     )
                 if orbital_only.any():
+                    marker, color = EVENT_STYLES["orbital_phase_bad"]
                     plt.scatter(
                         x[orbital_only],
                         y[orbital_only],
                         s=30,
-                        marker="s",
+                        marker=marker,
                         facecolors="none",
-                        edgecolors="blue",
+                        edgecolors=color,
                         alpha=0.9,
                         label="orbital_phase_bad",
                     )
@@ -288,11 +295,7 @@ def main() -> None:
                 plt.xlabel(feat)
                 plt.ylabel(resid_col)
                 if feat == "solar_elongation_deg":
-                    # Center the x-axis at zero elongation (sun direction).
-                    xmax = np.nanmax(np.abs(x)) if np.isfinite(x).any() else None
-                    if xmax is not None and np.isfinite(xmax) and xmax > 0:
-                        plt.xlim(-xmax, xmax)
-                    plt.axvline(0.0, color="black", lw=0.8, alpha=0.6)
+                    plt.xlim(0.0, 180.0)
                 label = ",".join([f"{c}={row.get(c)}" for c in cols]) if cols else "all"
                 plt.title(
                     f"{feat} ({label}) | bad_points={int(bad_sub.sum())} | "

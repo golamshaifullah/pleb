@@ -12,6 +12,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from plot_styles import EVENT_STYLES, BAD_POINT_STYLE
 from matplotlib.colors import to_rgb
 from scipy.interpolate import UnivariateSpline
 import colorsys
@@ -224,31 +226,22 @@ def main() -> None:
 
     # Bad points: grey X
     if bad_only.any():
+        bad_marker, bad_color = BAD_POINT_STYLE
         plt.scatter(
             df.loc[bad_only, "mjd"],
             df.loc[bad_only, resid_col],
             s=28,
-            marker="x",
-            color="grey",
+            marker=bad_marker,
+            color=bad_color,
             alpha=0.9,
             label="bad_point",
         )
 
     # Event members: unique markers by event type
-    event_styles = {
-        "transient": ("o", "red"),
-        "exp_dip": ("v", "black"),
-        "solar_event": ("^", "orange"),
-        "eclipse_event": ("h", "blue"),
-        "step": ("s", "purple"),
-        "dm_step": ("D", "green"),
-        "step_global": ("P", "brown"),
-        "dm_step_global": ("X", "darkorange"),
-    }
     for name, mask in event_masks.items():
         if not mask.any():
             continue
-        marker, color = event_styles.get(name, ("o", "red"))
+        marker, color = EVENT_STYLES.get(name, EVENT_STYLES["event_member"])
         plt.scatter(
             df.loc[mask, "mjd"],
             df.loc[mask, resid_col],
@@ -261,36 +254,39 @@ def main() -> None:
         )
         # Overlay bad-point marker for event points that are also bad
         if (mask & bad_point).any():
+            bad_marker, bad_color = BAD_POINT_STYLE
             plt.scatter(
                 df.loc[mask & bad_point, "mjd"],
                 df.loc[mask & bad_point, resid_col],
                 s=24,
-                marker="x",
-                color="grey",
+                marker=bad_marker,
+                color=bad_color,
                 alpha=0.9,
                 label=None,
             )
 
     # Solar-flagged: open orange triangles
     if solar_bad.any():
+        marker, color = EVENT_STYLES["solar_bad"]
         plt.scatter(
             df.loc[solar_bad, "mjd"],
             df.loc[solar_bad, resid_col],
             s=36,
-            marker="^",
+            marker=marker,
             facecolors="none",
-            edgecolors="orange",
+            edgecolors=color,
             alpha=0.9,
             label="solar_bad",
         )
     if orbital_bad.any():
+        marker, color = EVENT_STYLES["orbital_phase_bad"]
         plt.scatter(
             df.loc[orbital_bad, "mjd"],
             df.loc[orbital_bad, resid_col],
             s=36,
-            marker="s",
+            marker=marker,
             facecolors="none",
-            edgecolors="blue",
+            edgecolors=color,
             alpha=0.9,
             label="orbital_phase_bad",
         )
@@ -360,6 +356,8 @@ def main() -> None:
                 continue
             x = pd.to_numeric(df[feat], errors="coerce").to_numpy(dtype=float)
             y = pd.to_numeric(df[resid_col], errors="coerce").to_numpy(dtype=float)
+            if feat == "solar_elongation_deg":
+                x = np.where(np.isfinite(x), np.clip(x, 0.0, 180.0), x)
             valid = np.isfinite(x) & np.isfinite(y)
             if not np.any(valid):
                 continue
@@ -415,6 +413,8 @@ def main() -> None:
                         alpha=0.9,
                         label=None,
                     )
+            if feat == "solar_elongation_deg":
+                plt.xlim(0.0, 180.0)
             plt.xlabel(feat)
             plt.ylabel(resid_col)
             plt.title(f"{Path(args.csv).name} | {feat}")
