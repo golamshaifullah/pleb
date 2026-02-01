@@ -392,7 +392,7 @@ def main() -> None:
                 mask = mask & valid
                 if not mask.any():
                     continue
-                marker, color = event_styles.get(name, ("o", "red"))
+                marker, color = EVENT_STYLES.get(name, EVENT_STYLES["event_member"])
                 plt.scatter(
                     x[mask],
                     y[mask],
