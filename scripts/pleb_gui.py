@@ -278,7 +278,7 @@ def _editor_block(key_prefix: str, title: str) -> None:
                     st.session_state[state_key] = _load_text(load_path)
                 else:
                     st.warning("Provide a path or upload a file.")
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"Load failed: {e}")
     with col2:
@@ -300,13 +300,18 @@ def _editor_block(key_prefix: str, title: str) -> None:
                 st.error(f"Save failed: {e}")
 
     if state_key not in st.session_state:
-        st.session_state[state_key] = ""
-    st.text_area(
-        f"{key_prefix}_text",
-        value=st.session_state.get(state_key, ""),
-        height=360,
-        key=state_key,
-    )
+        st.text_area(
+            f"{key_prefix}_text",
+            value="",
+            height=360,
+            key=state_key,
+        )
+    else:
+        st.text_area(
+            f"{key_prefix}_text",
+            height=360,
+            key=state_key,
+        )
 
     if st.button(f"Validate {title}", key=f"{key_prefix}_validate_btn"):
         try:
@@ -331,6 +336,178 @@ def _editor_block(key_prefix: str, title: str) -> None:
             st.error(f"Validation failed: {e}")
 
 
+def _path_picker(prefix: str, label: str, start_dir: str, target_key: str) -> None:
+    st.markdown(f"**{label}**")
+    base = st.text_input(f"{prefix}_base", value=start_dir, key=f"{prefix}_base")
+    chosen = _file_tree(f"{prefix}_tree", Path(base))
+    if not chosen:
+        chosen = _file_browser(f"{prefix}_browser", "Browse filesystem", base)
+    if chosen:
+        st.caption(f"Selected: {chosen}")
+        cur = st.session_state.get(target_key, "")
+        pending_key = f"{target_key}__pending"
+        if chosen != cur and chosen != st.session_state.get(pending_key, ""):
+            st.session_state[pending_key] = chosen
+            sel_key = f"{prefix}_selected"
+            st.session_state[sel_key] = ""
+            st.rerun()
+    if st.button("Use selected path", key=f"{prefix}_use"):
+        if chosen:
+            st.session_state[f"{target_key}__pending"] = chosen
+            st.rerun()
+
+
+def _ingest_form() -> Dict[str, Any]:
+    st.markdown("### Ingest Mapping Builder")
+    data: Dict[str, Any] = {}
+
+    def list_paths(section_key: str, label: str, hint: str) -> list[str]:
+        st.markdown(f"**{label}** — {hint}")
+        items_key = f"ingest_{section_key}_items"
+        if items_key not in st.session_state:
+            st.session_state[items_key] = []
+        rows = st.session_state[items_key]
+
+        for i, _ in enumerate(list(rows)):
+            left, right = st.columns([2, 6])
+            with left:
+                st.write(f"{label}[{i}]")
+                if st.button("Remove", key=f"{items_key}_{i}_rm"):
+                    rows.pop(i)
+                    st.rerun()
+            with right:
+                path_key = f"{items_key}_{i}_path"
+                pending_key = f"{path_key}__pending"
+                if pending_key in st.session_state:
+                    st.session_state[path_key] = st.session_state.pop(pending_key)
+                if path_key not in st.session_state:
+                    st.session_state[path_key] = rows[i]
+                st.text_input("Path", key=path_key)
+                _path_picker(
+                    f"{items_key}_{i}",
+                    "Pick path",
+                    os.getcwd(),
+                    path_key,
+                )
+                rows[i] = st.session_state.get(path_key, rows[i])
+
+        if st.button(f"Add {label}", key=f"{items_key}_add"):
+            rows.append("")
+            st.rerun()
+        return [r for r in rows if str(r).strip()]
+
+    data["sources"] = list_paths("sources", "sources", "Root folders to scan")
+    data["par_roots"] = list_paths("par_roots", "par_roots", "PAR file roots (optional)")
+    data["template_roots"] = list_paths("template_roots", "template_roots", "Template roots (optional)")
+
+    st.markdown("**ignore_backends** — backend names to ignore")
+    ignore_key = "ingest_ignore_backends"
+    if ignore_key not in st.session_state:
+        st.session_state[ignore_key] = ""
+    st.text_input("Comma-separated backend names", key=ignore_key)
+    data["ignore_backends"] = [
+        s.strip()
+        for s in str(st.session_state.get(ignore_key, "")).split(",")
+        if s.strip()
+    ]
+
+    st.markdown("**pulsar_aliases** — mapping like B1234+56 -> J1234+5678")
+    alias_key = "ingest_aliases"
+    if alias_key not in st.session_state:
+        st.session_state[alias_key] = ""
+    st.text_area("One mapping per line: Bxxxx+yy=Jxxxx+yyyy", key=alias_key, height=120)
+    aliases: Dict[str, str] = {}
+    for line in str(st.session_state.get(alias_key, "")).splitlines():
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        if k and v:
+            aliases[k] = v
+    data["pulsar_aliases"] = aliases
+
+    st.markdown("**backends** — backend name (TEL.BACKEND.CENFREQ) + path to tim files")
+    back_key = "ingest_backends_rows"
+    if back_key not in st.session_state:
+        st.session_state[back_key] = []
+    back_rows = st.session_state[back_key]
+    for i, _ in enumerate(list(back_rows)):
+        left, right = st.columns([3, 7])
+        with left:
+            name_key = f"{back_key}_{i}_name"
+            if name_key not in st.session_state:
+                st.session_state[name_key] = back_rows[i].get("name", "")
+            st.text_input("backend name", key=name_key)
+            if st.button("Remove backend", key=f"{back_key}_{i}_rm"):
+                back_rows.pop(i)
+                st.rerun()
+        with right:
+            root_key = f"{back_key}_{i}_root"
+            pending_key = f"{root_key}__pending"
+            if pending_key in st.session_state:
+                st.session_state[root_key] = st.session_state.pop(pending_key)
+            if root_key not in st.session_state:
+                st.session_state[root_key] = back_rows[i].get("root", "")
+            st.text_input("root path", key=root_key)
+            source_options = [
+                s for s in (st.session_state.get("ingest_sources_items", []) or []) if str(s).strip()
+            ]
+            if source_options:
+                base_choice = st.selectbox(
+                    "Select source base",
+                    options=source_options,
+                    key=f"{back_key}_{i}_source_select",
+                )
+            else:
+                base_choice = os.getcwd()
+            _path_picker(
+                f"{back_key}_{i}",
+                "Pick tim root",
+                str(base_choice),
+                root_key,
+            )
+            ignore_key = f"{back_key}_{i}_ignore"
+            if ignore_key not in st.session_state:
+                st.session_state[ignore_key] = bool(back_rows[i].get("ignore", False))
+            st.checkbox("ignore backend", key=ignore_key)
+            glob_key = f"{back_key}_{i}_glob"
+            if glob_key not in st.session_state:
+                st.session_state[glob_key] = back_rows[i].get("tim_glob", "*.tim")
+            st.text_input("tim_glob", key=glob_key)
+            suf_key = f"{back_key}_{i}_suf"
+            if suf_key not in st.session_state:
+                st.session_state[suf_key] = ",".join(back_rows[i].get("ignore_suffixes", ["_all.tim"]))
+            st.text_input("ignore_suffixes (comma)", key=suf_key)
+            back_rows[i] = {
+                "name": st.session_state[name_key],
+                "root": st.session_state[root_key],
+                "ignore": bool(st.session_state[ignore_key]),
+                "tim_glob": st.session_state[glob_key],
+                "ignore_suffixes": [s.strip() for s in st.session_state[suf_key].split(",") if s.strip()],
+            }
+    if st.button("Add backend mapping", key="backend_add"):
+        back_rows.append(
+            {"name": "", "root": "", "ignore": False, "tim_glob": "*.tim", "ignore_suffixes": ["_all.tim"]}
+        )
+        st.rerun()
+
+    backends: Dict[str, Any] = {}
+    for b in back_rows:
+        name = (b.get("name") or "").strip()
+        root = (b.get("root") or "").strip()
+        if not name or not root:
+            continue
+        backends[name] = {
+            "root": root,
+            "ignore": bool(b.get("ignore", False)),
+            "tim_glob": b.get("tim_glob") or "*.tim",
+            "ignore_suffixes": b.get("ignore_suffixes") or ["_all.tim"],
+        }
+    data["backends"] = backends
+    return data
+
+
 def _ensure_list_state(key: str) -> None:
     if key not in st.session_state:
         st.session_state[key] = []
@@ -346,14 +523,14 @@ def _list_editor(prefix: str, label: str) -> None:
         if st.button("Add", key=f"{prefix}_add"):
             if new_val.strip():
                 st.session_state[prefix].append(new_val.strip())
-                st.experimental_rerun()
+                st.rerun()
     if st.session_state[prefix]:
         for i, val in enumerate(list(st.session_state[prefix])):
             c1, c2 = st.columns([8, 1])
             c1.text_input(f"{prefix}_{i}", value=val, key=f"{prefix}_{i}_val")
             if c2.button("Remove", key=f"{prefix}_{i}_rm"):
                 st.session_state[prefix].pop(i)
-                st.experimental_rerun()
+                st.rerun()
 
 
 def _backend_editor() -> None:
@@ -371,7 +548,7 @@ def _backend_editor() -> None:
                 "ignore_suffixes": ["_all.tim"],
             }
         )
-        st.experimental_rerun()
+        st.rerun()
 
     for i, b in enumerate(list(st.session_state["ingest_backends"])):
         with st.expander(f"Backend {i + 1}"):
@@ -389,7 +566,7 @@ def _backend_editor() -> None:
             b["ignore_suffixes"] = [s.strip() for s in suffix_txt.split(",") if s.strip()]
             if st.button("Remove backend", key=f"backend_{i}_rm"):
                 st.session_state["ingest_backends"].pop(i)
-                st.experimental_rerun()
+                st.rerun()
 
 
 def _apply_ingest_builder_to_text() -> None:
@@ -427,39 +604,10 @@ def main() -> None:
 
     with tabs[0]:
         _editor_block("ingest", "Ingest Mapping")
-
-        st.markdown("### Ingest Mapping Builder")
-        _list_editor("ingest_sources", "Sources")
-        _list_editor("ingest_par_roots", "Par roots")
-        _list_editor("ingest_template_roots", "Template roots")
-        _backend_editor()
-        if st.button("Apply builder to Ingest Mapping editor"):
-            _apply_ingest_builder_to_text()
-
-        st.markdown("### Add source paths")
-        base = st.text_input("ingest_base_dir", value=os.getcwd())
-        chosen = _file_tree("ingest_tree", Path(base))
-        if not chosen:
-            chosen = _file_browser("ingest_browser", "Browse filesystem", base)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Append to sources"):
-                try:
-                    text = st.session_state.get("ingest_text", "{}")
-                    data = _parse_text(text, _detect_format(None, text))
-                    data.setdefault("sources", []).append(chosen)
-                    st.session_state["ingest_text"] = _serialize_data(data, "json")
-                except Exception as e:
-                    st.error(f"Failed to append: {e}")
-        with col_b:
-            if st.button("Append to par_roots"):
-                try:
-                    text = st.session_state.get("ingest_text", "{}")
-                    data = _parse_text(text, _detect_format(None, text))
-                    data.setdefault("par_roots", []).append(chosen)
-                    st.session_state["ingest_text"] = _serialize_data(data, "json")
-                except Exception as e:
-                    st.error(f"Failed to append: {e}")
+        ingest_data = _ingest_form()
+        if st.button("Update ingest text view from fields"):
+            st.session_state["ingest_text"] = _serialize_data(ingest_data, "json")
+            st.rerun()
 
     with tabs[1]:
         st.markdown("### Settings Form (schema-driven)")
