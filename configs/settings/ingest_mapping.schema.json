@@ -47,7 +47,7 @@
         },
         "required": ["root"]
       },
-      "description": "Mapping of backend name -> scan config. Backend name uses PETA format: TEL.BE.CENFREQ."
+      "description": "Mapping of backend name -> scan config. Backend name uses EPTA format: TEL.BE.CENFREQ."
     }
   }
 }

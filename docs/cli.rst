@@ -66,6 +66,35 @@ The ``--scan-typical`` option applies a built-in profile that explores parallax,
 binary derivatives, or DM derivatives based on the timing model and reduced
 chi-square thresholds. [Edwards2006]_ [Hobbs2006]_
 
+Param-check mode (fit-only scans)
+---------------------------------
+
+The ``--param-scan`` mode is the "param_check" workflow: it performs fit-only
+scans of candidate parameters without running the full pipeline. It runs tempo2
+on temporary ``.par`` variants and records how the fit statistics change.
+
+Prerequisites:
+
+- tempo2 available in your container/environment
+- a clean Git repo (the scan checks out branches)
+- ``home_dir``, ``dataset_name``, and ``results_dir`` set (via config or ``--set``)
+
+Outputs:
+
+- A standalone run directory under ``<results>/<outdir>_param_scan/``
+- Per-pulsar scan tables in ``param_scan/``
+- PLK logs under ``plk/``
+- Scratch workspace under ``work/`` (removed if ``cleanup_work_dir=true``)
+
+Interpreting outputs:
+
+- The per-pulsar tables list each candidate and the change in fit metrics
+  (e.g., reduced chi-square or log-likelihood proxies derived from PLK logs).
+- Prefer candidates that improve fit quality without inflating uncertainties.
+- If multiple candidates improve the fit similarly, prioritize those with
+  physical motivation (e.g., DM derivatives for dispersive trends, BTX
+  derivatives for binary timing) and check residual structure.
+
 QC report subcommand
 --------------------
 

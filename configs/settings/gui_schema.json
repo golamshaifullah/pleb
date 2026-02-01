@@ -1,0 +1,770 @@
+{
+  "schema_version": 1,
+  "fields": [
+    {
+      "name": "home_dir",
+      "type": "PosixPath",
+      "default": "."
+    },
+    {
+      "name": "singularity_image",
+      "type": "PosixPath",
+      "default": "/tmp/tempo2.sif"
+    },
+    {
+      "name": "dataset_name",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "results_dir",
+      "type": "PosixPath",
+      "default": "."
+    },
+    {
+      "name": "branches",
+      "type": "list",
+      "default": [
+        "main",
+        "EPTA"
+      ]
+    },
+    {
+      "name": "reference_branch",
+      "type": "str",
+      "default": "main"
+    },
+    {
+      "name": "pulsars",
+      "type": "str",
+      "default": "ALL",
+      "choices": [
+        "ALL"
+      ]
+    },
+    {
+      "name": "outdir_name",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "cleanup_output_tree",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "cleanup_work_dir",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "epoch",
+      "type": "str",
+      "default": "55000"
+    },
+    {
+      "name": "force_rerun",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "jobs",
+      "type": "int",
+      "default": 1
+    },
+    {
+      "name": "run_tempo2",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "make_toa_coverage_plots",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "make_change_reports",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "make_covariance_heatmaps",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "make_residual_plots",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "make_outlier_reports",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "testing_mode",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "run_pqc",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_backend_col",
+      "type": "str",
+      "default": "group"
+    },
+    {
+      "name": "pqc_drop_unmatched",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_merge_tol_seconds",
+      "type": "float",
+      "default": 2.0
+    },
+    {
+      "name": "pqc_tau_corr_minutes",
+      "type": "float",
+      "default": 30.0
+    },
+    {
+      "name": "pqc_fdr_q",
+      "type": "float",
+      "default": 0.01
+    },
+    {
+      "name": "pqc_mark_only_worst_per_day",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_tau_rec_days",
+      "type": "float",
+      "default": 7.0
+    },
+    {
+      "name": "pqc_window_mult",
+      "type": "float",
+      "default": 5.0
+    },
+    {
+      "name": "pqc_min_points",
+      "type": "int",
+      "default": 6
+    },
+    {
+      "name": "pqc_delta_chi2_thresh",
+      "type": "float",
+      "default": 25.0
+    },
+    {
+      "name": "pqc_step_enabled",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_step_min_points",
+      "type": "int",
+      "default": 20
+    },
+    {
+      "name": "pqc_step_delta_chi2_thresh",
+      "type": "float",
+      "default": 25.0
+    },
+    {
+      "name": "pqc_step_scope",
+      "type": "str",
+      "default": "both",
+      "choices": [
+        "backend",
+        "global",
+        "both"
+      ]
+    },
+    {
+      "name": "pqc_dm_step_enabled",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_dm_step_min_points",
+      "type": "int",
+      "default": 20
+    },
+    {
+      "name": "pqc_dm_step_delta_chi2_thresh",
+      "type": "float",
+      "default": 25.0
+    },
+    {
+      "name": "pqc_dm_step_scope",
+      "type": "str",
+      "default": "both",
+      "choices": [
+        "backend",
+        "global",
+        "both"
+      ]
+    },
+    {
+      "name": "pqc_robust_enabled",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_robust_z_thresh",
+      "type": "float",
+      "default": 5.0
+    },
+    {
+      "name": "pqc_robust_scope",
+      "type": "str",
+      "default": "both",
+      "choices": [
+        "backend",
+        "global",
+        "both"
+      ]
+    },
+    {
+      "name": "pqc_add_orbital_phase",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_add_solar_elongation",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_add_elevation",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_add_airmass",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_add_parallactic_angle",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_add_freq_bin",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_freq_bins",
+      "type": "int",
+      "default": 8
+    },
+    {
+      "name": "pqc_observatory_path",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "pqc_structure_mode",
+      "type": "str",
+      "default": "none",
+      "choices": [
+        "none",
+        "detrend",
+        "test",
+        "both"
+      ]
+    },
+    {
+      "name": "pqc_structure_detrend_features",
+      "type": "list",
+      "default": [
+        "solar_elongation_deg",
+        "orbital_phase"
+      ]
+    },
+    {
+      "name": "pqc_structure_test_features",
+      "type": "list",
+      "default": [
+        "solar_elongation_deg",
+        "orbital_phase"
+      ]
+    },
+    {
+      "name": "pqc_structure_nbins",
+      "type": "int",
+      "default": 12
+    },
+    {
+      "name": "pqc_structure_min_per_bin",
+      "type": "int",
+      "default": 3
+    },
+    {
+      "name": "pqc_structure_p_thresh",
+      "type": "float",
+      "default": 0.01
+    },
+    {
+      "name": "pqc_structure_circular_features",
+      "type": "list",
+      "default": [
+        "orbital_phase"
+      ]
+    },
+    {
+      "name": "pqc_structure_group_cols",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "pqc_outlier_gate_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_outlier_gate_sigma",
+      "type": "float",
+      "default": 3.0
+    },
+    {
+      "name": "pqc_outlier_gate_resid_col",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "pqc_outlier_gate_sigma_col",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "pqc_event_instrument",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_solar_events_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_solar_approach_max_deg",
+      "type": "float",
+      "default": 30.0
+    },
+    {
+      "name": "pqc_solar_min_points_global",
+      "type": "int",
+      "default": 30
+    },
+    {
+      "name": "pqc_solar_min_points_year",
+      "type": "int",
+      "default": 10
+    },
+    {
+      "name": "pqc_solar_min_points_near_zero",
+      "type": "int",
+      "default": 3
+    },
+    {
+      "name": "pqc_solar_tau_min_deg",
+      "type": "float",
+      "default": 2.0
+    },
+    {
+      "name": "pqc_solar_tau_max_deg",
+      "type": "float",
+      "default": 60.0
+    },
+    {
+      "name": "pqc_solar_member_eta",
+      "type": "float",
+      "default": 1.0
+    },
+    {
+      "name": "pqc_solar_freq_dependence",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_solar_freq_alpha_min",
+      "type": "float",
+      "default": 0.0
+    },
+    {
+      "name": "pqc_solar_freq_alpha_max",
+      "type": "float",
+      "default": 4.0
+    },
+    {
+      "name": "pqc_solar_freq_alpha_tol",
+      "type": "float",
+      "default": 0.001
+    },
+    {
+      "name": "pqc_solar_freq_alpha_max_iter",
+      "type": "int",
+      "default": 64
+    },
+    {
+      "name": "pqc_orbital_phase_cut_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_orbital_phase_cut_center",
+      "type": "float",
+      "default": 0.25
+    },
+    {
+      "name": "pqc_orbital_phase_cut",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "pqc_orbital_phase_cut_sigma",
+      "type": "float",
+      "default": 3.0
+    },
+    {
+      "name": "pqc_orbital_phase_cut_nbins",
+      "type": "int",
+      "default": 18
+    },
+    {
+      "name": "pqc_orbital_phase_cut_min_points",
+      "type": "int",
+      "default": 20
+    },
+    {
+      "name": "pqc_eclipse_events_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "pqc_eclipse_center_phase",
+      "type": "float",
+      "default": 0.25
+    },
+    {
+      "name": "pqc_eclipse_min_points",
+      "type": "int",
+      "default": 30
+    },
+    {
+      "name": "pqc_eclipse_width_min",
+      "type": "float",
+      "default": 0.01
+    },
+    {
+      "name": "pqc_eclipse_width_max",
+      "type": "float",
+      "default": 0.5
+    },
+    {
+      "name": "pqc_eclipse_member_eta",
+      "type": "float",
+      "default": 1.0
+    },
+    {
+      "name": "pqc_eclipse_freq_dependence",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "pqc_eclipse_freq_alpha_min",
+      "type": "float",
+      "default": 0.0
+    },
+    {
+      "name": "pqc_eclipse_freq_alpha_max",
+      "type": "float",
+      "default": 4.0
+    },
+    {
+      "name": "pqc_eclipse_freq_alpha_tol",
+      "type": "float",
+      "default": 0.001
+    },
+    {
+      "name": "pqc_eclipse_freq_alpha_max_iter",
+      "type": "int",
+      "default": 64
+    },
+    {
+      "name": "qc_report",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "qc_report_backend_col",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_report_backend",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_report_dir",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_report_no_plots",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "qc_report_structure_group_cols",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_report_no_feature_plots",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "run_fix_dataset",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "make_binary_analysis",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "param_scan_typical",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "param_scan_dm_redchisq_threshold",
+      "type": "float",
+      "default": 2.0
+    },
+    {
+      "name": "param_scan_dm_max_order",
+      "type": "int",
+      "default": 4
+    },
+    {
+      "name": "param_scan_btx_max_fb",
+      "type": "int",
+      "default": 3
+    },
+    {
+      "name": "fix_apply",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "fix_branch_name",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_base_branch",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_commit_message",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_backup",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "fix_dry_run",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "fix_update_alltim_includes",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "fix_min_toas_per_backend_tim",
+      "type": "int",
+      "default": 10
+    },
+    {
+      "name": "fix_required_tim_flags",
+      "type": "dict",
+      "default": {}
+    },
+    {
+      "name": "fix_system_flag_mapping_path",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_insert_missing_jumps",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "fix_jump_flag",
+      "type": "str",
+      "default": "-sys"
+    },
+    {
+      "name": "fix_ensure_ephem",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_ensure_clk",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_ensure_ne_sw",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_remove_patterns",
+      "type": "list",
+      "default": [
+        "NRT.NUPPI.",
+        "NRT.NUXPI."
+      ]
+    },
+    {
+      "name": "fix_coord_convert",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_qc_remove_outliers",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "fix_qc_action",
+      "type": "str",
+      "default": "comment",
+      "choices": [
+        "comment",
+        "delete"
+      ]
+    },
+    {
+      "name": "fix_qc_comment_prefix",
+      "type": "str",
+      "default": "C QC_OUTLIER"
+    },
+    {
+      "name": "fix_qc_backend_col",
+      "type": "str",
+      "default": "sys"
+    },
+    {
+      "name": "fix_qc_remove_bad",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "fix_qc_remove_transients",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "fix_qc_remove_solar",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "fix_qc_solar_action",
+      "type": "str",
+      "default": "comment",
+      "choices": [
+        "comment",
+        "delete"
+      ]
+    },
+    {
+      "name": "fix_qc_solar_comment_prefix",
+      "type": "str",
+      "default": "# QC_SOLAR"
+    },
+    {
+      "name": "fix_qc_remove_orbital_phase",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "fix_qc_orbital_phase_action",
+      "type": "str",
+      "default": "comment",
+      "choices": [
+        "comment",
+        "delete"
+      ]
+    },
+    {
+      "name": "fix_qc_orbital_phase_comment_prefix",
+      "type": "str",
+      "default": "# QC_BIANRY_ECLIPSE"
+    },
+    {
+      "name": "fix_qc_merge_tol_days",
+      "type": "float",
+      "default": 2.3148148148148147e-05
+    },
+    {
+      "name": "fix_qc_results_dir",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "fix_qc_branch",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "binary_only_models",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "dpi",
+      "type": "int",
+      "default": 120
+    },
+    {
+      "name": "max_covmat_params",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "ingest_mapping_file",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "ingest_output_dir",
+      "type": "NoneType",
+      "default": null
+    }
+  ]
+}

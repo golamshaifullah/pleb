@@ -1,13 +1,1 @@
-.ipynb_checkpoints/
-candidates.txt
-configs/.ipynb_checkpoints/
-configs/testconfig.toml
-configs/testconfig2.toml
-data_combination_pipeline.egg-info/
-data_combination_pipeline/__pycache__/legacy_fixdataset.cpython-311.pyc
-data_combination_pipeline/__pycache__/outlier_qc.cpython-311.pyc
-data_combination_pipeline/__pycache__/system_flag_inference.cpython-311.pyc
-data_combination_pipeline/__pycache__/tim_reader.cpython-311.pyc
-data_combination_pipeline_module_with_pta_qc_hook.zip
-donezip/
-tests/__pycache__/test_qc_integration.cpython-311-pytest-9.0.2.pyc
+__pycache__

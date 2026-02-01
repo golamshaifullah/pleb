@@ -12,6 +12,7 @@ EPTA Data Combination Pipeline
    modes
    concepts
    cli
+   gui
    ingest
    examples
    faq
