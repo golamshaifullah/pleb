@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from .logging_utils import get_logger
+from .utils import safe_mkdir
 
 logger = get_logger("pleb.tempo2")
 
@@ -124,7 +125,11 @@ def run_tempo2_for_pulsar(
     par, tim = tempo2_paths_in_container(pulsar)
 
     work_dir = out_paths.get("work", out_paths["logs"]) / branch / pulsar
-    work_dir.mkdir(parents=True, exist_ok=True)
+    safe_mkdir(work_dir)
+
+    safe_mkdir(out_paths["plk"])
+    safe_mkdir(out_paths["covmat"])
+    safe_mkdir(out_paths["general2"])
 
     plk_out = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
     cov_out = out_paths["covmat"] / f"{pulsar}_{branch}.covmat"

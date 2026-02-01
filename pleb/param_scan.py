@@ -24,7 +24,13 @@ from .config import PipelineConfig
 from .git_tools import checkout, require_clean_repo
 from .logging_utils import get_logger
 from .tempo2 import build_singularity_prefix, run_subprocess, tempo2_paths_in_container
-from .utils import which_or_raise, discover_pulsars, safe_mkdir
+from .utils import (
+    which_or_raise,
+    discover_pulsars,
+    safe_mkdir,
+    cleanup_empty_dirs,
+    remove_tree_if_exists,
+)
 from .parsers import read_plklog
 import numpy as np
 
@@ -597,8 +603,9 @@ def run_param_scan(
         "work": tag / "work",
         "logs": tag / "logs",
     }
-    for p in out_paths.values():
-        safe_mkdir(Path(p))
+    safe_mkdir(out_paths["base"])
+    safe_mkdir(out_paths["tag"])
+    safe_mkdir(out_paths["logs"])
 
     try:
         from git import Repo  # type: ignore
@@ -626,6 +633,7 @@ def run_param_scan(
         base_par = p_work / f"{pulsar}_BASE.par"
         base_par.write_text(base_text, encoding="utf-8")
         base_plk = out_paths["plk"] / f"{pulsar}_{scan_branch}_BASE_plk.log"
+        safe_mkdir(out_paths["plk"])
 
         if cfg.force_rerun or not base_plk.exists():
             _run_fit_only_plk(
@@ -770,6 +778,7 @@ def run_param_scan(
 
         # Per-pulsar file
         dfp = pd.DataFrame(rows)
+        safe_mkdir(out_paths["param_scan"])
         pdir = out_paths["param_scan"] / pulsar
         safe_mkdir(pdir)
         dfp.to_csv(pdir / f"param_scan_{pulsar}.tsv", sep="\t", index=False)
@@ -813,6 +822,10 @@ def run_param_scan(
             )
             df.to_csv(out_file, sep="\t", index=False)
 
+        if getattr(cfg, "cleanup_work_dir", False):
+            remove_tree_if_exists(out_paths["work"])
+        if getattr(cfg, "cleanup_output_tree", False):
+            cleanup_empty_dirs(out_paths["tag"])
         return {k: Path(v) for k, v in out_paths.items()}
 
     finally:

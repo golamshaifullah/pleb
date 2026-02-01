@@ -19,6 +19,7 @@ import pandas as pd
 
 from .parsers import PlkParseError, read_plklog, read_general2, read_tim_file
 from .logging_utils import get_logger
+from .utils import safe_mkdir
 
 logger = get_logger("pleb.reports")
 
@@ -284,6 +285,7 @@ def write_change_reports(
 
             write_change_reports(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
+    safe_mkdir(out_paths["change_report"])
     combined = []
     skipped = 0
     for branch in branches:
@@ -521,6 +523,7 @@ def write_new_param_significance(
 
             write_new_param_significance(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
+    safe_mkdir(out_paths["change_report"])
     rows = []
     for pulsar in pulsars:
         ref_path = out_paths["plk"] / f"{pulsar}_{reference_branch}_plk.log"
@@ -614,6 +617,7 @@ def write_outlier_tables(
 
             write_outlier_tables(Path("/data/epta/EPTA"), Path("EPTA"), out_paths, ["J1234+5678"], ["main"])
     """
+    safe_mkdir(out_paths["outliers"])
     for pulsar in pulsars:
         tim_dir = home_dir / pulsar / "tims"
         tim_lookup = []

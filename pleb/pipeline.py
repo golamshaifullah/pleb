@@ -46,7 +46,13 @@ from .reports import (
     write_outlier_tables,
 )
 from .tempo2 import run_tempo2_for_pulsar
-from .utils import discover_pulsars, make_output_tree, which_or_raise
+from .utils import (
+    discover_pulsars,
+    make_output_tree,
+    which_or_raise,
+    cleanup_empty_dirs,
+    remove_tree_if_exists,
+)
 
 # Add-ons from FixDataset.ipynb / AnalysePulsars.ipynb
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
@@ -529,7 +535,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     ):
         branches_to_run.append(reference_branch)
 
-    out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name)
+    out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name, lazy=True)
     logger.info("Writing outputs to: %s", out_paths["tag"])
 
     # Ensure fix-dataset output path exists even if the output tree helper doesn't pre-create it
@@ -930,6 +936,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 logger.info("QC report written to: %s", report_dir)
             except Exception as e:
                 logger.warning("QC report generation failed: %s", e)
+
+        if getattr(cfg, "cleanup_work_dir", False):
+            remove_tree_if_exists(out_paths["work"])
+        if getattr(cfg, "cleanup_output_tree", False):
+            cleanup_empty_dirs(out_paths["tag"])
 
         logger.info("Pipeline complete.")
         return out_paths

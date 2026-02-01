@@ -111,6 +111,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of parallel workers to run pulsars concurrently (per branch).",
     )
     p.add_argument(
+        "--cleanup-output-tree",
+        type=str,
+        default=None,
+        help="Remove empty output directories after a run (true/false, default: true).",
+    )
+    p.add_argument(
+        "--cleanup-work-dir",
+        action="store_true",
+        help="Remove work/ scratch directories after successful runs.",
+    )
+    p.add_argument(
         "--qc",
         action="store_true",
         help="Run optional pqc outlier detection (requires pqc + libstempo).",
@@ -512,6 +523,16 @@ def _parse_csv_list(raw: str | None) -> list[str] | None:
     return items or None
 
 
+def _parse_bool(raw: str, name: str) -> bool:
+    """Parse a boolean CLI value (true/false/1/0/yes/no)."""
+    val = str(raw).strip().lower()
+    if val in ("true", "1", "yes", "y", "on"):
+        return True
+    if val in ("false", "0", "no", "n", "off"):
+        return False
+    raise ValueError(f"--{name} expects true/false, got: {raw!r}")
+
+
 def main(argv=None) -> int:
     """Run the CLI entry point.
 
@@ -573,6 +594,10 @@ def main(argv=None) -> int:
 
     if args.jobs is not None:
         cfg.jobs = int(args.jobs)
+    if getattr(args, "cleanup_output_tree", None) is not None:
+        cfg.cleanup_output_tree = _parse_bool(args.cleanup_output_tree, "cleanup-output-tree")
+    if getattr(args, "cleanup_work_dir", False):
+        cfg.cleanup_work_dir = True
     if getattr(args, "qc", False):
         cfg.run_pqc = True
     if getattr(args, "qc_backend_col", None):

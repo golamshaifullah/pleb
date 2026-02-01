@@ -212,6 +212,12 @@ class PipelineConfig:
     # Output directory name: None -> timestamped
     outdir_name: Optional[str] = None
 
+    # Remove empty output folders after a run
+    cleanup_output_tree: bool = True
+
+    # Remove work/ scratch directories after successful runs
+    cleanup_work_dir: bool = False
+
     # tempo2 settings
     epoch: str = "55000"
 

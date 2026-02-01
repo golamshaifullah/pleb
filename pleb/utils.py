@@ -7,6 +7,7 @@ used across pipeline modules.
 from __future__ import annotations
 
 import shutil
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -68,7 +69,11 @@ def discover_pulsars(home_dir: Path) -> List[str]:
 
 
 def make_output_tree(
-    results_dir: Path, branches: List[str], outdir_name: Optional[str]
+    results_dir: Path,
+    branches: List[str],
+    outdir_name: Optional[str],
+    *,
+    lazy: bool = True,
 ) -> Dict[str, Path]:
     """Create the output directory tree for a pipeline run.
 
@@ -109,6 +114,32 @@ def make_output_tree(
         "param_scan": base / tag / "param_scan",
         "qc": base / tag / "qc",
     }
-    for p in paths.values():
-        safe_mkdir(p)
+    safe_mkdir(base)
+    safe_mkdir(base / tag)
+    safe_mkdir(paths["logs"])
+    if not lazy:
+        for p in paths.values():
+            safe_mkdir(p)
     return paths
+
+
+def cleanup_empty_dirs(root: Path) -> None:
+    """Remove empty directories under a root (bottom-up)."""
+    root = Path(root)
+    if not root.exists():
+        return
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+        if dirnames or filenames:
+            continue
+        try:
+            Path(dirpath).rmdir()
+        except OSError:
+            pass
+
+
+def remove_tree_if_exists(path: Path) -> None:
+    """Remove a directory tree if it exists."""
+    path = Path(path)
+    if not path.exists():
+        return
+    shutil.rmtree(path, ignore_errors=True)
