@@ -336,7 +336,7 @@ pqc_eclipse_freq_alpha_tol = 1e-3
 pqc_eclipse_freq_alpha_max_iter = 64
 
 # pqc_gaussian_bump_enabled: enable Gaussian-bump event detection. allowed: true/false. default: false
-pqc_gaussian_bump_enabled = false
+pqc_gaussian_bump_enabled = true
 # pqc_gaussian_bump_min_duration_days: minimum bump duration (days). allowed: float. default: 60.0
 pqc_gaussian_bump_min_duration_days = 60.0
 # pqc_gaussian_bump_max_duration_days: maximum bump duration (days). allowed: float. default: 1500.0
@@ -363,7 +363,7 @@ pqc_gaussian_bump_freq_alpha_tol = 1e-3
 pqc_gaussian_bump_freq_alpha_max_iter = 64
 
 # pqc_glitch_enabled: enable glitch event detection. allowed: true/false. default: false
-pqc_glitch_enabled = false
+pqc_glitch_enabled = true
 # pqc_glitch_min_points: minimum points for glitch detection. allowed: int. default: 30
 pqc_glitch_min_points = 30
 # pqc_glitch_delta_chi2_thresh: delta-chi2 threshold for glitch detection. allowed: float. default: 25.0
