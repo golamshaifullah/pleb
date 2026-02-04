@@ -56,7 +56,7 @@ epoch = "58000"
 # force_rerun: re-run tempo2 even if outputs exist. allowed: true/false. default: false
 force_rerun = true
 # jobs: parallel workers per branch. allowed: integer >=1. default: 1
-jobs = 16
+jobs = 19
 # run_tempo2: run tempo2 stage. allowed: true/false. default: true
 run_tempo2 = true
 # make_toa_coverage_plots: generate TOA coverage plots. allowed: true/false. default: true
@@ -367,13 +367,19 @@ pqc_glitch_enabled = true
 # pqc_glitch_min_points: minimum points for glitch detection. allowed: int. default: 30
 pqc_glitch_min_points = 30
 # pqc_glitch_delta_chi2_thresh: delta-chi2 threshold for glitch detection. allowed: float. default: 25.0
-pqc_glitch_delta_chi2_thresh = 25.0
+pqc_glitch_delta_chi2_thresh = 35.0
 # pqc_glitch_suppress_overlap: suppress overlapping glitches. allowed: true/false. default: true
 pqc_glitch_suppress_overlap = true
 # pqc_glitch_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
 pqc_glitch_member_eta = 1.0
 # pqc_glitch_peak_tau_days: peak exponential timescale for glitch model (days). allowed: float. default: 30.0
-pqc_glitch_peak_tau_days = 30.0
+pqc_glitch_peak_tau_days = 1.0
+# pqc_glitch_noise_k: noise-aware threshold multiplier. allowed: float. default: 1.0
+pqc_glitch_noise_k = 3.0
+# pqc_glitch_mean_window_days: rolling-mean window (days). allowed: float. default: 180.0
+pqc_glitch_mean_window_days = 500.0
+# pqc_glitch_min_duration_days: minimum glitch duration (days). allowed: float. default: 1000.0
+pqc_glitch_min_duration_days = 1000.0
 
 # ---- Optional QC report artifacts ----
 # qc_report: generate QC report artifacts. allowed: true/false. default: false

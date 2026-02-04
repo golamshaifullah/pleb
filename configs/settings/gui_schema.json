@@ -597,6 +597,21 @@
       "default": 30.0
     },
     {
+      "name": "pqc_glitch_noise_k",
+      "type": "float",
+      "default": 1.0
+    },
+    {
+      "name": "pqc_glitch_mean_window_days",
+      "type": "float",
+      "default": 180.0
+    },
+    {
+      "name": "pqc_glitch_min_duration_days",
+      "type": "float",
+      "default": 1000.0
+    },
+    {
       "name": "qc_report",
       "type": "bool",
       "default": false

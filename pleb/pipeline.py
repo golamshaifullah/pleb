@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover
 
 from .config import PipelineConfig
 from .git_tools import checkout, require_clean_repo
-from .logging_utils import get_logger
+from .logging_utils import get_logger, set_log_dir
 from .plotting import (
     plot_covmat_heatmaps,
     plot_pulsars_per_system,
@@ -385,6 +385,8 @@ def _apply_fixdataset_and_commit(
     write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
 
     dataset_prefix = str(cfg.dataset_name).strip("/")
+    if dataset_prefix in (".", "./"):
+        dataset_prefix = ""
 
     changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
     untracked = list(getattr(repo, "untracked_files", []) or [])
@@ -459,6 +461,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             outputs = run_pipeline(cfg)
     """
     cfg = config.resolved()
+    set_log_dir(Path(cfg.home_dir) / "logs")
 
     run_fix_dataset = _cfg_get_bool(cfg, "run_fix_dataset", False)
     fix_apply = _cfg_get_bool(cfg, "fix_apply", False)
@@ -517,10 +520,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         raise RuntimeError("No pulsars selected/found.")
 
     # Branch selection
-    compare_branches: List[str] = list(
-        dict.fromkeys(list(cfg.branches))
-    )  # preserve order
-    reference_branch = str(cfg.reference_branch) if cfg.reference_branch else ""
+    compare_branches: List[str] = [
+        str(b).strip() for b in cfg.branches if str(b).strip()
+    ]
+    compare_branches = list(dict.fromkeys(compare_branches))  # preserve order
+    reference_branch = str(cfg.reference_branch).strip() if cfg.reference_branch else ""
 
     branches_to_run = compare_branches.copy()
     change_reports_enabled = bool(cfg.make_change_reports) and bool(reference_branch)
@@ -528,11 +532,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         logger.info("Testing mode enabled: change reports will be skipped.")
         change_reports_enabled = False
 
-    if (
-        reference_branch
-        and reference_branch not in branches_to_run
-        and change_reports_enabled
-    ):
+    if reference_branch and reference_branch not in branches_to_run and change_reports_enabled:
         branches_to_run.append(reference_branch)
 
     out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name, lazy=True)
@@ -840,6 +840,13 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     ),
                     glitch_peak_tau_days=float(
                         getattr(cfg, "pqc_glitch_peak_tau_days", 30.0)
+                    ),
+                    glitch_noise_k=float(getattr(cfg, "pqc_glitch_noise_k", 1.0)),
+                    glitch_mean_window_days=float(
+                        getattr(cfg, "pqc_glitch_mean_window_days", 180.0)
+                    ),
+                    glitch_min_duration_days=float(
+                        getattr(cfg, "pqc_glitch_min_duration_days", 1000.0)
                     ),
                 )
                 qc_out_dir = out_paths["qc"] / branch

@@ -20,10 +20,16 @@ from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
 from .ingest import ingest_dataset
-from .logging_utils import get_logger
+from .logging_utils import get_logger, set_log_dir
 from .config_io import _load_config_dict, _parse_value_as_toml_literal, _set_dotted_key
 
 logger = get_logger("pleb.workflow")
+
+try:
+    from git import Repo, InvalidGitRepositoryError  # type: ignore
+except Exception:  # pragma: no cover
+    Repo = None  # type: ignore
+    InvalidGitRepositoryError = Exception  # type: ignore
 
 
 @dataclass
@@ -177,14 +183,63 @@ def _should_stop(stop_if: List[Any], ctx: WorkflowContext) -> bool:
 def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowContext) -> None:
     name = step["name"]
     cfg = _build_cfg(base_dict, step.get("set", []), step.get("overrides", {}))
+    if name in ("pipeline", "fix_dataset", "fix_apply", "param_scan"):
+        try:
+            home_dir = Path(cfg.home_dir)
+        except Exception:
+            home_dir = None
+        if home_dir is not None and not home_dir.exists():
+            ingest_root = getattr(cfg, "ingest_output_dir", None)
+            if ingest_root:
+                cfg.home_dir = Path(ingest_root)
+                home_dir = Path(cfg.home_dir)
+            home_dir.mkdir(parents=True, exist_ok=True)
+            logger.warning("home_dir did not exist; created %s.", home_dir)
+        if name in ("fix_dataset", "fix_apply") and getattr(cfg, "fix_apply", False):
+            if Repo is None:
+                raise RuntimeError("GitPython is required for fix_apply workflows.")
+            try:
+                repo = Repo(str(home_dir), search_parent_directories=False)
+            except InvalidGitRepositoryError:
+                repo = Repo.init(str(home_dir))
+                base_branch = str(getattr(cfg, "fix_base_branch", "") or "main").strip() or "main"
+                repo.git.checkout("-b", base_branch)
+                try:
+                    repo.git.commit("--allow-empty", "-m", "Initialize ingest repository")
+                except Exception as e:
+                    raise RuntimeError(
+                        "Failed to create initial git commit for fix_apply. "
+                        "Configure git user.name/user.email and retry."
+                    ) from e
 
     if name == "ingest":
         if not getattr(cfg, "ingest_mapping_file", None) or not getattr(cfg, "ingest_output_dir", None):
             raise RuntimeError("ingest step requires ingest_mapping_file and ingest_output_dir in config.")
+        set_log_dir(Path(cfg.ingest_output_dir) / "logs")
         ingest_dataset(Path(cfg.ingest_mapping_file), Path(cfg.ingest_output_dir))
+        if bool(getattr(cfg, "ingest_commit_branch", False)):
+            from .ingest import commit_ingest_changes
+
+            commit_ingest_changes(
+                Path(cfg.ingest_output_dir),
+                branch_name=getattr(cfg, "ingest_commit_branch_name", None),
+                base_branch=getattr(cfg, "ingest_commit_base_branch", None),
+                commit_message=getattr(cfg, "ingest_commit_message", None),
+            )
         return
 
     if name == "pipeline":
+        out_paths = run_pipeline(cfg)
+        ctx.last_run_dir = out_paths.get("tag")
+        ctx.last_pipeline_run_dir = out_paths.get("tag")
+        ctx.last_fix_summary = _find_latest_fix_summary(out_paths)
+        ctx.last_qc_summary = _find_qc_summary(out_paths)
+        return
+
+    if name == "fix_dataset":
+        cfg.run_fix_dataset = True
+        # Honor fix_apply/fix_* settings provided in the config/overrides.
+        cfg.fix_apply = bool(getattr(cfg, "fix_apply", False))
         out_paths = run_pipeline(cfg)
         ctx.last_run_dir = out_paths.get("tag")
         ctx.last_pipeline_run_dir = out_paths.get("tag")

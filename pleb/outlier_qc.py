@@ -97,6 +97,9 @@ class PTAQCConfig:
         glitch_suppress_overlap: Suppress overlapping glitches.
         glitch_member_eta: Per-point membership SNR threshold.
         glitch_peak_tau_days: Peak exponential timescale for glitch model.
+        glitch_noise_k: Noise-aware threshold multiplier.
+        glitch_mean_window_days: Rolling-mean window (days) for zero-crossing.
+        glitch_min_duration_days: Minimum glitch duration (days).
     """
 
     backend_col: str = "group"
@@ -218,6 +221,9 @@ class PTAQCConfig:
     glitch_suppress_overlap: bool = True
     glitch_member_eta: float = 1.0
     glitch_peak_tau_days: float = 30.0
+    glitch_noise_k: float = 1.0
+    glitch_mean_window_days: float = 180.0
+    glitch_min_duration_days: float = 1000.0
 
 
 @contextmanager
@@ -440,6 +446,9 @@ def run_pqc_for_parfile(
         suppress_overlap=bool(cfg.glitch_suppress_overlap),
         member_eta=float(cfg.glitch_member_eta),
         peak_tau_days=float(cfg.glitch_peak_tau_days),
+        noise_k=float(cfg.glitch_noise_k),
+        mean_window_days=float(cfg.glitch_mean_window_days),
+        min_duration_days=float(cfg.glitch_min_duration_days),
     )
 
     if settings_out is None:

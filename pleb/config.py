@@ -151,6 +151,9 @@ class PipelineConfig:
         pqc_glitch_suppress_overlap: Suppress overlapping glitches.
         pqc_glitch_member_eta: Per-point membership SNR threshold.
         pqc_glitch_peak_tau_days: Peak exponential timescale for glitch model.
+        pqc_glitch_noise_k: Noise-aware threshold multiplier.
+        pqc_glitch_mean_window_days: Rolling-mean window (days) for zero-crossing.
+        pqc_glitch_min_duration_days: Minimum glitch duration (days).
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -205,6 +208,10 @@ class PipelineConfig:
         max_covmat_params: Max params in covariance heatmaps.
         ingest_mapping_file: JSON mapping file for ingest mode (optional).
         ingest_output_dir: Output root directory for ingest mode (optional).
+        ingest_commit_branch: Create a new branch and commit ingest outputs.
+        ingest_commit_branch_name: Optional name for the ingest branch.
+        ingest_commit_base_branch: Base branch for the ingest commit.
+        ingest_commit_message: Commit message for ingest.
     """
 
     # Root of the data repository (contains pulsar folders like Jxxxx+xxxx/)
@@ -361,6 +368,9 @@ class PipelineConfig:
     pqc_glitch_suppress_overlap: bool = True
     pqc_glitch_member_eta: float = 1.0
     pqc_glitch_peak_tau_days: float = 30.0
+    pqc_glitch_noise_k: float = 1.0
+    pqc_glitch_mean_window_days: float = 180.0
+    pqc_glitch_min_duration_days: float = 1000.0
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -434,6 +444,10 @@ class PipelineConfig:
     # ---- Ingest mode (mapping-driven) ----
     ingest_mapping_file: Optional[Path] = None
     ingest_output_dir: Optional[Path] = None
+    ingest_commit_branch: bool = False
+    ingest_commit_branch_name: Optional[str] = None
+    ingest_commit_base_branch: Optional[str] = None
+    ingest_commit_message: Optional[str] = None
 
     def resolved(self) -> "PipelineConfig":
         """Return a copy with paths expanded and resolved.
@@ -487,7 +501,11 @@ class PipelineConfig:
             c.dataset_name = (Path(c.home_dir).expanduser() / ds_raw).resolve()
 
         c.singularity_image = c.singularity_image.expanduser().resolve()
-        c.results_dir = c.results_dir.expanduser().resolve()
+        # Keep results under home_dir when results_dir is relative.
+        if not c.results_dir.is_absolute():
+            c.results_dir = (Path(c.home_dir) / c.results_dir).expanduser().resolve()
+        else:
+            c.results_dir = c.results_dir.expanduser().resolve()
         if c.qc_report_dir is not None:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
@@ -739,6 +757,9 @@ class PipelineConfig:
             pqc_glitch_suppress_overlap=bool(d.get("pqc_glitch_suppress_overlap", True)),
             pqc_glitch_member_eta=float(d.get("pqc_glitch_member_eta", 1.0)),
             pqc_glitch_peak_tau_days=float(d.get("pqc_glitch_peak_tau_days", 30.0)),
+            pqc_glitch_noise_k=float(d.get("pqc_glitch_noise_k", 1.0)),
+            pqc_glitch_mean_window_days=float(d.get("pqc_glitch_mean_window_days", 180.0)),
+            pqc_glitch_min_duration_days=float(d.get("pqc_glitch_min_duration_days", 1000.0)),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),
@@ -813,6 +834,10 @@ class PipelineConfig:
             ingest_output_dir=(
                 Path(d["ingest_output_dir"]) if d.get("ingest_output_dir") else None
             ),
+            ingest_commit_branch=bool(d.get("ingest_commit_branch", False)),
+            ingest_commit_branch_name=opt_str("ingest_commit_branch_name"),
+            ingest_commit_base_branch=opt_str("ingest_commit_base_branch"),
+            ingest_commit_message=opt_str("ingest_commit_message"),
         )
 
     @staticmethod

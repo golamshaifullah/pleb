@@ -28,6 +28,26 @@ def _default_log_file() -> Path:
     return _LOG_FILE
 
 
+def set_log_dir(log_dir: Path) -> None:
+    """Force log file location under the supplied directory."""
+    global _LOG_FILE
+    log_dir = Path(log_dir).expanduser().resolve()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _LOG_FILE = log_dir / f"pleb_{ts}.log"
+    # Replace file handlers for all known loggers.
+    for logger in logging.Logger.manager.loggerDict.values():
+        if not isinstance(logger, logging.Logger):
+            continue
+        to_remove = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+        for h in to_remove:
+            logger.removeHandler(h)
+        file_handler = logging.FileHandler(_LOG_FILE)
+        formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+
 def get_logger(name: str = "pleb", level: int = logging.INFO) -> logging.Logger:
     """Return a configured logger for pipeline modules.
 

@@ -41,6 +41,9 @@
   "pqc_glitch_suppress_overlap": true,
   "pqc_glitch_member_eta": 1.0,
   "pqc_glitch_peak_tau_days": 30.0,
+  "pqc_glitch_noise_k": 1.0,
+  "pqc_glitch_mean_window_days": 180.0,
+  "pqc_glitch_min_duration_days": 1000.0,
 
   "fix_update_alltim_includes": true,
   "fix_min_toas_per_backend_tim": 10,

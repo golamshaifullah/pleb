@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from .logging_utils import get_logger
+from .dataset_fix import count_toa_lines, parse_include_lines
 from .utils import safe_mkdir
 
 logger = get_logger("pleb.tempo2")
@@ -123,6 +124,17 @@ def run_tempo2_for_pulsar(
     """
     prefix = build_singularity_prefix(home_dir, dataset_name, singularity_image)
     par, tim = tempo2_paths_in_container(pulsar)
+    # Compute total TOAs from all INCLUDE tim files for -nobs.
+    psr_dir = Path(home_dir) / Path(dataset_name) / pulsar
+    all_tim = psr_dir / f"{pulsar}_all.tim"
+    total_toas = 0
+    includes = parse_include_lines(all_tim)
+    if includes:
+        for rel in includes:
+            total_toas += count_toa_lines(psr_dir / rel)
+    else:
+        total_toas = count_toa_lines(all_tim)
+    nobs = max(1, total_toas + 1)
 
     work_dir = out_paths.get("work", out_paths["logs"]) / branch / pulsar
     safe_mkdir(work_dir)
@@ -143,6 +155,8 @@ def run_tempo2_for_pulsar(
         "-f",
         par,
         tim,
+        "-nobs",
+        str(nobs),
         "-showchisq",
         "-colour",
         "-sys",
@@ -158,6 +172,8 @@ def run_tempo2_for_pulsar(
         "-f",
         par,
         tim,
+        "-nobs",
+        str(nobs),
     ]
     rc = run_subprocess(matrix_cmd, cov_out, cwd=work_dir)
     if rc != 0:
@@ -173,6 +189,8 @@ def run_tempo2_for_pulsar(
         "-f",
         par,
         tim,
+        "-nobs",
+        str(nobs),
         "-s",
         gen2_strings,
     ]

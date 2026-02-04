@@ -35,6 +35,7 @@ import tempfile
 
 from .config import PipelineConfig
 from .ingest import ingest_dataset, IngestError
+from .logging_utils import set_log_dir
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
@@ -427,6 +428,27 @@ def build_ingest_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional config file to supply output root defaults.",
     )
+    p.add_argument(
+        "--ingest-commit-branch",
+        dest="ingest_commit_branch",
+        action="store_true",
+        help="Create a new branch and commit ingest outputs.",
+    )
+    p.add_argument(
+        "--ingest-commit-branch-name",
+        dest="ingest_commit_branch_name",
+        help="Explicit branch name for ingest commit (optional).",
+    )
+    p.add_argument(
+        "--ingest-commit-base-branch",
+        dest="ingest_commit_base_branch",
+        help="Base branch for ingest commit (optional).",
+    )
+    p.add_argument(
+        "--ingest-commit-message",
+        dest="ingest_commit_message",
+        help="Commit message for ingest (optional).",
+    )
     return p
 
 
@@ -499,10 +521,33 @@ def run_ingest(argv: list[str] | None) -> int:
         raise SystemExit(
             "Ingest mode requires --output-dir (or ingest_output_dir/home_dir+dataset_name in config)."
         )
+    set_log_dir(Path(output_root) / "logs")
     try:
         report = ingest_dataset(Path(mapping_file), Path(output_root))
     except IngestError as e:
         raise SystemExit(str(e)) from e
+    ingest_commit_branch = bool(args.ingest_commit_branch) or (
+        bool(getattr(cfg, "ingest_commit_branch", False)) if cfg else False
+    )
+    if ingest_commit_branch:
+        branch_name = args.ingest_commit_branch_name or (
+            getattr(cfg, "ingest_commit_branch_name", None) if cfg else None
+        )
+        base_branch = args.ingest_commit_base_branch or (
+            getattr(cfg, "ingest_commit_base_branch", None) if cfg else None
+        )
+        commit_message = args.ingest_commit_message or (
+            getattr(cfg, "ingest_commit_message", None) if cfg else None
+        )
+        from .ingest import commit_ingest_changes
+
+        new_branch = commit_ingest_changes(
+            Path(output_root),
+            branch_name=branch_name,
+            base_branch=base_branch,
+            commit_message=commit_message,
+        )
+        print(f"ingest commit branch: {new_branch}")
     print(str(report["output_root"]))
     return 0
 
