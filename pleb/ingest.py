@@ -307,7 +307,7 @@ def _write_all_tim(pulsar_dir: Path, tim_entries: List[Tuple[str, Path]]) -> Non
     include_lines = []
     for backend_name, _ in tim_entries:
         include_lines.append(f"INCLUDE tims/{backend_name}.tim")
-    all_tim.write_text("\\n".join(sorted(set(include_lines))) + "\\n", encoding="utf-8")
+    all_tim.write_text("\n".join(sorted(set(include_lines))) + "\n", encoding="utf-8")
 
 
 def _copy_file(src: Path, dst: Path) -> None:
@@ -588,6 +588,24 @@ def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
 
         report["pulsars"].append(psr)
 
+    # Sanitize tim files: replace literal "\\n" with newline characters.
+    for psr in pulsars:
+        psr_dir = output_root / psr
+        tims_dir = psr_dir / "tims"
+        candidates = [psr_dir / f"{psr}_all.tim"]
+        if tims_dir.exists():
+            candidates.extend(sorted(tims_dir.glob("*.tim")))
+        for tim in candidates:
+            if not tim.exists():
+                continue
+            text = tim.read_text(encoding="utf-8", errors="ignore")
+            if "\\n" in text:
+                tim.write_text(text.replace("\\n", "\n"), encoding="utf-8")
+
+    if report["missing_parfiles"]:
+        missing = ", ".join(sorted(report["missing_parfiles"]))
+        logger.warning("Missing parfiles after ingest: %s", missing)
+
     if clockfiles:
         clock_dir = output_root / "clockfiles"
         for name, src in sorted(clockfiles.items()):
@@ -633,12 +651,11 @@ def commit_ingest_changes(
         # First commit in a new repo: create branch directly.
         repo.git.checkout("-b", new_branch)
     else:
-        if new_branch not in existing:
-            # Create main from base or current HEAD.
+        if new_branch in existing:
+            checkout(repo, new_branch)
+        else:
             checkout(repo, base or current)
             repo.git.checkout("-b", new_branch)
-        else:
-            checkout(repo, new_branch)
 
     repo.git.add("-A")
     msg = (commit_message or "Ingest: collected files").strip()

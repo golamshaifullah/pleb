@@ -217,15 +217,14 @@ def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowCont
             raise RuntimeError("ingest step requires ingest_mapping_file and ingest_output_dir in config.")
         set_log_dir(Path(cfg.ingest_output_dir) / "logs")
         ingest_dataset(Path(cfg.ingest_mapping_file), Path(cfg.ingest_output_dir))
-        if bool(getattr(cfg, "ingest_commit_branch", False)):
-            from .ingest import commit_ingest_changes
+        from .ingest import commit_ingest_changes
 
-            commit_ingest_changes(
-                Path(cfg.ingest_output_dir),
-                branch_name=getattr(cfg, "ingest_commit_branch_name", None),
-                base_branch=getattr(cfg, "ingest_commit_base_branch", None),
-                commit_message=getattr(cfg, "ingest_commit_message", None),
-            )
+        commit_ingest_changes(
+            Path(cfg.ingest_output_dir),
+            branch_name=getattr(cfg, "ingest_commit_branch_name", None),
+            base_branch=getattr(cfg, "ingest_commit_base_branch", None),
+            commit_message=getattr(cfg, "ingest_commit_message", None),
+        )
         return
 
     if name == "pipeline":

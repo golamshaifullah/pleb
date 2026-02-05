@@ -134,7 +134,7 @@ def run_tempo2_for_pulsar(
             total_toas += count_toa_lines(psr_dir / rel)
     else:
         total_toas = count_toa_lines(all_tim)
-    nobs = max(1, total_toas + 1)
+    nobs = max(1, int(total_toas * 1.01) + 1)
 
     work_dir = out_paths.get("work", out_paths["logs"]) / branch / pulsar
     safe_mkdir(work_dir)

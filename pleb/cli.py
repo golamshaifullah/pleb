@@ -526,9 +526,7 @@ def run_ingest(argv: list[str] | None) -> int:
         report = ingest_dataset(Path(mapping_file), Path(output_root))
     except IngestError as e:
         raise SystemExit(str(e)) from e
-    ingest_commit_branch = bool(args.ingest_commit_branch) or (
-        bool(getattr(cfg, "ingest_commit_branch", False)) if cfg else False
-    )
+    ingest_commit_branch = True
     if ingest_commit_branch:
         branch_name = args.ingest_commit_branch_name or (
             getattr(cfg, "ingest_commit_branch_name", None) if cfg else None

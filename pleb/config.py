@@ -444,7 +444,7 @@ class PipelineConfig:
     # ---- Ingest mode (mapping-driven) ----
     ingest_mapping_file: Optional[Path] = None
     ingest_output_dir: Optional[Path] = None
-    ingest_commit_branch: bool = False
+    ingest_commit_branch: bool = True
     ingest_commit_branch_name: Optional[str] = None
     ingest_commit_base_branch: Optional[str] = None
     ingest_commit_message: Optional[str] = None
