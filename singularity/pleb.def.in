@@ -1,0 +1,32 @@
+Bootstrap: localimage
+From: {{BASE_IMAGE}}
+
+%help
+    Pleb + PQC container built on psrpta.sif.
+    Usage: singularity exec pleb.sif pleb --help
+
+%files
+    ../pleb /opt/pleb
+    ../pqc /opt/pqc
+
+%post
+    set -e
+    export PIP_DISABLE_PIP_VERSION_CHECK=1
+
+    mkdir -p /opt/pleb_data/configs/settings
+    mkdir -p /opt/pleb_data/configs/workflows
+    mkdir -p /opt/pleb_data/results
+    mkdir -p /opt/pleb_data/logs
+
+    cp -a /opt/pleb/configs/settings/. /opt/pleb_data/configs/settings/
+    cp -a /opt/pleb/configs/workflows/. /opt/pleb_data/configs/workflows/
+
+    python3 -m pip install -e /opt/pqc
+    python3 -m pip install -e /opt/pleb
+
+%environment
+    export PLEB_DATA=/opt/pleb_data
+    export PLEB_CONFIGS=/opt/pleb_data/configs
+
+%runscript
+    exec pleb "$@"
