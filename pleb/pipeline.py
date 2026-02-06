@@ -350,6 +350,7 @@ def _apply_fixdataset_and_commit(
     """
     require_clean_repo(repo)
     checkout(repo, base_branch)
+    logger.info("Checked out branch %s", base_branch)
 
     existing = {h.name for h in getattr(repo, "heads", [])}
     if new_branch in existing:
@@ -358,6 +359,7 @@ def _apply_fixdataset_and_commit(
         )
 
     repo.git.checkout("-b", new_branch)
+    logger.info("Checked out branch %s", new_branch)
 
     qc_results_dir = _cfg_get(cfg, "fix_qc_results_dir", None)
     qc_branch = _cfg_get(cfg, "fix_qc_branch", None)
@@ -674,6 +676,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     min_points=int(getattr(cfg, "pqc_min_points", 6)),
                     delta_chi2_thresh=float(
                         getattr(cfg, "pqc_delta_chi2_thresh", 25.0)
+                    ),
+                    exp_dip_min_duration_days=float(
+                        getattr(cfg, "pqc_exp_dip_min_duration_days", 21.0)
                     ),
                     step_enabled=bool(getattr(cfg, "pqc_step_enabled", True)),
                     step_min_points=int(getattr(cfg, "pqc_step_min_points", 20)),

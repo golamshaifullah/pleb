@@ -646,7 +646,12 @@ def _collect_qc_mjds(
         if "_timfile" in df.columns:
             mapping: Dict[Optional[str], list[float]] = {}
             for timfile, sub in df.loc[mask, ["_timfile", "mjd"]].groupby("_timfile"):
-                mapping[str(timfile)] = [float(x) for x in sub["mjd"].to_numpy()]
+                key = str(timfile)
+                try:
+                    key = Path(key).name
+                except Exception:
+                    pass
+                mapping[key] = [float(x) for x in sub["mjd"].to_numpy()]
             return mapping
         return {None: [float(x) for x in df.loc[mask, "mjd"].to_numpy()]}
 

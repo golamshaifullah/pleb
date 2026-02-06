@@ -122,7 +122,7 @@ pqc_dip_min_points = 6
 pqc_dip_delta_chi2_thresh = 25.0
 # pqc_dip_member_eta: dip membership SNR threshold. allowed: float. default: 1.0
 #   Per-point SNR threshold for dip membership.
-pqc_dip_member_eta = 1.0
+pqc_dip_member_eta = 3.0
 
 # pqc_dip_freq_dependence: fit 1/f^alpha index. allowed: true/false. default: true
 #   If false, dips are fit directly in residual units.
@@ -175,7 +175,7 @@ pqc_dm_step_scope = "both"
 pqc_robust_enabled = true
 # pqc_robust_z_thresh: robust z threshold. allowed: float. default: 5.0
 #   Threshold on robust z-score.
-pqc_robust_z_thresh = 2.0
+pqc_robust_z_thresh = 3.0
 # pqc_robust_scope: scope for robust outliers. allowed: "backend"|"global"|"both". default: "both"
 #   Where to compute robust stats: per backend, global, or both.
 pqc_robust_scope = "both"
@@ -235,16 +235,16 @@ pqc_structure_group_cols = ""
 # Outlier gating
 # pqc_outlier_gate_enabled: enable hard sigma gate. allowed: true/false. default: false
 #   Hard cut based on residual/sigma columns.
-pqc_outlier_gate_enabled = false
+pqc_outlier_gate_enabled = true
 # pqc_outlier_gate_sigma: sigma threshold. allowed: float. default: 3.0
 #   Threshold for sigma gating.
 pqc_outlier_gate_sigma = 3.0
 # pqc_outlier_gate_resid_col: residual column. allowed: string or empty. default: "" -> None
 #   Name of residual column to use (defaults to pqc internal).
-pqc_outlier_gate_resid_col = ""
+pqc_outlier_gate_resid_col = "resid"
 # pqc_outlier_gate_sigma_col: sigma column. allowed: string or empty. default: "" -> None
 #   Name of sigma column to use (defaults to pqc internal).
-pqc_outlier_gate_sigma_col = ""
+pqc_outlier_gate_sigma_col = "sigma"
 # pqc_event_instrument: include per-event membership diagnostics. allowed: true/false. default: false
 #   If true, pqc adds per-event membership diagnostics to outputs.
 pqc_event_instrument = true
@@ -265,7 +265,7 @@ pqc_solar_tau_min_deg = 2.0
 # pqc_solar_tau_max_deg: max elongation scale (deg). allowed: float. default: 60.0
 pqc_solar_tau_max_deg = 60.0
 # pqc_solar_member_eta: membership SNR threshold. allowed: float. default: 1.0
-pqc_solar_member_eta = 1.0
+pqc_solar_member_eta = 3.0
 # pqc_solar_freq_dependence: fit 1/f^alpha dependence. allowed: true/false. default: true
 pqc_solar_freq_dependence = true
 # pqc_solar_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
@@ -323,7 +323,7 @@ pqc_eclipse_width_min = 0.01
 # pqc_eclipse_width_max: max eclipse width in phase. allowed: float. default: 0.5
 pqc_eclipse_width_max = 0.5
 # pqc_eclipse_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
-pqc_eclipse_member_eta = 1.0
+pqc_eclipse_member_eta = 3.0
 # pqc_eclipse_freq_dependence: fit 1/f^alpha dependence. allowed: true/false. default: true
 pqc_eclipse_freq_dependence = true
 # pqc_eclipse_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
@@ -350,7 +350,7 @@ pqc_gaussian_bump_delta_chi2_thresh = 25.0
 # pqc_gaussian_bump_suppress_overlap: suppress overlapping bumps. allowed: true/false. default: true
 pqc_gaussian_bump_suppress_overlap = true
 # pqc_gaussian_bump_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
-pqc_gaussian_bump_member_eta = 1.0
+pqc_gaussian_bump_member_eta = 3.0
 # pqc_gaussian_bump_freq_dependence: fit 1/f^alpha dependence. allowed: true/false. default: true
 pqc_gaussian_bump_freq_dependence = true
 # pqc_gaussian_bump_freq_alpha_min: lower bound for alpha. allowed: float. default: 0.0
@@ -371,7 +371,7 @@ pqc_glitch_delta_chi2_thresh = 35.0
 # pqc_glitch_suppress_overlap: suppress overlapping glitches. allowed: true/false. default: true
 pqc_glitch_suppress_overlap = true
 # pqc_glitch_member_eta: per-point membership SNR threshold. allowed: float. default: 1.0
-pqc_glitch_member_eta = 1.0
+pqc_glitch_member_eta = 3.0
 # pqc_glitch_peak_tau_days: peak exponential timescale for glitch model (days). allowed: float. default: 30.0
 pqc_glitch_peak_tau_days = 1.0
 # pqc_glitch_noise_k: noise-aware threshold multiplier. allowed: float. default: 1.0
@@ -623,12 +623,12 @@ ingest_output_dir = ""
 [pqc_internal_defaults]
 # TransientConfig defaults
 transient_suppress_overlap = true
-transient_member_eta = 1.0
+transient_member_eta = 3.0
 transient_instrument = false
 transient_scope = "global"
 
 # StepConfig defaults
-step_member_eta = 1.0
+step_member_eta = 3.0
 step_member_tmax_days = 3650.0
 step_instrument = false
 

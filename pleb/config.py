@@ -81,6 +81,7 @@ class PipelineConfig:
         pqc_window_mult: Window multiplier for transient scan.
         pqc_min_points: Minimum points for transient scan.
         pqc_delta_chi2_thresh: Delta-chi2 threshold for transients.
+        pqc_exp_dip_min_duration_days: Minimum duration (days) for exp dips.
         pqc_add_orbital_phase: Add orbital-phase feature.
         pqc_add_solar_elongation: Add solar elongation feature.
         pqc_add_elevation: Add elevation feature.
@@ -275,6 +276,7 @@ class PipelineConfig:
     pqc_window_mult: float = 5.0
     pqc_min_points: int = 6
     pqc_delta_chi2_thresh: float = 25.0
+    pqc_exp_dip_min_duration_days: float = 21.0
 
     pqc_step_enabled: bool = True
     pqc_step_min_points: int = 20
@@ -636,6 +638,9 @@ class PipelineConfig:
             pqc_window_mult=float(d.get("pqc_window_mult", 5.0)),
             pqc_min_points=int(d.get("pqc_min_points", 6)),
             pqc_delta_chi2_thresh=float(d.get("pqc_delta_chi2_thresh", 25.0)),
+            pqc_exp_dip_min_duration_days=float(
+                d.get("pqc_exp_dip_min_duration_days", 21.0)
+            ),
             pqc_step_enabled=bool(d.get("pqc_step_enabled", True)),
             pqc_step_min_points=int(d.get("pqc_step_min_points", 20)),
             pqc_step_delta_chi2_thresh=float(d.get("pqc_step_delta_chi2_thresh", 25.0)),

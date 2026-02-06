@@ -664,6 +664,12 @@ def commit_ingest_changes(
     else:
         repo.git.commit("--allow-empty", "-m", msg + " (no changes)")
 
+    # Create a read-only snapshot branch for the ingest baseline.
+    # We intentionally do not check it out or modify it.
+    raw_branch = "raw"
+    if raw_branch not in existing:
+        repo.git.branch(raw_branch, new_branch)
+
     if current:
         checkout(repo, current)
     return new_branch

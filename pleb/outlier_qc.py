@@ -46,6 +46,7 @@ class PTAQCConfig:
         min_points: Minimum points for transient scan.
         delta_chi2_thresh: Delta-chi2 threshold for transient scan.
         suppress_overlap: Suppress overlapping transient windows.
+        exp_dip_min_duration_days: Minimum exponential dip duration (days).
         step_enabled: Enable step-change detection.
         step_min_points: Minimum points for step detection.
         step_delta_chi2_thresh: Delta-chi2 threshold for step detection.
@@ -119,6 +120,7 @@ class PTAQCConfig:
     min_points: int = 6
     delta_chi2_thresh: float = 25.0
     suppress_overlap: bool = True
+    exp_dip_min_duration_days: float = 21.0
 
     # Step-change detection (global + per-backend)
     step_enabled: bool = True
@@ -283,6 +285,7 @@ def run_pqc_for_parfile(
             EclipseConfig,
             GaussianBumpConfig,
             GlitchConfig,
+            ExpDipConfig,
         )
 
         # Sanity check: ensure pqc config classes are importable
@@ -292,6 +295,7 @@ def run_pqc_for_parfile(
             MergeConfig,
             StructureConfig,
             TransientConfig,
+            ExpDipConfig,
             StepConfig,
             RobustOutlierConfig,
             OutlierGateConfig,
@@ -322,6 +326,7 @@ def run_pqc_for_parfile(
         suppress_overlap=bool(cfg.suppress_overlap),
         instrument=bool(cfg.event_instrument),
     )
+    dip_cfg = ExpDipConfig(min_duration_days=float(cfg.exp_dip_min_duration_days))
     feature_cfg = FeatureConfig(
         add_orbital_phase=bool(cfg.add_orbital_phase),
         add_solar_elongation=bool(cfg.add_solar_elongation),
@@ -463,6 +468,7 @@ def run_pqc_for_parfile(
             backend_col=str(cfg.backend_col),
             bad_cfg=bad_cfg,
             tr_cfg=tr_cfg,
+            dip_cfg=dip_cfg,
             merge_cfg=merge_cfg,
             feature_cfg=feature_cfg,
             struct_cfg=struct_cfg,
