@@ -13,7 +13,8 @@ See Also:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, field
+from .compat import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import json
@@ -69,6 +70,9 @@ class PipelineConfig:
         make_covariance_heatmaps: Generate covariance heatmaps.
         make_residual_plots: Generate residual plots.
         make_outlier_reports: Generate outlier tables.
+        make_plots: Convenience toggle to disable all plotting outputs.
+        make_reports: Convenience toggle to disable report outputs.
+        make_covmat: Convenience toggle to control covariance heatmaps.
         testing_mode: If True, skip change reports (useful for CI).
         run_pqc: Enable optional pqc stage.
         pqc_backend_col: Backend grouping column for pqc.
@@ -182,6 +186,7 @@ class PipelineConfig:
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_insert_missing_jumps: Insert missing JUMP lines.
         fix_jump_flag: Flag used for inserted jumps.
+        fix_prune_stale_jumps: Drop JUMPs not present in timfile flags.
         fix_ensure_ephem: Ensure ephemeris parameter exists.
         fix_ensure_clk: Ensure clock parameter exists.
         fix_ensure_ne_sw: Ensure NE_SW parameter exists.
@@ -261,6 +266,9 @@ class PipelineConfig:
     make_covariance_heatmaps: bool = True
     make_residual_plots: bool = True
     make_outlier_reports: bool = True
+    make_plots: Optional[bool] = None
+    make_reports: Optional[bool] = None
+    make_covmat: Optional[bool] = None
     testing_mode: bool = False
 
     # Optional outlier/QC stage using the external `pqc` package (libstempo-based).
@@ -407,9 +415,18 @@ class PipelineConfig:
     # Example: {"-pta": "EPTA", "-be": "P200"}
     fix_required_tim_flags: Dict[str, str] = field(default_factory=dict)
     fix_system_flag_mapping_path: Optional[str] = None
+    fix_system_flag_table_path: Optional[str] = None
+    fix_infer_system_flags: bool = False
+    fix_system_flag_overwrite_existing: bool = False
+    fix_backend_overrides: Dict[str, str] = field(default_factory=dict)
+    fix_raise_on_backend_missing: bool = False
+    fix_dedupe_toas_within_tim: bool = True
+    fix_check_duplicate_backend_tims: bool = False
+    fix_remove_overlaps_exact: bool = True
 
     fix_insert_missing_jumps: bool = True
     fix_jump_flag: str = "-sys"
+    fix_prune_stale_jumps: bool = False
     fix_ensure_ephem: Optional[str] = None
     fix_ensure_clk: Optional[str] = None
     fix_ensure_ne_sw: Optional[str] = None
@@ -418,6 +435,16 @@ class PipelineConfig:
     )
     # "equatorial_to_ecliptic" or "ecliptic_to_equatorial"
     fix_coord_convert: Optional[str] = None
+    fix_prune_missing_includes: bool = True
+    fix_drop_small_backend_includes: bool = True
+    fix_system_flag_update_table: bool = True
+    fix_default_backend: Optional[str] = None
+    fix_group_flag: str = "-group"
+    fix_pta_flag: str = "-pta"
+    fix_pta_value: Optional[str] = None
+    fix_standardize_par_values: bool = True
+    fix_prune_small_system_toas: bool = False
+    fix_prune_small_system_flag: str = "-sys"
 
     # ---- PQC outlier application (optional) ----
     fix_qc_remove_outliers: bool = False
@@ -450,6 +477,7 @@ class PipelineConfig:
     ingest_commit_branch_name: Optional[str] = None
     ingest_commit_base_branch: Optional[str] = None
     ingest_commit_message: Optional[str] = None
+    ingest_verify: bool = False
 
     def resolved(self) -> "PipelineConfig":
         """Return a copy with paths expanded and resolved.
@@ -516,6 +544,10 @@ class PipelineConfig:
             c.fix_system_flag_mapping_path = (
                 Path(c.fix_system_flag_mapping_path).expanduser().resolve()
             )
+        if c.fix_system_flag_table_path is not None:
+            c.fix_system_flag_table_path = (
+                Path(c.fix_system_flag_table_path).expanduser().resolve()
+            )
         if c.ingest_mapping_file is not None:
             c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
         if c.ingest_output_dir is not None:
@@ -551,6 +583,8 @@ class PipelineConfig:
             d["fix_system_flag_mapping_path"] = str(
                 d["fix_system_flag_mapping_path"]
             )
+        if d.get("fix_system_flag_table_path") is not None:
+            d["fix_system_flag_table_path"] = str(d["fix_system_flag_table_path"])
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -624,6 +658,9 @@ class PipelineConfig:
             make_covariance_heatmaps=bool(d.get("make_covariance_heatmaps", True)),
             make_residual_plots=bool(d.get("make_residual_plots", True)),
             make_outlier_reports=bool(d.get("make_outlier_reports", True)),
+            make_plots=(d.get("make_plots") if "make_plots" in d else None),
+            make_reports=(d.get("make_reports") if "make_reports" in d else None),
+            make_covmat=(d.get("make_covmat") if "make_covmat" in d else None),
             testing_mode=bool(d.get("testing_mode", False)),
             run_pqc=bool(d.get("run_pqc", False)),
             pqc_backend_col=str(d.get("pqc_backend_col", "group")),
@@ -792,8 +829,25 @@ class PipelineConfig:
             fix_min_toas_per_backend_tim=int(d.get("fix_min_toas_per_backend_tim", 10)),
             fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
             fix_system_flag_mapping_path=opt_str("fix_system_flag_mapping_path"),
+            fix_system_flag_table_path=opt_str("fix_system_flag_table_path"),
+            fix_infer_system_flags=bool(d.get("fix_infer_system_flags", False)),
+            fix_system_flag_overwrite_existing=bool(
+                d.get("fix_system_flag_overwrite_existing", False)
+            ),
+            fix_backend_overrides=dict(d.get("fix_backend_overrides", {})),
+            fix_raise_on_backend_missing=bool(
+                d.get("fix_raise_on_backend_missing", False)
+            ),
+            fix_dedupe_toas_within_tim=bool(
+                d.get("fix_dedupe_toas_within_tim", True)
+            ),
+            fix_check_duplicate_backend_tims=bool(
+                d.get("fix_check_duplicate_backend_tims", False)
+            ),
+            fix_remove_overlaps_exact=bool(d.get("fix_remove_overlaps_exact", True)),
             fix_insert_missing_jumps=bool(d.get("fix_insert_missing_jumps", True)),
             fix_jump_flag=str(d.get("fix_jump_flag", "-sys")),
+            fix_prune_stale_jumps=bool(d.get("fix_prune_stale_jumps", False)),
             fix_ensure_ephem=opt_str("fix_ensure_ephem"),
             fix_ensure_clk=opt_str("fix_ensure_clk"),
             fix_ensure_ne_sw=opt_str("fix_ensure_ne_sw"),
@@ -801,6 +855,26 @@ class PipelineConfig:
                 d.get("fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."])
             ),
             fix_coord_convert=opt_str("fix_coord_convert"),
+            fix_prune_missing_includes=bool(d.get("fix_prune_missing_includes", True)),
+            fix_drop_small_backend_includes=bool(
+                d.get("fix_drop_small_backend_includes", True)
+            ),
+            fix_system_flag_update_table=bool(
+                d.get("fix_system_flag_update_table", True)
+            ),
+            fix_default_backend=opt_str("fix_default_backend"),
+            fix_group_flag=str(d.get("fix_group_flag", "-group")),
+            fix_pta_flag=str(d.get("fix_pta_flag", "-pta")),
+            fix_pta_value=opt_str("fix_pta_value"),
+            fix_standardize_par_values=bool(
+                d.get("fix_standardize_par_values", True)
+            ),
+            fix_prune_small_system_toas=bool(
+                d.get("fix_prune_small_system_toas", False)
+            ),
+            fix_prune_small_system_flag=str(
+                d.get("fix_prune_small_system_flag", "-sys")
+            ),
             fix_qc_remove_outliers=bool(d.get("fix_qc_remove_outliers", False)),
             fix_qc_action=str(d.get("fix_qc_action", "comment")),
             fix_qc_comment_prefix=str(d.get("fix_qc_comment_prefix", "C QC_OUTLIER")),
@@ -843,6 +917,7 @@ class PipelineConfig:
             ingest_commit_branch_name=opt_str("ingest_commit_branch_name"),
             ingest_commit_base_branch=opt_str("ingest_commit_base_branch"),
             ingest_commit_message=opt_str("ingest_commit_message"),
+            ingest_verify=bool(d.get("ingest_verify", False)),
         )
 
     @staticmethod

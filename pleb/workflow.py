@@ -11,7 +11,7 @@ import copy
 try:
     import tomllib  # py3.11+
 except Exception:  # pragma: no cover
-    tomllib = None  # type: ignore
+    import tomli as tomllib  # type: ignore
 
 import pandas as pd
 
@@ -47,8 +47,6 @@ def _load_workflow(path: Path) -> Dict[str, Any]:
     if path.suffix.lower() == ".json":
         return json.loads(path.read_text(encoding="utf-8"))
     if path.suffix.lower() in (".toml", ".tml"):
-        if tomllib is None:
-            raise RuntimeError("TOML workflow requested but tomllib is unavailable.")
         return tomllib.loads(path.read_text(encoding="utf-8"))
     raise ValueError(f"Unsupported workflow file type: {path.suffix}")
 
@@ -216,7 +214,11 @@ def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowCont
         if not getattr(cfg, "ingest_mapping_file", None) or not getattr(cfg, "ingest_output_dir", None):
             raise RuntimeError("ingest step requires ingest_mapping_file and ingest_output_dir in config.")
         set_log_dir(Path(cfg.ingest_output_dir) / "logs")
-        ingest_dataset(Path(cfg.ingest_mapping_file), Path(cfg.ingest_output_dir))
+        ingest_dataset(
+            Path(cfg.ingest_mapping_file),
+            Path(cfg.ingest_output_dir),
+            verify=bool(getattr(cfg, "ingest_verify", False)),
+        )
         from .ingest import commit_ingest_changes
 
         commit_ingest_changes(

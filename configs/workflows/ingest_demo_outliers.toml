@@ -1,0 +1,37 @@
+# Workflow: ingest -> pqc -> apply outlier comments
+#
+# Update these paths before running:
+# - ingest_output_dir
+# - fix_qc_results_dir (points at qc outputs from the pipeline step)
+
+config = "configs/settings/ingest_demo.toml"
+
+steps = [
+  { name = "ingest", overrides = {
+      ingest_output_dir = "/work/git_projects/epta_dir",
+      ingest_mapping_file = "configs/settings/ingest_demo_mapping.json",
+      ingest_commit_branch_name = "main",
+      ingest_commit_base_branch = "main",
+      ingest_commit_message = "Ingest: collected files",
+    }
+  },
+  { name = "pipeline", overrides = {
+      run_pqc = true,
+      run_fix_dataset = false,
+      fix_apply = false,
+      branches = ["main"],
+      outdir_name = "run_ingest_qc",
+    }
+  },
+  { name = "fix_apply", overrides = {
+      fix_apply = true,
+      fix_branch_name = "outliers",
+      fix_base_branch = "main",
+      fix_commit_message = "Apply PQC outlier comments",
+      fix_qc_remove_outliers = true,
+      fix_qc_action = "comment",
+      fix_qc_results_dir = "/work/git_projects/epta_dir/results/run_ingest_qc/qc/main",
+      fix_qc_branch = "main",
+    }
+  },
+]

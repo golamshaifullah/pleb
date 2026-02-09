@@ -449,6 +449,17 @@ def build_ingest_parser() -> argparse.ArgumentParser:
         dest="ingest_commit_message",
         help="Commit message for ingest (optional).",
     )
+    p.add_argument(
+        "--ingest-verify",
+        dest="ingest_verify",
+        action="store_true",
+        help="Warn if expected tim files are missing after ingest.",
+    )
+    p.add_argument(
+        "--pulsars",
+        dest="ingest_pulsars",
+        help="Comma-separated list of pulsars to ingest (optional).",
+    )
     return p
 
 
@@ -523,7 +534,14 @@ def run_ingest(argv: list[str] | None) -> int:
         )
     set_log_dir(Path(output_root) / "logs")
     try:
-        report = ingest_dataset(Path(mapping_file), Path(output_root))
+        verify = bool(
+            args.ingest_verify
+            or (getattr(cfg, "ingest_verify", False) if cfg else False)
+        )
+        pulsars = _parse_csv_list(args.ingest_pulsars) if args.ingest_pulsars else None
+        report = ingest_dataset(
+            Path(mapping_file), Path(output_root), verify=verify, pulsars=pulsars
+        )
     except IngestError as e:
         raise SystemExit(str(e)) from e
     ingest_commit_branch = True

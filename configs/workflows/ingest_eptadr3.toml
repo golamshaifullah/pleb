@@ -1,0 +1,9 @@
+config = "/work/git_projects/pleb/configs/settings/ingest_eptadr3.toml"
+
+[[loops]]
+name = "ingest_then_fix"
+max_iters = 1
+steps = [
+  { name = "ingest", overrides = { ingest_verify = true } },
+  "fix_dataset"
+]

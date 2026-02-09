@@ -11,7 +11,8 @@ See Also:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
+from .compat import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 import shutil
@@ -72,6 +73,7 @@ class FixDatasetConfig:
         remove_overlaps_exact: Remove known overlapping TOAs across backends.
         insert_missing_jumps: Insert missing JUMP lines into par files.
         jump_flag: Flag used to label inserted jumps.
+        prune_stale_jumps: Drop JUMP lines not present in timfile flags.
         ensure_ephem: Ensure EPHEM param exists (optional value).
         ensure_clk: Ensure CLK param exists (optional value).
         ensure_ne_sw: Ensure NE_SW param exists (optional value).
@@ -125,15 +127,16 @@ class FixDatasetConfig:
     raise_on_backend_missing: bool = False
 
     # TIM hygiene
-    dedupe_toas_within_tim: bool = False
+    dedupe_toas_within_tim: bool = True
     check_duplicate_backend_tims: bool = False
 
     # Overlap handling (cheap: exact TOA duplicate removal across known overlapping backends)
-    remove_overlaps_exact: bool = False
+    remove_overlaps_exact: bool = True
 
     # parfile maintenance
     insert_missing_jumps: bool = True
     jump_flag: str = "-sys"
+    prune_stale_jumps: bool = False
     ensure_ephem: Optional[str] = None
     ensure_clk: Optional[str] = None
     ensure_ne_sw: Optional[str] = None
@@ -456,6 +459,7 @@ def update_parfile_jumps(
     parfile: Path,
     jump_flag: str,
     jump_values: Sequence[str],
+    prune_stale_jumps: bool = False,
     ensure_ephem: Optional[str] = None,
     ensure_clk: Optional[str] = None,
     ensure_ne_sw: Optional[str] = None,
@@ -471,6 +475,7 @@ def update_parfile_jumps(
         parfile: Path to the .par file.
         jump_flag: Flag used for JUMP insertion (e.g., ``"-sys"``).
         jump_values: Sequence of jump flag values to ensure.
+        prune_stale_jumps: Drop JUMP lines with values not in ``jump_values``.
         ensure_ephem: Optional EPHEM value to enforce.
         ensure_clk: Optional CLK value to enforce.
         ensure_ne_sw: Optional NE_SW value to enforce.
@@ -487,6 +492,7 @@ def update_parfile_jumps(
     jump_values = [j for j in jump_values if j is not None]
     wanted: Set[str] = set(jump_values)
     found: Set[str] = set()
+    removed_stale: List[str] = []
 
     lines = parfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     new_lines: List[str] = []
@@ -527,7 +533,12 @@ def update_parfile_jumps(
 
         # consume already-present JUMPs
         if key == "JUMP" and len(parts) >= 3 and parts[1] == jump_flag:
-            found.add(parts[2])
+            val = parts[2]
+            if prune_stale_jumps and wanted and val not in wanted:
+                removed_stale.append(val)
+                changed = True
+                continue
+            found.add(val)
 
         new_lines.append(" ".join(parts))
 
@@ -564,10 +575,16 @@ def update_parfile_jumps(
             "parfile": str(parfile),
             "changed": bool(changed),
             "missing_jumps": missing,
+            "removed_stale_jumps": removed_stale,
         }
 
     if not changed:
-        return {"parfile": str(parfile), "changed": False, "missing_jumps": []}
+        return {
+            "parfile": str(parfile),
+            "changed": False,
+            "missing_jumps": [],
+            "removed_stale_jumps": [],
+        }
 
     if backup:
         _backup_file(parfile)
@@ -579,7 +596,12 @@ def update_parfile_jumps(
 
     parfile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
-    return {"parfile": str(parfile), "changed": True, "missing_jumps": missing}
+    return {
+        "parfile": str(parfile),
+        "changed": True,
+        "missing_jumps": missing,
+        "removed_stale_jumps": removed_stale,
+    }
 
 
 # -----------------------------
@@ -621,6 +643,18 @@ def _collect_qc_mjds(
     standard = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_bad:
         for col in ("bad", "bad_day"):
+            if col in df.columns:
+                standard |= df[col].fillna(False).astype(bool).to_numpy()
+    if cfg.qc_remove_outliers:
+        for col in (
+            "outlier_any",
+            "bad_point",
+            "bad_hard",
+            "robust_outlier",
+            "robust_global_outlier",
+            "bad_mad",
+            "bad_ou",
+        ):
             if col in df.columns:
                 standard |= df[col].fillna(False).astype(bool).to_numpy()
     if cfg.qc_remove_transients and "transient_id" in df.columns:
@@ -1196,7 +1230,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         report["steps"].append({"update_alltim_includes": rep})
 
     # TIM hygiene: dedupe within each backend tim
-    if cfg.dedupe_toas_within_tim:
+    if cfg.apply and cfg.dedupe_toas_within_tim:
         tims = list_backend_timfiles(psr_dir)
         reps = []
         for t in tims:
@@ -1222,7 +1256,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         report["steps"].append({"infer_system_flags": reps})
 
     # Cheap overlap removal (exact duplicates across known overlapping backend tims)
-    if cfg.remove_overlaps_exact:
+    if cfg.apply and cfg.remove_overlaps_exact:
         try:
             rep = remove_overlaps_exact(
                 psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run
@@ -1268,6 +1302,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             parfile,
             jump_flag=str(cfg.jump_flag),
             jump_values=sorted(vals),
+            prune_stale_jumps=bool(cfg.prune_stale_jumps),
             ensure_ephem=cfg.ensure_ephem,
             ensure_clk=cfg.ensure_clk,
             ensure_ne_sw=cfg.ensure_ne_sw,
@@ -1429,7 +1464,7 @@ def dedupe_timfile_toas(
 
     if backup:
         _backup_file(timfile)
-    timfile.write_text("\\n".join(new_lines) + "\\n", encoding="utf-8")
+    timfile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
     return {"timfile": str(timfile), "changed": True, "removed": int(removed)}
 
 
@@ -1473,7 +1508,26 @@ def infer_and_apply_system_flags(
         }
 
     override_backend = _infer_backend_override(cfg, timfile)
-    dataset_root = timfile.parent.parent
+    # Resolve dataset root (parent of pulsar dir).
+    if timfile.parent.name == "tims":
+        psr_dir = timfile.parent.parent
+    else:
+        psr_dir = timfile.parent
+    fallback_root = psr_dir.parent
+
+    def _root_from_cfg_path(path_value: Optional[str]) -> Optional[Path]:
+        if not path_value:
+            return None
+        p = Path(path_value)
+        if p.is_absolute():
+            return p.parent
+        return None
+
+    dataset_root = (
+        _root_from_cfg_path(cfg.system_flag_table_path)
+        or _root_from_cfg_path(cfg.system_flag_mapping_path)
+        or fallback_root
+    )
     override_telescope = None
     mapping = None
 
@@ -1484,6 +1538,8 @@ def infer_and_apply_system_flags(
             if cfg.system_flag_mapping_path
             else (dataset_root / "system_flag_mapping.json")
         )
+        if not mapping_path.is_absolute():
+            mapping_path = dataset_root / mapping_path
         if mapping_path.exists():
             mapping = load_system_flag_mapping(mapping_path)
             if not override_backend:
@@ -1525,13 +1581,54 @@ def infer_and_apply_system_flags(
             "sample_toa_line": getattr(e, "sample_toa_line", None),
         }
 
+    try:
+        tel_vals = inferred.get("tel", pd.Series([], dtype=object))
+        if any(str(t).upper() == "LOFAR" for t in pd.Series(tel_vals).dropna().unique()):
+            return {"timfile": str(timfile), "skipped": True, "reason": "LOFAR"}
+    except Exception:
+        pass
+
+    def _is_new_wsrt_p2_timfile(tpath: Path) -> bool:
+        try:
+            lines = tpath.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            return False
+        has_gof = False
+        has_pta = False
+        has_group = False
+        for raw in lines:
+            s = raw.strip()
+            if not s or s.startswith(("#", "C")):
+                continue
+            head = s.split(maxsplit=1)[0]
+            if head in _TIM_DIRECTIVES:
+                continue
+            if "-gof" in s:
+                has_gof = True
+            if "-pta" in s:
+                has_pta = True
+            if "-group" in s:
+                has_group = True
+        return has_gof and not (has_pta or has_group)
+
+    allow_overwrite = cfg.system_flag_overwrite_existing
+    try:
+        tel_vals = inferred.get("tel", pd.Series([], dtype=object))
+        be_vals = inferred.get("backend", pd.Series([], dtype=object))
+        tel_set = {str(t).upper() for t in pd.Series(tel_vals).dropna().unique()}
+        be_set = {str(b).upper() for b in pd.Series(be_vals).dropna().unique()}
+        if not (tel_set == {"WSRT"} and be_set == {"P2"} and _is_new_wsrt_p2_timfile(timfile)):
+            allow_overwrite = False
+    except Exception:
+        allow_overwrite = False
+
     stats = apply_flags_to_timfile(
         timfile,
         inferred,
         apply=cfg.apply,
         backup=cfg.backup,
         dry_run=cfg.dry_run,
-        overwrite_existing=cfg.system_flag_overwrite_existing,
+        overwrite_existing=allow_overwrite,
     )
 
     # Update a global mapping table at dataset root (keyed by timfile basename).
@@ -1542,10 +1639,20 @@ def infer_and_apply_system_flags(
             if cfg.system_flag_table_path
             else (dataset_root / "system_flag_table.json")
         )
+        if not mapping_path.is_absolute():
+            mapping_path = dataset_root / mapping_path
         inferred2 = inferred.copy()
         inferred2["timfile"] = timfile.name
         update_mapping_table(mapping_path, inferred2)
         stats["mapping_table"] = str(mapping_path)
+        if cfg.apply and not cfg.dry_run:
+            for fname in ("system_flag_table.json", "system_flag_table.toml"):
+                per_psr = psr_dir / fname
+                try:
+                    if per_psr.exists() and per_psr.resolve() != mapping_path.resolve():
+                        per_psr.unlink()
+                except Exception:
+                    pass
     except Exception as e:
         stats["mapping_error"] = str(e)
 
@@ -1650,6 +1757,6 @@ def remove_overlaps_exact(
                 if not dry_run and apply:
                     if backup:
                         _backup_file(drop)
-                    drop.write_text("\\n".join(new_lines) + "\\n", encoding="utf-8")
+                    drop.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
     return {"changed_files": changed_files, "commented": int(total_commented)}

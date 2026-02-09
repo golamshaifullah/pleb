@@ -212,6 +212,7 @@ def _build_fixdataset_config(
         remove_overlaps_exact=bool(_cfg_get(cfg, "fix_remove_overlaps_exact", False)),
         insert_missing_jumps=bool(_cfg_get(cfg, "fix_insert_missing_jumps", True)),
         jump_flag=str(_cfg_get(cfg, "fix_jump_flag", "-sys") or "-sys"),
+        prune_stale_jumps=bool(_cfg_get(cfg, "fix_prune_stale_jumps", False)),
         ensure_ephem=_cfg_get(cfg, "fix_ensure_ephem", None),
         ensure_clk=_cfg_get(cfg, "fix_ensure_clk", None),
         ensure_ne_sw=_cfg_get(cfg, "fix_ensure_ne_sw", None),
@@ -389,6 +390,14 @@ def _apply_fixdataset_and_commit(
     dataset_prefix = str(cfg.dataset_name).strip("/")
     if dataset_prefix in (".", "./"):
         dataset_prefix = ""
+    elif dataset_prefix:
+        dataset_path = cfg.home_dir / dataset_prefix
+        if not dataset_path.exists():
+            logger.warning(
+                "Dataset path %s does not exist; staging changes from repo root.",
+                dataset_path,
+            )
+            dataset_prefix = ""
 
     changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
     untracked = list(getattr(repo, "untracked_files", []) or [])
@@ -464,6 +473,17 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     """
     cfg = config.resolved()
     set_log_dir(Path(cfg.home_dir) / "logs")
+
+    # Convenience toggles for older CLI usage.
+    if cfg.make_plots is not None and not bool(cfg.make_plots):
+        cfg.make_toa_coverage_plots = False
+        cfg.make_covariance_heatmaps = False
+        cfg.make_residual_plots = False
+    if cfg.make_reports is not None and not bool(cfg.make_reports):
+        cfg.make_outlier_reports = False
+        cfg.make_change_reports = False
+    if cfg.make_covmat is not None:
+        cfg.make_covariance_heatmaps = bool(cfg.make_covmat)
 
     run_fix_dataset = _cfg_get_bool(cfg, "run_fix_dataset", False)
     fix_apply = _cfg_get_bool(cfg, "fix_apply", False)
@@ -601,7 +621,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 cfg, apply=False, qc_results_dir=out_paths.get("qc"), qc_branch=branch
             )
             reports = []
-            if run_fix_dataset:
+            if run_fix_dataset and not fix_apply:
                 for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
                     rep = fix_pulsar_dataset(
                         cfg.home_dir / cfg.dataset_name / pulsar, fcfg
@@ -609,9 +629,13 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     rep["branch"] = branch
                     reports.append(rep)
                 write_fix_report(reports, out_paths["fix_dataset"] / branch)
-            else:
+            elif not run_fix_dataset:
                 logger.info(
                     "FixDataset report-only stage skipped (run_fix_dataset=false)."
+                )
+            else:
+                logger.info(
+                    "FixDataset report-only stage skipped (fix_apply=true)."
                 )
 
             # tempo2 runs (parallelizable across pulsars)

@@ -26,7 +26,8 @@ See Also:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
+from .compat import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -69,6 +70,27 @@ _TIM_DIRECTIVES = {
 
 # Regex that finds "-key value" pairs (value = next non-space token).
 _FLAG_RE = re.compile(r"(?P<k>-\w+)\s+(?P<v>[^\s]+)")
+
+# WSRT P2 subband centers used for system flagging (MHz).
+_WSRT_P2_BANDS = {
+    "low350": (334, 366),
+    "low800": (848, 912),
+    "mid1400": (1346, 1410),
+    "high2200": (2032, 2178),
+}
+
+
+def _wsrt_p2_centre_for_freq(freq_mhz: float) -> int:
+    """Snap WSRT P2 frequencies onto canonical subband centers."""
+    if freq_mhz < 550:
+        candidates = _WSRT_P2_BANDS["low350"]
+    elif freq_mhz < 1000:
+        candidates = _WSRT_P2_BANDS["low800"]
+    elif freq_mhz < 1900:
+        candidates = _WSRT_P2_BANDS["mid1400"]
+    else:
+        candidates = _WSRT_P2_BANDS["high2200"]
+    return int(min(candidates, key=lambda c: abs(freq_mhz - c)))
 
 
 class BackendMissingError(RuntimeError):
@@ -516,6 +538,12 @@ def infer_sys_group_pta(
         bw = float(bw_vals[0]) if len(bw_vals) == 1 else np.nan
         nb = int(nb_vals[0]) if len(nb_vals) == 1 else np.nan
         centre = np.rint(df["freq_mhz"].to_numpy()).astype(int)
+
+    if tel == "WSRT" and backend == "P2":
+        centre = np.array(
+            [_wsrt_p2_centre_for_freq(f) for f in df["freq_mhz"].to_numpy()],
+            dtype=int,
+        )
 
     # Vectorised string build
     centre_s = pd.Series(centre, index=df.index, dtype="int64").astype(str)

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Set
 from collections import Counter
 from datetime import datetime
 import os
@@ -66,6 +66,7 @@ class IngestMapping:
     backends: Tuple[BackendSpec, ...]
     ignore_backends: Tuple[str, ...]
     pulsar_aliases: Dict[str, str]
+    pulsars: Tuple[str, ...] = ()
 
 
 class IngestError(RuntimeError):
@@ -116,6 +117,7 @@ def _load_mapping(path: Path) -> IngestMapping:
     pulsar_aliases = {
         str(k): str(v) for k, v in (data.get("pulsar_aliases") or {}).items()
     }
+    pulsars = tuple(str(p) for p in (data.get("pulsars") or []) if str(p).strip())
     return IngestMapping(
         sources=sources,
         par_roots=par_roots,
@@ -123,6 +125,7 @@ def _load_mapping(path: Path) -> IngestMapping:
         backends=tuple(backends),
         ignore_backends=ignore_backends,
         pulsar_aliases=pulsar_aliases,
+        pulsars=pulsars,
     )
 
 
@@ -185,6 +188,13 @@ def _template_allowed(path: Path) -> bool:
     return path.suffix.lower() in allowed_exts
 
 
+def _reverse_aliases(aliases: Dict[str, str]) -> Dict[str, List[str]]:
+    rev: Dict[str, List[str]] = {}
+    for src, dst in aliases.items():
+        rev.setdefault(dst, []).append(src)
+    return rev
+
+
 def _canonical_pulsar(name: str, aliases: Dict[str, str]) -> str:
     if name in aliases:
         return aliases[name]
@@ -195,6 +205,136 @@ def _canonical_pulsar(name: str, aliases: Dict[str, str]) -> str:
         f"Encountered B-name '{name}' without an explicit mapping in pulsar_aliases. "
         "Provide a B->J mapping."
     )
+
+
+def _collect_expected_tim_paths(
+    psr: str, mapping: IngestMapping
+) -> Dict[Path, Set[Path]]:
+    """Collect expected tim file paths by backend spec for a pulsar."""
+    expected: Dict[Path, Set[Path]] = {}
+    ignore_set = set(mapping.ignore_backends)
+    for backend in mapping.backends:
+        if backend.ignore or backend.name in ignore_set:
+            continue
+        if not backend.root.exists():
+            continue
+        for tim in backend.root.rglob(backend.tim_glob):
+            if tim.is_dir():
+                continue
+            if any(tim.name.endswith(suf) for suf in backend.ignore_suffixes):
+                continue
+            psr_raw = _extract_pulsar_name(tim)
+            if not psr_raw:
+                continue
+            try:
+                psr_canon = _canonical_pulsar(psr_raw, mapping.pulsar_aliases)
+            except IngestError:
+                continue
+            if psr_canon != psr:
+                continue
+            expected.setdefault(backend.root, set()).add(tim)
+    return expected
+
+
+def verify_ingest_tims(
+    output_root: Path,
+    mapping: IngestMapping,
+    *,
+    check_git: bool = True,
+    check_all_tim: bool = True,
+) -> None:
+    """Warn if expected tim files were not copied or tracked.
+
+    Checks:
+    - Source tims listed in mapping are present in ingest manifest.
+    - Destination tims are tracked in git (if repo exists).
+    - Destination tims are included in <psr>_all.tim.
+    """
+    manifest = output_root / "ingest_reports" / "ingest_manifest_tim.csv"
+    manifest_srcs: Set[str] = set()
+    if manifest.exists():
+        try:
+            for line in manifest.read_text(encoding="utf-8").splitlines()[1:]:
+                parts = line.split(",")
+                if len(parts) >= 3:
+                    manifest_srcs.add(parts[2])
+        except Exception:
+            pass
+    missing_total = 0
+    repo = None
+    tracked: Set[str] = set()
+    untracked: Set[str] = set()
+    if check_git:
+        try:
+            from git import Repo, InvalidGitRepositoryError  # type: ignore
+
+            repo = Repo(str(output_root), search_parent_directories=False)
+            tracked = {
+                p.strip()
+                for p in repo.git.ls_files().splitlines()
+                if p.strip()
+            }
+            untracked = set(getattr(repo, "untracked_files", []) or [])
+        except Exception:
+            repo = None
+    for psr_dir in sorted(output_root.iterdir()):
+        if not psr_dir.is_dir():
+            continue
+        psr = psr_dir.name
+        expected_by_root = _collect_expected_tim_paths(psr, mapping)
+        all_tim = psr_dir / f"{psr}_all.tim"
+        includes: Set[str] = set()
+        if check_all_tim and all_tim.exists():
+            for line in all_tim.read_text(encoding="utf-8", errors="ignore").splitlines():
+                s = line.strip()
+                if s.startswith("INCLUDE"):
+                    parts = s.split(maxsplit=1)
+                    if len(parts) == 2:
+                        includes.add(parts[1].replace("\\", "/"))
+        for root, expected in expected_by_root.items():
+            missing: List[Path] = []
+            for tim in sorted(expected):
+                src = str(tim.resolve())
+                if manifest_srcs and src in manifest_srcs:
+                    continue
+                if manifest_srcs:
+                    missing.append(tim)
+            if missing:
+                missing_total += len(missing)
+                logger.warning(
+                    "Ingest verify: %s missing %s tims from %s",
+                    psr,
+                    len(missing),
+                    root,
+                )
+                for tim in missing[:20]:
+                    logger.warning("  missing: %s", tim.name)
+
+        # Verify each copied destination is in git and in _all.tim.
+        if manifest.exists():
+            for line in manifest.read_text(encoding="utf-8").splitlines()[1:]:
+                parts = line.split(",")
+                if len(parts) < 4:
+                    continue
+                m_psr, _, _, dst = parts[0], parts[1], parts[2], parts[3]
+                if m_psr != psr:
+                    continue
+                rel = str(Path(dst).resolve().relative_to(output_root).as_posix())
+                if check_git and repo is not None:
+                    if rel in untracked:
+                        logger.warning("Ingest verify: untracked file %s", rel)
+                    elif rel not in tracked:
+                        logger.warning("Ingest verify: not tracked in git %s", rel)
+                if check_all_tim and includes:
+                    inc = f"tims/{Path(dst).name}"
+                    if inc not in includes:
+                        logger.warning(
+                            "Ingest verify: %s missing INCLUDE for %s",
+                            psr,
+                            inc,
+                        )
+    if missing_total == 0:
+        logger.info("Ingest verify: all expected tim files copied.")
 
 
 def _find_parfiles(
@@ -533,7 +673,13 @@ def _write_ingest_upset_plots(output_root: Path) -> None:
         _plot_upset(df_be, out_dir / "ingest_upset_backends", "Ingest: backend membership")
 
 
-def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
+def ingest_dataset(
+    mapping_file: Path,
+    output_root: Path,
+    *,
+    verify: bool = False,
+    pulsars: Optional[Iterable[str]] = None,
+) -> Dict[str, object]:
     """Ingest pulsar data into a canonical layout using a mapping file."""
     mapping = _load_mapping(mapping_file)
     output_root = Path(output_root).expanduser().resolve()
@@ -548,8 +694,15 @@ def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
     clock_roots.extend([b.root for b in mapping.backends])
     clockfiles = _find_clockfiles(clock_roots)
 
-    pulsars = sorted(set(parfiles) | set(timfiles) | set(templates))
-    if not pulsars:
+    pulsar_set = sorted(set(parfiles) | set(timfiles) | set(templates))
+    if mapping.pulsars:
+        allowed = {p.strip() for p in mapping.pulsars if p.strip()}
+        pulsar_set = [p for p in pulsar_set if p in allowed]
+    if pulsars:
+        allowed = {p.strip() for p in pulsars if p.strip()}
+        pulsar_set = [p for p in pulsar_set if p in allowed]
+
+    if not pulsar_set:
         raise IngestError("No pulsars found from mapping sources.")
 
     report = {
@@ -560,8 +713,9 @@ def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
         "missing_templates": [],
         "clockfiles": [],
     }
+    tim_manifest: List[Dict[str, str]] = []
 
-    for psr in pulsars:
+    for psr in pulsar_set:
         psr_dir = output_root / psr
         psr_dir.mkdir(parents=True, exist_ok=True)
 
@@ -574,7 +728,16 @@ def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
         if tim_entries:
             for backend_name, tim_path in tim_entries:
                 backend_key = _norm_backend_key(backend_name)
-                _copy_file(tim_path, psr_dir / "tims" / f"{backend_key}.tim")
+                dst = psr_dir / "tims" / f"{backend_key}.tim"
+                _copy_file(tim_path, dst)
+                tim_manifest.append(
+                    {
+                        "pulsar": psr,
+                        "backend": backend_key,
+                        "src": str(tim_path.resolve()),
+                        "dst": str(dst.resolve()),
+                    }
+                )
             _write_all_tim(psr_dir, tim_entries)
         else:
             report["missing_timfiles"].append(psr)
@@ -589,7 +752,7 @@ def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
         report["pulsars"].append(psr)
 
     # Sanitize tim files: replace literal "\\n" with newline characters.
-    for psr in pulsars:
+    for psr in pulsar_set:
         psr_dir = output_root / psr
         tims_dir = psr_dir / "tims"
         candidates = [psr_dir / f"{psr}_all.tim"]
@@ -612,10 +775,25 @@ def ingest_dataset(mapping_file: Path, output_root: Path) -> Dict[str, object]:
             _copy_file(src, clock_dir / name)
             report["clockfiles"].append(str(clock_dir / name))
 
+    # Write ingest manifest for traceability.
+    if tim_manifest:
+        rep_dir = output_root / "ingest_reports"
+        rep_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = rep_dir / "ingest_manifest_tim.csv"
+        lines = ["pulsar,backend,src,dst"]
+        lines.extend(
+            f"{row['pulsar']},{row['backend']},{row['src']},{row['dst']}"
+            for row in tim_manifest
+        )
+        manifest_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     try:
         _write_ingest_upset_plots(output_root)
     except Exception as e:  # pragma: no cover
         logger.warning("Failed to generate ingest upset plots: %s", e)
+
+    if verify:
+        verify_ingest_tims(output_root, mapping)
 
     return report
 
@@ -657,6 +835,19 @@ def commit_ingest_changes(
             checkout(repo, base or current)
             repo.git.checkout("-b", new_branch)
 
+    # Ensure logs do not keep the repo dirty after ingest.
+    gitignore = output_root / ".gitignore"
+    ignore_lines = ["logs/", "results/"]
+    if gitignore.exists():
+        existing = set(gitignore.read_text(encoding="utf-8").splitlines())
+        to_add = [ln for ln in ignore_lines if ln not in existing]
+        if to_add:
+            gitignore.write_text(
+                "\n".join([*existing, *to_add]) + "\n", encoding="utf-8"
+            )
+    else:
+        gitignore.write_text("\n".join(ignore_lines) + "\n", encoding="utf-8")
+
     repo.git.add("-A")
     msg = (commit_message or "Ingest: collected files").strip()
     if repo.is_dirty(untracked_files=True):
@@ -669,6 +860,15 @@ def commit_ingest_changes(
     raw_branch = "raw"
     if raw_branch not in existing:
         repo.git.branch(raw_branch, new_branch)
+
+    dirty = repo.is_dirty(untracked_files=True)
+    if dirty:
+        untracked = list(getattr(repo, "untracked_files", []) or [])
+        changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
+        raise IngestError(
+            "Ingest commit left untracked/modified files. "
+            f"Untracked={len(untracked)} Changed={len(changed)}"
+        )
 
     if current:
         checkout(repo, current)

@@ -6,12 +6,13 @@ From: {{BASE_IMAGE}}
     Usage: singularity exec pleb.sif pleb --help
 
 %files
-    ../pleb /opt/pleb
-    ../pqc /opt/pqc
+    {{PLEB_SRC}} /opt/pleb
+    {{PQC_SRC}} /opt/pqc
 
 %post
     set -e
     export PIP_DISABLE_PIP_VERSION_CHECK=1
+    export PIP_IGNORE_REQUIRES_PYTHON=1
 
     mkdir -p /opt/pleb_data/configs/settings
     mkdir -p /opt/pleb_data/configs/workflows
@@ -22,7 +23,7 @@ From: {{BASE_IMAGE}}
     cp -a /opt/pleb/configs/workflows/. /opt/pleb_data/configs/workflows/
 
     python3 -m pip install -e /opt/pqc
-    python3 -m pip install -e /opt/pleb
+    python3 -m pip install -e /opt/pleb[plot,gui,qc]
 
 %environment
     export PLEB_DATA=/opt/pleb_data

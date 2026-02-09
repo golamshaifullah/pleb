@@ -11,7 +11,8 @@ See Also:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
+from .compat import dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any
 import json

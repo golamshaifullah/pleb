@@ -1,0 +1,151 @@
+# ---- Required paths / dataset ----
+# home_dir: path to data repository root. allowed: string path. default: (required)
+home_dir = "/work/git_projects/epta_dr3beta/"
+# dataset_name: dataset name or path. allowed: string path or name. default: "." (resolved under home_dir if not path)
+dataset_name = ""
+# results_dir: output base directory. allowed: string path. default: "."
+results_dir = "results"
+# singularity_image: tempo2 container image path. allowed: string path. default: (required)
+singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
+
+
+# ---- Core pipeline controls ----
+# epoch: tempo2 epoch as string. allowed: string. default: "55000"
+epoch = "58000"
+# force_rerun: re-run tempo2 even if outputs exist. allowed: true/false. default: false
+force_rerun = true
+# jobs: parallel workers per branch. allowed: integer >=1. default: 1
+jobs = 19
+# run_tempo2: run tempo2 stage. allowed: true/false. default: true
+run_tempo2 = false
+# make_toa_coverage_plots: generate TOA coverage plots. allowed: true/false. default: true
+make_toa_coverage_plots = false
+# make_change_reports: generate change reports. allowed: true/false. default: true
+make_change_reports = false
+# make_covariance_heatmaps: generate covariance heatmaps. allowed: true/false. default: true
+make_covariance_heatmaps = false
+# make_residual_plots: generate residual plots. allowed: true/false. default: true
+make_residual_plots = false
+# make_outlier_reports: generate outlier tables. allowed: true/false. default: true
+make_outlier_reports = false
+# testing_mode: skip change reports (CI convenience). allowed: true/false. default: false
+testing_mode = false
+
+# ---- Ingest mode (mapping-driven) ----
+# ingest_mapping_file: JSON mapping file path. allowed: string or empty. default: "" -> None
+#   Mapping is required for ingest mode; no autoparse is performed. Unmapped backends error unless ignored.
+ingest_mapping_file = "/work/git_projects/pleb/configs/settings/ingest_demo_mapping.json"
+# ingest_output_dir: output root for ingest. allowed: string or empty. default: "" -> None
+#   Output structure: JNAME/JNAME.par, JNAME/JNAME_all.tim, tims/TEL.BE.CENFREQ.tim, tmplts/<orig>.
+ingest_output_dir = "/work/git_projects/epta_dr3beta"
+
+
+# ---- FixDataset apply/commit ----
+# fix_apply: apply and commit dataset fixes. allowed: true/false. default: false
+#   If true, modifies files in-place and commits to a branch.
+fix_apply = true
+# fix_branch_name: branch name for apply. allowed: string or empty. default: "" -> None (auto)
+#   If empty, a timestamped branch name is generated.
+fix_branch_name = ""
+# fix_base_branch: base branch for apply. allowed: string or empty. default: "" -> None (auto)
+#   If empty, uses reference_branch or current branch.
+fix_base_branch = "main"
+# fix_commit_message: commit message. allowed: string or empty. default: "" -> None (auto)
+#   If empty, uses a standard FixDataset message.
+fix_commit_message = "TEST: apply FixDataset fixes"
+# fix_backup: create backups before apply. allowed: true/false. default: true (false when fix_apply)
+#   Backups are disabled when fix_apply is true (to avoid duplication).
+fix_backup = false
+# fix_dry_run: no writes if true. allowed: true/false. default: false (forced false if fix_apply)
+#   If true, emits a report only without modifying files.
+fix_dry_run = false
+
+# ---- FixDataset switches ----
+# fix_update_alltim_includes: update INCLUDE lines. allowed: true/false. default: true
+#   Rewrites INCLUDE ordering to match expected layout.
+fix_update_alltim_includes = true
+# fix_min_toas_per_backend_tim: min TOAs per backend tim. allowed: int >=0. default: 10
+#   Used when splitting into per-backend tims.
+fix_min_toas_per_backend_tim = 10
+# fix_infer_system_flags: infer system flags. allowed: true/false. default: false
+#   Builds system-flag mapping using signal properties.
+fix_infer_system_flags = true
+# fix_system_flag_table_path: path for system-flag table. allowed: string or empty. default: "" -> None
+#   If set, read/write system-flag mapping at this path.
+fix_system_flag_table_path = ""
+# fix_system_flag_mapping_path: editable mapping/allowlist JSON. allowed: string or empty. default: "" -> None
+#   If empty, uses <dataset_root>/system_flag_mapping.json when present.
+#   Use this to define backend/telescope allowlists and per-timfile overrides.
+fix_system_flag_mapping_path = ""
+# fix_system_flag_overwrite_existing: overwrite existing system flags. allowed: true/false. default: false
+#   If true, replace existing system flags rather than preserving them.
+fix_system_flag_overwrite_existing = true
+# fix_backend_overrides: backend mapping overrides. allowed: table/dict. default: {}
+#   Explicit mapping overrides (e.g., sys name replacements).
+fix_backend_overrides = {}
+# fix_raise_on_backend_missing: error if backend missing. allowed: true/false. default: false
+#   If true, missing backend mapping is a hard error.
+fix_raise_on_backend_missing = false
+# fix_dedupe_toas_within_tim: dedupe TOAs within tim. allowed: true/false. default: false
+#   Removes duplicate TOAs within a tim file.
+fix_dedupe_toas_within_tim = true
+# fix_check_duplicate_backend_tims: detect duplicate backend tims. allowed: true/false. default: false
+#   Detects duplicate backend tim files.
+fix_check_duplicate_backend_tims = true
+# fix_remove_overlaps_exact: remove exact overlaps. allowed: true/false. default: false
+#   Drops exact duplicates across tim files.
+fix_remove_overlaps_exact = true
+# fix_required_tim_flags: enforce required flags. allowed: table/dict. default: {}
+#   Ensures required flags appear on each TOA.
+fix_required_tim_flags = { "-pta" = "EPTA" }
+# fix_insert_missing_jumps: insert missing JUMPs. allowed: true/false. default: true
+#   Adds JUMP parameters for missing backends.
+fix_insert_missing_jumps = true
+# fix_jump_flag: flag used for jumps. allowed: string. default: "-sys"
+#   Flag used to group TOAs for JUMP insertion.
+fix_jump_flag = "-sys"
+# fix_ensure_ephem: ensure ephemeris parameter. allowed: string or empty. default: "" -> None
+#   If set, enforce this EPHEM in par files.
+fix_ensure_ephem = ""
+# fix_ensure_clk: ensure clock parameter. allowed: string or empty. default: "" -> None
+#   If set, enforce this CLK in par files.
+fix_ensure_clk = ""
+# fix_ensure_ne_sw: ensure NE_SW parameter. allowed: string or empty. default: "" -> None
+#   If set, enforce this NE_SW in par files.
+fix_ensure_ne_sw = ""
+# fix_remove_patterns: list of patterns to remove. allowed: list of strings. default: ["NRT.NUPPI.","NRT.NUXPI."]
+#   Removes matching tim files or INCLUDEs.
+fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
+# fix_coord_convert: coordinate conversion. allowed: "equatorial_to_ecliptic"|"ecliptic_to_equatorial"|"". default: "" -> None
+#   If set, converts coordinate system in par files.
+fix_coord_convert = ""
+# fix_prune_missing_includes: drop missing INCLUDEs. allowed: true/false. default: true
+#   Removes INCLUDEs that point to missing files.
+fix_prune_missing_includes = true
+# fix_drop_small_backend_includes: drop small backend INCLUDEs. allowed: true/false. default: true
+#   Drops backend INCLUDEs with too few TOAs.
+fix_drop_small_backend_includes = true
+# fix_system_flag_update_table: write/update system-flag table. allowed: true/false. default: true
+#   Writes system flag mapping table when inferred.
+fix_system_flag_update_table = true
+# fix_default_backend: default backend label. allowed: string or empty. default: "" -> None
+#   Used when backend info is missing.
+fix_default_backend = ""
+# fix_group_flag: group flag name. allowed: string. default: "-group"
+#   Flag used for grouping in tim files.
+fix_group_flag = "-group"
+# fix_pta_flag: PTA flag name. allowed: string. default: "-pta"
+#   PTA flag name for required PTA values.
+fix_pta_flag = "-pta"
+# fix_pta_value: default PTA value. allowed: string or empty. default: "" -> None
+#   Value used when inserting PTA flag.
+fix_pta_value = ""
+# fix_standardize_par_values: standardize par values. allowed: true/false. default: true
+#   Enforces common formatting for par parameters.
+fix_standardize_par_values = true
+# fix_prune_small_system_toas: drop small system groups. allowed: true/false. default: false
+#   Prunes system groups with small TOA counts.
+fix_prune_small_system_toas = false
+# fix_prune_small_system_flag: system flag for pruning. allowed: string. default: "-sys"
+#   Flag used to group TOAs for pruning.
+fix_prune_small_system_flag = "-sys"

@@ -8,8 +8,9 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-_LOG_FILE: Path | None = None
+_LOG_FILE: Optional[Path] = None
 
 
 def _default_log_file() -> Path:

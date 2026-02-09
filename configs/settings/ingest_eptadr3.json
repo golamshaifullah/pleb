@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/pleb/ingest_mapping.schema.json",
+  "$id": "https://example.valid/pleb/ingest_mapping.schema.json",
   "title": "pleb ingest mapping",
   "type": "object",
   "additionalProperties": false,
@@ -29,11 +29,6 @@
       "type": "object",
       "additionalProperties": { "type": "string" },
       "description": "Explicit B->J (or other) pulsar name mappings. Required for B-name ingestion."
-    },
-    "pulsars": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Optional allow-list of pulsars to ingest."
     },
     "backends": {
       "type": "object",
