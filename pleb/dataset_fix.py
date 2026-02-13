@@ -22,9 +22,34 @@ import numpy as np
 import pandas as pd
 
 from .logging_utils import get_logger
+from .system_tables import load_table
 
 logger = get_logger("pleb.dataset_fix")
 
+_BACKEND_BW_TABLE: Dict[str, float] = load_table("backend_bw", {})
+
+_LEGACY_SYS_ALLOWLIST = {
+    "EFF.EBPP.1360",
+    "EFF.EBPP.1410",
+    "EFF.EBPP.2639",
+    "EFF.P200.1365",
+    "EFF.P200.1380",
+    "EFF.P200.1425",
+    "EFF.P217.1365",
+    "EFF.P217.1380",
+    "EFF.P217.1425",
+    "EFF.S110.2487",
+    "EFF.S60.4857",
+    "JBO.DFB.1400",
+    "JBO.DFB.1520",
+    "JBO.MK2.1520",
+    "JBO.ROACH.1420",
+    "JBO.ROACH.1620",
+    "LEAP.1396",
+    "NRT.BON.1400",
+    "NRT.BON.1600",
+    "NRT.BON.2000",
+}
 
 # A pragmatic set of header/directive prefixes commonly seen in tempo2 .tim files.
 _TIM_DIRECTIVES = {
@@ -121,6 +146,7 @@ class FixDatasetConfig:
     )
     system_flag_mapping_path: Optional[str] = None
     system_flag_overwrite_existing: bool = False
+    wsrt_p2_force_sys_by_freq: bool = False
     backend_overrides: Dict[str, str] = field(
         default_factory=dict
     )  # tim basename -> backend
@@ -128,6 +154,9 @@ class FixDatasetConfig:
 
     # TIM hygiene
     dedupe_toas_within_tim: bool = True
+    dedupe_mjd_tol_sec: float = 0.0
+    dedupe_freq_tol_mhz: Optional[float] = None
+    dedupe_freq_tol_auto: bool = False
     check_duplicate_backend_tims: bool = False
 
     # Overlap handling (cheap: exact TOA duplicate removal across known overlapping backends)
@@ -1237,7 +1266,13 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             try:
                 reps.append(
                     dedupe_timfile_toas(
-                        t, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run
+                        t,
+                        apply=cfg.apply,
+                        backup=cfg.backup,
+                        dry_run=cfg.dry_run,
+                        mjd_tol_sec=float(cfg.dedupe_mjd_tol_sec),
+                        freq_tol_mhz=cfg.dedupe_freq_tol_mhz,
+                        freq_tol_auto=bool(cfg.dedupe_freq_tol_auto),
                     )
                 )
             except Exception as e:
@@ -1413,47 +1448,107 @@ def _toa_key_from_line(line: str) -> Optional[Tuple[str, str, str, str]]:
     return (parts[0], parts[1], parts[2], parts[3])
 
 
+def _infer_freq_tol(freqs: np.ndarray, bw: Optional[float]) -> Optional[float]:
+    """Infer a frequency tolerance (MHz) from observed spacing or bandwidth."""
+    if freqs.size >= 2:
+        uniq = np.unique(np.round(freqs.astype(float), 6))
+        if uniq.size >= 2:
+            diffs = np.diff(np.sort(uniq))
+            diffs = diffs[diffs > 0]
+            if diffs.size:
+                return max(0.01, min(1.0, float(diffs.min()) * 0.25))
+    if bw is not None and bw > 0:
+        return max(0.01, min(1.0, float(bw) / 1024.0))
+    return None
+
+
 def dedupe_timfile_toas(
     timfile: Path,
     apply: bool = False,
     backup: bool = True,
     dry_run: bool = False,
+    mjd_tol_sec: float = 0.0,
+    freq_tol_mhz: Optional[float] = None,
+    freq_tol_auto: bool = False,
 ) -> Dict[str, object]:
-    """Remove exact duplicate TOA lines within a single .tim file (FORMAT 1).
+    """Remove duplicate TOA lines within a single .tim file (FORMAT 1).
 
-    This is intentionally conservative: only exact duplicates on first 4 columns are removed.
-    Directives/comments are preserved in place.
-
-    Args:
-        timfile: Path to the .tim file.
-        apply: If True, write changes to disk.
-        backup: If True, create a backup before writing.
-        dry_run: If True, do not write but return planned changes.
-
-    Returns:
-        Stats dictionary summarizing removed duplicates.
+    Default: exact duplicates on first 4 columns only. When tolerances are
+    provided, treat TOAs as duplicates if they share the same file token and
+    are within (mjd_tol_sec, freq_tol_mhz).
     """
     if not timfile.exists():
         return {"timfile": str(timfile), "changed": False, "removed": 0}
 
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
-    seen: Set[Tuple[str, str, str, str]] = set()
     removed = 0
     new_lines: List[str] = []
     changed = False
 
-    for raw in lines:
-        key = _toa_key_from_line(raw)
-        if key is None:
+    # If no tolerance requested, keep legacy exact-key behavior.
+    if mjd_tol_sec <= 0.0 and not freq_tol_auto and freq_tol_mhz is None:
+        seen: Set[Tuple[str, str, str, str]] = set()
+        for raw in lines:
+            key = _toa_key_from_line(raw)
+            if key is None:
+                new_lines.append(_cleanline(raw))
+                continue
+            if key in seen:
+                removed += 1
+                changed = True
+                continue
+            seen.add(key)
             new_lines.append(_cleanline(raw))
-            continue
-        if key in seen:
-            removed += 1
-            changed = True
-            # drop duplicate
-            continue
-        seen.add(key)
-        new_lines.append(_cleanline(raw))
+    else:
+        # Tolerance-based dedupe: same file token + close MJD + close freq.
+        tol_days = float(mjd_tol_sec) / 86400.0
+        bw = _BACKEND_BW_TABLE.get(timfile.name)
+        freqs = []
+        parsed = []
+        for raw in lines:
+            if not is_toa_line(raw):
+                parsed.append((raw, None, None, None))
+                continue
+            parts = raw.strip().split()
+            if len(parts) < 4:
+                parsed.append((raw, None, None, None))
+                continue
+            try:
+                freq = float(parts[1])
+                mjd = float(parts[2])
+            except Exception:
+                parsed.append((raw, None, None, None))
+                continue
+            freqs.append(freq)
+            parsed.append((raw, parts[0], mjd, freq))
+
+        if freq_tol_mhz is None and freq_tol_auto:
+            freq_tol_mhz = _infer_freq_tol(
+                np.array(freqs, dtype=float), float(bw) if bw is not None else None
+            )
+        if freq_tol_mhz is None:
+            freq_tol_mhz = 0.0
+
+        kept: List[Tuple[str, float, float]] = []
+        for raw, ftoken, mjd, freq in parsed:
+            if ftoken is None or mjd is None or freq is None:
+                new_lines.append(_cleanline(raw))
+                continue
+            is_dup = False
+            for k_ftoken, k_mjd, k_freq in kept:
+                if k_ftoken != ftoken:
+                    continue
+                if abs(mjd - k_mjd) <= tol_days and abs(freq - k_freq) <= float(
+                    freq_tol_mhz
+                ):
+                    is_dup = True
+                    break
+            if is_dup:
+                removed += 1
+                changed = True
+                continue
+            kept.append((ftoken, mjd, freq))
+            new_lines.append(_cleanline(raw))
 
     if dry_run or not apply or not changed:
         return {
@@ -1495,6 +1590,7 @@ def infer_and_apply_system_flags(
         from .system_flag_inference import (
             BackendMissingError,
             TelescopeMissingError,
+            parse_tim_toa_table,
             infer_sys_group_pta,
             apply_flags_to_timfile,
             update_mapping_table,
@@ -1530,6 +1626,31 @@ def infer_and_apply_system_flags(
     )
     override_telescope = None
     mapping = None
+
+    def _has_legacy_sys_flag(tpath: Path) -> bool:
+        try:
+            lines = tpath.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            return False
+        for raw in lines:
+            s = raw.strip()
+            if not s or s.startswith(("#", "C")):
+                continue
+            head = s.split(maxsplit=1)[0]
+            if head in _TIM_DIRECTIVES:
+                continue
+            parts = s.split()
+            if "-sys" not in parts:
+                continue
+            i = parts.index("-sys")
+            if i + 1 >= len(parts):
+                continue
+            val = parts[i + 1]
+            if val.startswith("NRT.NUPPI.") or val.startswith("LOFAR."):
+                continue
+            if val in _LEGACY_SYS_ALLOWLIST:
+                return True
+        return False
 
     # Optional mapping/allowlist file (editable by users).
     try:
@@ -1581,12 +1702,36 @@ def infer_and_apply_system_flags(
             "sample_toa_line": getattr(e, "sample_toa_line", None),
         }
 
+    legacy_sys = _has_legacy_sys_flag(timfile)
+
     try:
         tel_vals = inferred.get("tel", pd.Series([], dtype=object))
         if any(str(t).upper() == "LOFAR" for t in pd.Series(tel_vals).dropna().unique()):
             return {"timfile": str(timfile), "skipped": True, "reason": "LOFAR"}
     except Exception:
         pass
+
+    wsrt_p2_mismatches = None
+    try:
+        tel_vals = inferred.get("tel", pd.Series([], dtype=object))
+        be_vals = inferred.get("backend", pd.Series([], dtype=object))
+        tel_set = {str(t).upper() for t in pd.Series(tel_vals).dropna().unique()}
+        be_set = {str(b).upper() for b in pd.Series(be_vals).dropna().unique()}
+        if tel_set == {"WSRT"} and be_set == {"P2"}:
+            df = parse_tim_toa_table(timfile)
+            idx_to_sys = {
+                int(r.line_idx): str(r.sys) for r in inferred.itertuples(index=False)
+            }
+            mismatches = 0
+            for r in df.itertuples(index=False):
+                flags = r.flags or {}
+                sys_val = flags.get("-sys")
+                want = idx_to_sys.get(int(r.line_idx))
+                if want and sys_val and str(sys_val) != str(want):
+                    mismatches += 1
+            wsrt_p2_mismatches = mismatches
+    except Exception:
+        wsrt_p2_mismatches = None
 
     def _is_new_wsrt_p2_timfile(tpath: Path) -> bool:
         try:
@@ -1611,7 +1756,7 @@ def infer_and_apply_system_flags(
                 has_group = True
         return has_gof and not (has_pta or has_group)
 
-    allow_overwrite = cfg.system_flag_overwrite_existing
+    allow_overwrite = cfg.system_flag_overwrite_existing and not legacy_sys
     try:
         tel_vals = inferred.get("tel", pd.Series([], dtype=object))
         be_vals = inferred.get("backend", pd.Series([], dtype=object))
@@ -1621,6 +1766,16 @@ def infer_and_apply_system_flags(
             allow_overwrite = False
     except Exception:
         allow_overwrite = False
+    if cfg.wsrt_p2_force_sys_by_freq:
+        try:
+            tel_vals = inferred.get("tel", pd.Series([], dtype=object))
+            be_vals = inferred.get("backend", pd.Series([], dtype=object))
+            tel_set = {str(t).upper() for t in pd.Series(tel_vals).dropna().unique()}
+            be_set = {str(b).upper() for b in pd.Series(be_vals).dropna().unique()}
+            if tel_set == {"WSRT"} and be_set == {"P2"}:
+                allow_overwrite = True
+        except Exception:
+            pass
 
     stats = apply_flags_to_timfile(
         timfile,
@@ -1630,6 +1785,8 @@ def infer_and_apply_system_flags(
         dry_run=cfg.dry_run,
         overwrite_existing=allow_overwrite,
     )
+    if wsrt_p2_mismatches is not None:
+        stats["wsrt_p2_sys_mismatches"] = int(wsrt_p2_mismatches)
 
     # Update a global mapping table at dataset root (keyed by timfile basename).
     try:

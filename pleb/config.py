@@ -418,9 +418,13 @@ class PipelineConfig:
     fix_system_flag_table_path: Optional[str] = None
     fix_infer_system_flags: bool = False
     fix_system_flag_overwrite_existing: bool = False
+    fix_wsrt_p2_force_sys_by_freq: bool = False
     fix_backend_overrides: Dict[str, str] = field(default_factory=dict)
     fix_raise_on_backend_missing: bool = False
     fix_dedupe_toas_within_tim: bool = True
+    fix_dedupe_mjd_tol_sec: float = 0.0
+    fix_dedupe_freq_tol_mhz: Optional[float] = None
+    fix_dedupe_freq_tol_auto: bool = False
     fix_check_duplicate_backend_tims: bool = False
     fix_remove_overlaps_exact: bool = True
 
@@ -834,6 +838,9 @@ class PipelineConfig:
             fix_system_flag_overwrite_existing=bool(
                 d.get("fix_system_flag_overwrite_existing", False)
             ),
+            fix_wsrt_p2_force_sys_by_freq=bool(
+                d.get("fix_wsrt_p2_force_sys_by_freq", False)
+            ),
             fix_backend_overrides=dict(d.get("fix_backend_overrides", {})),
             fix_raise_on_backend_missing=bool(
                 d.get("fix_raise_on_backend_missing", False)
@@ -841,6 +848,13 @@ class PipelineConfig:
             fix_dedupe_toas_within_tim=bool(
                 d.get("fix_dedupe_toas_within_tim", True)
             ),
+            fix_dedupe_mjd_tol_sec=float(d.get("fix_dedupe_mjd_tol_sec", 0.0)),
+            fix_dedupe_freq_tol_mhz=(
+                None
+                if d.get("fix_dedupe_freq_tol_mhz") in (None, "")
+                else float(d.get("fix_dedupe_freq_tol_mhz"))
+            ),
+            fix_dedupe_freq_tol_auto=bool(d.get("fix_dedupe_freq_tol_auto", False)),
             fix_check_duplicate_backend_tims=bool(
                 d.get("fix_check_duplicate_backend_tims", False)
             ),

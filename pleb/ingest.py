@@ -66,6 +66,10 @@ class IngestMapping:
     backends: Tuple[BackendSpec, ...]
     ignore_backends: Tuple[str, ...]
     pulsar_aliases: Dict[str, str]
+    lockfile_path: Optional[Path] = None
+    lockfile_strict: bool = True
+    priority_order: Tuple[str, ...] = ()
+    priority_roots: Dict[str, Path] = None
     pulsars: Tuple[str, ...] = ()
 
 
@@ -118,6 +122,18 @@ def _load_mapping(path: Path) -> IngestMapping:
         str(k): str(v) for k, v in (data.get("pulsar_aliases") or {}).items()
     }
     pulsars = tuple(str(p) for p in (data.get("pulsars") or []) if str(p).strip())
+    priority_order = tuple(
+        str(p) for p in (data.get("priority_order") or []) if str(p).strip()
+    )
+    raw_priority_roots = data.get("priority_roots") or {}
+    priority_roots = {
+        str(k): Path(v).expanduser().resolve()
+        for k, v in raw_priority_roots.items()
+        if str(k).strip() and str(v).strip()
+    }
+    lockfile_path = data.get("lockfile_path")
+    lockfile_strict = bool(data.get("lockfile_strict", True))
+    lockfile = Path(lockfile_path).expanduser().resolve() if lockfile_path else None
     return IngestMapping(
         sources=sources,
         par_roots=par_roots,
@@ -125,8 +141,76 @@ def _load_mapping(path: Path) -> IngestMapping:
         backends=tuple(backends),
         ignore_backends=ignore_backends,
         pulsar_aliases=pulsar_aliases,
+        lockfile_path=lockfile,
+        lockfile_strict=lockfile_strict,
+        priority_order=priority_order,
+        priority_roots=priority_roots,
         pulsars=pulsars,
     )
+
+
+def _load_lockfile(
+    path: Path, aliases: Dict[str, str]
+) -> Dict[str, List[Tuple[str, Path]]]:
+    """Load a mapping lockfile of exact timfile sources."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    entries = data.get("timfiles", [])
+    out: Dict[str, List[Tuple[str, Path]]] = {}
+    for row in entries:
+        try:
+            psr_raw = str(row.get("pulsar") or "").strip()
+            backend = str(row.get("backend") or "").strip()
+            src = Path(str(row.get("src") or "")).expanduser().resolve()
+        except Exception:
+            continue
+        if not psr_raw or not backend or not src.exists():
+            continue
+        psr = _canonical_pulsar(psr_raw, aliases)
+        out.setdefault(psr, []).append((backend, src))
+    return out
+
+
+def _validate_lockfile(
+    mapping: IngestMapping, lock_path: Path, timfiles: Dict[str, List[Tuple[str, Path]]]
+) -> None:
+    """Validate lockfile against current source tree."""
+    # Build expected src set from current mapping discovery.
+    expected = _find_timfiles(
+        mapping.backends,
+        mapping.pulsar_aliases,
+        mapping.ignore_backends,
+        priority_order=mapping.priority_order,
+        priority_roots=mapping.priority_roots,
+    )
+    expected_srcs = {
+        str(p.resolve()) for entries in expected.values() for _, p in entries
+    }
+    locked_srcs = {
+        str(p.resolve()) for entries in timfiles.values() for _, p in entries
+    }
+
+    missing = sorted(locked_srcs - expected_srcs)
+    added = sorted(expected_srcs - locked_srcs)
+    missing_files = [p for p in missing if not Path(p).exists()]
+
+    if missing or added:
+        msg = [
+            "Ingest lockfile validation failed: source tree changed since lockfile was generated.",
+            f"lockfile={lock_path}",
+            f"missing_from_sources={len(missing)}",
+            f"added_in_sources={len(added)}",
+        ]
+        if missing_files:
+            msg.append(f"missing_files_on_disk={len(missing_files)}")
+        # Show a small sample to guide debugging.
+        if missing:
+            msg.append("missing_sample=" + ", ".join(missing[:5]))
+        if added:
+            msg.append("added_sample=" + ", ".join(added[:5]))
+        text = " | ".join(msg)
+        if mapping.lockfile_strict:
+            raise IngestError(text)
+        logger.warning("%s", text)
 
 
 def _extract_pulsar_name(path: Path) -> Optional[str]:
@@ -252,12 +336,21 @@ def verify_ingest_tims(
     """
     manifest = output_root / "ingest_reports" / "ingest_manifest_tim.csv"
     manifest_srcs: Set[str] = set()
+    manifest_rows: List[Dict[str, str]] = []
     if manifest.exists():
         try:
-            for line in manifest.read_text(encoding="utf-8").splitlines()[1:]:
-                parts = line.split(",")
-                if len(parts) >= 3:
-                    manifest_srcs.add(parts[2])
+            lines = manifest.read_text(encoding="utf-8").splitlines()
+            if lines:
+                headers = [h.strip() for h in lines[0].split(",")]
+                for line in lines[1:]:
+                    parts = line.split(",")
+                    if len(parts) < 4:
+                        continue
+                    row = {headers[i]: parts[i] for i in range(min(len(headers), len(parts)))}
+                    manifest_rows.append(row)
+                    src = row.get("src")
+                    if src:
+                        manifest_srcs.add(src)
         except Exception:
             pass
     missing_total = 0
@@ -311,22 +404,28 @@ def verify_ingest_tims(
                     logger.warning("  missing: %s", tim.name)
 
         # Verify each copied destination is in git and in _all.tim.
-        if manifest.exists():
-            for line in manifest.read_text(encoding="utf-8").splitlines()[1:]:
-                parts = line.split(",")
-                if len(parts) < 4:
-                    continue
-                m_psr, _, _, dst = parts[0], parts[1], parts[2], parts[3]
+        if manifest_rows:
+            for row in manifest_rows:
+                m_psr = row.get("pulsar", "")
                 if m_psr != psr:
                     continue
-                rel = str(Path(dst).resolve().relative_to(output_root).as_posix())
+                dst = row.get("dst")
+                if not dst:
+                    continue
+                dst_path = Path(dst).resolve()
+                try:
+                    rel = str(dst_path.relative_to(output_root).as_posix())
+                except ValueError:
+                    # Not under output_root; skip git checks.
+                    rel = None
                 if check_git and repo is not None:
-                    if rel in untracked:
-                        logger.warning("Ingest verify: untracked file %s", rel)
-                    elif rel not in tracked:
-                        logger.warning("Ingest verify: not tracked in git %s", rel)
+                    if rel is not None:
+                        if rel in untracked:
+                            logger.warning("Ingest verify: untracked file %s", rel)
+                        elif rel not in tracked:
+                            logger.warning("Ingest verify: not tracked in git %s", rel)
                 if check_all_tim and includes:
-                    inc = f"tims/{Path(dst).name}"
+                    inc = f"tims/{dst_path.name}"
                     if inc not in includes:
                         logger.warning(
                             "Ingest verify: %s missing INCLUDE for %s",
@@ -415,13 +514,27 @@ def _find_clockfiles(roots: Iterable[Path]) -> Dict[str, Path]:
     return best
 
 
+def _priority_rank(
+    path: Path, order: Tuple[str, ...], roots: Dict[str, Path]
+) -> Optional[int]:
+    for idx, label in enumerate(order):
+        root = roots.get(label)
+        if root and root in path.parents:
+            return idx
+    return None
+
+
 def _find_timfiles(
     backends: Iterable[BackendSpec],
     aliases: Dict[str, str],
     ignore_backends: Iterable[str],
+    priority_order: Tuple[str, ...] = (),
+    priority_roots: Optional[Dict[str, Path]] = None,
 ) -> Dict[str, List[Tuple[str, Path]]]:
     out: Dict[str, List[Tuple[str, Path]]] = {}
+    best: Dict[Tuple[str, str], Tuple[int, float, Path]] = {}
     ignore_set = {b for b in ignore_backends}
+    use_priority = bool(priority_order) and bool(priority_roots)
     for backend in backends:
         if backend.ignore or backend.name in ignore_set:
             continue
@@ -438,7 +551,25 @@ def _find_timfiles(
                     f"Unable to determine pulsar for tim file: {tim} (backend {backend.name})"
                 )
             psr = _canonical_pulsar(psr_raw, aliases)
+            if use_priority:
+                rank = _priority_rank(tim, priority_order, priority_roots or {})
+                if rank is None:
+                    rank = len(priority_order) + 1
+                key = (psr, backend.name)
+                cur = best.get(key)
+                if cur is None:
+                    best[key] = (rank, tim.stat().st_mtime, tim)
+                else:
+                    cur_rank, cur_mtime, _ = cur
+                    if rank < cur_rank or (
+                        rank == cur_rank and tim.stat().st_mtime > cur_mtime
+                    ):
+                        best[key] = (rank, tim.stat().st_mtime, tim)
+                continue
             out.setdefault(psr, []).append((backend.name, tim))
+    if use_priority:
+        for (psr, backend_name), (_, _, tim) in best.items():
+            out.setdefault(psr, []).append((backend_name, tim))
     return out
 
 
@@ -448,6 +579,42 @@ def _write_all_tim(pulsar_dir: Path, tim_entries: List[Tuple[str, Path]]) -> Non
     for backend_name, _ in tim_entries:
         include_lines.append(f"INCLUDE tims/{backend_name}.tim")
     all_tim.write_text("\n".join(sorted(set(include_lines))) + "\n", encoding="utf-8")
+
+
+def _resolve_backend_keys(
+    psr: str, tim_entries: List[Tuple[str, Path]]
+) -> List[Tuple[str, Path, str]]:
+    """Resolve backend keys to avoid overwriting duplicate backend names.
+
+    Returns list of (backend_key, tim_path, src_backend_name).
+    """
+    by_backend: Dict[str, List[Path]] = {}
+    for backend_name, tim_path in tim_entries:
+        by_backend.setdefault(backend_name, []).append(tim_path)
+
+    resolved: List[Tuple[str, Path, str]] = []
+    used: Set[str] = set()
+    for backend_name, paths in sorted(by_backend.items()):
+        if len(paths) == 1:
+            key = backend_name
+            used.add(key)
+            resolved.append((key, paths[0], backend_name))
+            continue
+
+        logger.warning(
+            "Multiple tim files matched backend '%s' for %s; preserving all by unique names.",
+            backend_name,
+            psr,
+        )
+        for idx, p in enumerate(sorted(paths), start=1):
+            cand = _norm_backend_key(p.stem)
+            if cand in used:
+                cand = f"{backend_name}__{cand}"
+            if cand in used:
+                cand = f"{cand}__{idx}"
+            used.add(cand)
+            resolved.append((cand, p, backend_name))
+    return resolved
 
 
 def _copy_file(src: Path, dst: Path) -> None:
@@ -686,9 +853,21 @@ def ingest_dataset(
     output_root.mkdir(parents=True, exist_ok=True)
 
     parfiles = _find_parfiles(mapping.par_roots, mapping.pulsar_aliases)
-    timfiles = _find_timfiles(
-        mapping.backends, mapping.pulsar_aliases, mapping.ignore_backends
-    )
+    timfiles: Dict[str, List[Tuple[str, Path]]]
+    used_lockfile = False
+    if mapping.lockfile_path and mapping.lockfile_path.exists():
+        timfiles = _load_lockfile(mapping.lockfile_path, mapping.pulsar_aliases)
+        used_lockfile = True
+        logger.info("Using ingest lockfile: %s", mapping.lockfile_path)
+        _validate_lockfile(mapping, mapping.lockfile_path, timfiles)
+    else:
+        timfiles = _find_timfiles(
+            mapping.backends,
+            mapping.pulsar_aliases,
+            mapping.ignore_backends,
+            priority_order=mapping.priority_order,
+            priority_roots=mapping.priority_roots,
+        )
     templates = _find_template_files(mapping.template_roots, mapping.pulsar_aliases)
     clock_roots = list(mapping.sources) + list(mapping.par_roots) + list(mapping.template_roots)
     clock_roots.extend([b.root for b in mapping.backends])
@@ -726,19 +905,20 @@ def ingest_dataset(
 
         tim_entries = timfiles.get(psr, [])
         if tim_entries:
-            for backend_name, tim_path in tim_entries:
-                backend_key = _norm_backend_key(backend_name)
+            resolved = _resolve_backend_keys(psr, tim_entries)
+            for backend_key, tim_path, src_backend in resolved:
                 dst = psr_dir / "tims" / f"{backend_key}.tim"
                 _copy_file(tim_path, dst)
                 tim_manifest.append(
                     {
                         "pulsar": psr,
                         "backend": backend_key,
+                        "src_backend": src_backend,
                         "src": str(tim_path.resolve()),
                         "dst": str(dst.resolve()),
                     }
                 )
-            _write_all_tim(psr_dir, tim_entries)
+            _write_all_tim(psr_dir, [(k, p) for k, p, _ in resolved])
         else:
             report["missing_timfiles"].append(psr)
 
@@ -780,12 +960,34 @@ def ingest_dataset(
         rep_dir = output_root / "ingest_reports"
         rep_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = rep_dir / "ingest_manifest_tim.csv"
-        lines = ["pulsar,backend,src,dst"]
+        lines = ["pulsar,backend,src_backend,src,dst"]
         lines.extend(
-            f"{row['pulsar']},{row['backend']},{row['src']},{row['dst']}"
+            f"{row['pulsar']},{row['backend']},{row.get('src_backend','')},{row['src']},{row['dst']}"
             for row in tim_manifest
         )
         manifest_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        # Write or refresh a lockfile of exact timfile sources.
+        lock_path = (
+            mapping.lockfile_path
+            if mapping.lockfile_path is not None
+            else (rep_dir / "ingest_mapping.lock.json")
+        )
+        lock_payload = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "output_root": str(output_root),
+            "timfiles": [
+                {
+                    "pulsar": row["pulsar"],
+                    "backend": row["backend"],
+                    "src": row["src"],
+                }
+                for row in tim_manifest
+            ],
+        }
+        lock_path.write_text(json.dumps(lock_payload, indent=2) + "\n", encoding="utf-8")
+        if not used_lockfile:
+            logger.info("Wrote ingest lockfile: %s", lock_path)
 
     try:
         _write_ingest_upset_plots(output_root)

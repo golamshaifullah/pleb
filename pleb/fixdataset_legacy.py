@@ -64,8 +64,10 @@ meerkat["nchan"] = 16
 meerkat["bw"] = 48
 meerkat["band_top"] = 1650
 
+from .system_tables import load_table
+
 # jumps_per_system mapping extracted from the notebook
-jumps_per_system = {
+_DEFAULT_JUMPS_PER_SYSTEM = {
     "EFF.EBPP.1360.tim": ["EFF.EBPP.1360"],
     "EFF.EBPP.1410.tim": ["EFF.EBPP.1410"],
     "EFF.EBPP.2639.tim": ["EFF.EBPP.2639"],
@@ -140,7 +142,7 @@ jumps_per_system = {
 }
 
 # backend_bw mapping extracted from the notebook
-backend_bw = {
+_DEFAULT_BACKEND_BW = {
     "EFF.EBPP.1360.tim": 128.0,
     "EFF.EBPP.1410.tim": 128.0,
     "EFF.EBPP.2639.tim": 128.0,
@@ -176,7 +178,7 @@ backend_bw = {
 }
 
 # overlapped_timfiles mapping extracted from the notebook
-overlapped_timfiles = {
+_DEFAULT_OVERLAPPED_TIMFILES = {
     "EFF.P200.1380.tim": ["EFF.EBPP.1360.tim", "EFF.EBPP.1410.tim"],
     "EFF.P217.1380.tim": ["EFF.EBPP.1360.tim", "EFF.EBPP.1410.tim"],
     "EFF.S110.2487.tim": ["EFF.EBPP.2639.tim", "EFF.EBPP.2639.tim"],
@@ -213,7 +215,7 @@ overlapped_timfiles = {
 }
 
 # pta_systems mapping extracted from the notebook
-pta_systems = {
+_DEFAULT_PTA_SYSTEMS = {
     "EFF.EBPP.1360.tim": "EPTA",
     "EFF.EBPP.1410.tim": "EPTA",
     "EFF.EBPP.2639.tim": "EPTA",
@@ -251,6 +253,12 @@ pta_systems = {
     "GM_GWB_500_200_b1_post36.tim": "InPTA",
     "MK.LBAND.1420.tim": "MeerTime",
 }
+
+# Load editable tables if present under configs/system_tables/.
+jumps_per_system = load_table("jumps_per_system", _DEFAULT_JUMPS_PER_SYSTEM)
+backend_bw = load_table("backend_bw", _DEFAULT_BACKEND_BW)
+overlapped_timfiles = load_table("overlapped_timfiles", _DEFAULT_OVERLAPPED_TIMFILES)
+pta_systems = load_table("pta_systems", _DEFAULT_PTA_SYSTEMS)
 
 # Additional MeerKAT jump labels (as in notebook)
 jumps_per_system["MK.LBAND.1420"] = [

@@ -1,0 +1,52 @@
+{
+  "EFF.P200.1380.tim": [
+    "EFF.EBPP.1360.tim",
+    "EFF.EBPP.1410.tim"
+  ],
+  "EFF.P217.1380.tim": [
+    "EFF.EBPP.1360.tim",
+    "EFF.EBPP.1410.tim"
+  ],
+  "EFF.S110.2487.tim": [
+    "EFF.EBPP.2639.tim",
+    "EFF.EBPP.2639.tim"
+  ],
+  "JBO.ROACH.1520.tim": [
+    "JBO.DFB.1400.tim",
+    "JBO.DFB.1520.tim"
+  ],
+  "JBO.DFB.1520.tim": [
+    "JBO.DFB.1400.tim"
+  ],
+  "NRT.NUPPI.1484.tim": [
+    "NRT.BON.1400.tim",
+    "NRT.BON.1600.tim"
+  ],
+  "WSRT.P2.350.tim": [
+    "WSRT.P1.323.tim",
+    "WSRT.P1.328.tim",
+    "WSRT.P1.367.tim",
+    "WSRT.P1.382.tim"
+  ],
+  "WSRT.P2.1380.tim": [
+    "WSRT.P1.1380.tim",
+    "WSRT.P1.1380.C.tim",
+    "WSRT.P1.1380.2.tim"
+  ],
+  "WSRT.P2.2273.tim": [
+    "WSRT.P1.2273.tim",
+    "WSRT.P1.2273.C.tim",
+    "WSRT.P1.2273.2.tim"
+  ],
+  "LEAP.1396.tim": [
+    "EFF.P200.1380.tim",
+    "EFF.P217.1380.tim",
+    "EFF.S110.2487.tim",
+    "JBO.ROACH.1520.tim",
+    "NRT.NUPPI.1484.tim",
+    "NRT.NUPPI.1854.tim",
+    "SRT.DFB.1400",
+    "SRT.ROACH.1400",
+    "WSRT.P2.1380.tim"
+  ]
+}

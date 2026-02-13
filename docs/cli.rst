@@ -24,6 +24,19 @@ Override config values in place:
 
    pleb --config pipeline.toml --set results_dir=\"results\" --set jobs=8
 
+CLI overrides (1:1 with TOML)
+-----------------------------
+
+Any key from the TOML config can be supplied directly as a CLI flag and will
+override the file value. These are equivalent:
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml --jobs 8 --run_fix_dataset
+   pleb --config pipeline.toml --set jobs=8 --set run_fix_dataset=true
+
+Boolean keys accept ``--key`` (true) and ``--no-key`` (false).
+
 Common options
 --------------
 

@@ -32,7 +32,7 @@
 
 # ---- Required paths / dataset ----
 # home_dir: path to data repository root. allowed: string path. default: (required)
-home_dir = "/work/git_projects/epta_dr3beta/"
+home_dir = "/work/git_projects/epta_dr3alpha_0_better/"
 # dataset_name: dataset name or path. allowed: string path or name. default: "." (resolved under home_dir if not path)
 dataset_name = ""
 # results_dir: output base directory. allowed: string path. default: "."
@@ -294,7 +294,7 @@ pqc_solar_cut_sigma = 3.0
 # pqc_solar_cut_nbins: bins for auto cutoff. allowed: int. default: 18
 pqc_solar_cut_nbins = 18
 # pqc_solar_cut_min_points: min points for auto cutoff. allowed: int. default: 20
-pqc_solar_cut_min_points = 20
+pqc_solar_cut_min_points = 0
 # pqc_orbital_phase_cut_enabled: enable orbital-phase cutoff flagging. allowed: true/false. default: false
 #   When enabled, pqc adds orbital_phase_bad and a cutoff value used for marking TOAs.
 pqc_orbital_phase_cut_enabled = false
@@ -313,7 +313,7 @@ pqc_orbital_phase_cut_min_points = 20
 
 
 # pqc_eclipse_events_enabled: enable eclipse event detection. allowed: true/false. default: false
-pqc_eclipse_events_enabled = false
+pqc_eclipse_events_enabled = true
 # pqc_eclipse_center_phase: eclipse center phase (0..1). allowed: float. default: 0.25
 pqc_eclipse_center_phase = 0.25
 # pqc_eclipse_min_points: min points for global fit. allowed: int. default: 30
@@ -492,7 +492,7 @@ fix_ensure_ephem = ""
 fix_ensure_clk = ""
 # fix_ensure_ne_sw: ensure NE_SW parameter. allowed: string or empty. default: "" -> None
 #   If set, enforce this NE_SW in par files.
-fix_ensure_ne_sw = ""
+fix_ensure_ne_sw = "7.9"
 # fix_remove_patterns: list of patterns to remove. allowed: list of strings. default: ["NRT.NUPPI.","NRT.NUXPI."]
 #   Removes matching tim files or INCLUDEs.
 fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
@@ -519,7 +519,7 @@ fix_group_flag = "-group"
 fix_pta_flag = "-pta"
 # fix_pta_value: default PTA value. allowed: string or empty. default: "" -> None
 #   Value used when inserting PTA flag.
-fix_pta_value = ""
+fix_pta_value = "EPTA"
 # fix_standardize_par_values: standardize par values. allowed: true/false. default: true
 #   Enforces common formatting for par parameters.
 fix_standardize_par_values = true
@@ -599,7 +599,7 @@ fix_qc_branch = ""
 
 # ---- Binary analysis settings ----
 # binary_only_models: restrict binary models. allowed: list of strings or empty. default: "" -> None
-binary_only_models = ["BT", "BTX", "ELL1", "DD", "DDK"]
+binary_only_models = ["T2", "BT", "BTX", "ELL1", "DD", "DDK"]
 
 # ---- Plotting controls ----
 # dpi: plot resolution. allowed: int. default: 120

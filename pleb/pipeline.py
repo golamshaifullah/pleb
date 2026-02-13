@@ -201,11 +201,17 @@ def _build_fixdataset_config(
         system_flag_overwrite_existing=bool(
             _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
         ),
+        wsrt_p2_force_sys_by_freq=bool(
+            _cfg_get(cfg, "fix_wsrt_p2_force_sys_by_freq", False)
+        ),
         backend_overrides=dict(_cfg_get(cfg, "fix_backend_overrides", {}) or {}),
         raise_on_backend_missing=bool(
             _cfg_get(cfg, "fix_raise_on_backend_missing", False)
         ),
         dedupe_toas_within_tim=bool(_cfg_get(cfg, "fix_dedupe_toas_within_tim", False)),
+        dedupe_mjd_tol_sec=float(_cfg_get(cfg, "fix_dedupe_mjd_tol_sec", 0.0)),
+        dedupe_freq_tol_mhz=_cfg_get(cfg, "fix_dedupe_freq_tol_mhz", None),
+        dedupe_freq_tol_auto=bool(_cfg_get(cfg, "fix_dedupe_freq_tol_auto", False)),
         check_duplicate_backend_tims=bool(
             _cfg_get(cfg, "fix_check_duplicate_backend_tims", False)
         ),
@@ -380,10 +386,31 @@ def _apply_fixdataset_and_commit(
     )
 
     reports = []
-    for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
-        rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
-        rep["branch"] = new_branch
-        reports.append(rep)
+    n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+    if n_jobs == 1:
+        for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
+            rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
+            rep["branch"] = new_branch
+            reports.append(rep)
+    else:
+        def _run_fix(p: str) -> Dict[str, object]:
+            try:
+                rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / p, fcfg)
+                rep["branch"] = new_branch
+                return rep
+            except Exception as e:
+                return {"psr": p, "branch": new_branch, "error": str(e)}
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            for pulsar in pulsars:
+                futures.append(ex.submit(_run_fix, pulsar))
+            for fut in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc=f"fix-dataset (apply on {new_branch})",
+            ):
+                reports.append(fut.result())
 
     write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
 
@@ -622,12 +649,35 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             )
             reports = []
             if run_fix_dataset and not fix_apply:
-                for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                    rep = fix_pulsar_dataset(
-                        cfg.home_dir / cfg.dataset_name / pulsar, fcfg
-                    )
-                    rep["branch"] = branch
-                    reports.append(rep)
+                n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+                if n_jobs == 1:
+                    for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
+                        rep = fix_pulsar_dataset(
+                            cfg.home_dir / cfg.dataset_name / pulsar, fcfg
+                        )
+                        rep["branch"] = branch
+                        reports.append(rep)
+                else:
+                    def _run_fix(p: str) -> Dict[str, object]:
+                        try:
+                            rep = fix_pulsar_dataset(
+                                cfg.home_dir / cfg.dataset_name / p, fcfg
+                            )
+                            rep["branch"] = branch
+                            return rep
+                        except Exception as e:
+                            return {"psr": p, "branch": branch, "error": str(e)}
+
+                    futures = []
+                    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+                        for pulsar in pulsars:
+                            futures.append(ex.submit(_run_fix, pulsar))
+                        for fut in tqdm(
+                            as_completed(futures),
+                            total=len(futures),
+                            desc=f"fix-dataset ({branch})",
+                        ):
+                            reports.append(fut.result())
                 write_fix_report(reports, out_paths["fix_dataset"] / branch)
             elif not run_fix_dataset:
                 logger.info(
@@ -882,36 +932,91 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
                 qc_settings_dir = out_paths["tag"] / "run_settings"
                 qc_settings_dir.mkdir(parents=True, exist_ok=True)
-                for pulsar in tqdm(pulsars, desc=f"pqc ({branch})"):
-                    parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
-                    out_csv = qc_out_dir / f"{pulsar}_qc.csv"
-                    settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
-                    try:
-                        df = run_pqc_for_parfile_subprocess(
-                            parfile,
-                            out_csv,
-                            qc_cfg,
-                            settings_out=settings_out,
+                n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+                if n_jobs == 1:
+                    for pulsar in tqdm(pulsars, desc=f"pqc ({branch})"):
+                        parfile = (
+                            cfg.home_dir
+                            / cfg.dataset_name
+                            / pulsar
+                            / f"{pulsar}.par"
                         )
-                    except Exception as e:
-                        logger.warning(
-                            "pqc failed for %s (%s); skipping QC for this pulsar: %s",
-                            pulsar,
-                            branch,
-                            e,
+                        out_csv = qc_out_dir / f"{pulsar}_qc.csv"
+                        settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
+                        try:
+                            df = run_pqc_for_parfile_subprocess(
+                                parfile,
+                                out_csv,
+                                qc_cfg,
+                                settings_out=settings_out,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "pqc failed for %s (%s); skipping QC for this pulsar: %s",
+                                pulsar,
+                                branch,
+                                e,
+                            )
+                            qc_rows.append(
+                                {
+                                    "pulsar": pulsar,
+                                    "branch": branch,
+                                    "qc_csv": str(out_csv),
+                                    "qc_error": str(e),
+                                }
+                            )
+                            continue
+                        row = {
+                            "pulsar": pulsar,
+                            "branch": branch,
+                            "qc_csv": str(out_csv),
+                        }
+                        row.update(summarize_pqc(df))
+                        qc_rows.append(row)
+                else:
+                    def _run_pqc(p: str) -> Dict[str, object]:
+                        parfile = (
+                            cfg.home_dir
+                            / cfg.dataset_name
+                            / p
+                            / f"{p}.par"
                         )
-                        qc_rows.append(
-                            {
-                                "pulsar": pulsar,
+                        out_csv = qc_out_dir / f"{p}_qc.csv"
+                        settings_out = qc_settings_dir / f"{p}.pqc_settings.toml"
+                        try:
+                            df = run_pqc_for_parfile_subprocess(
+                                parfile,
+                                out_csv,
+                                qc_cfg,
+                                settings_out=settings_out,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "pqc failed for %s (%s); skipping QC for this pulsar: %s",
+                                p,
+                                branch,
+                                e,
+                            )
+                            return {
+                                "pulsar": p,
                                 "branch": branch,
                                 "qc_csv": str(out_csv),
                                 "qc_error": str(e),
                             }
-                        )
-                        continue
-                    row = {"pulsar": pulsar, "branch": branch, "qc_csv": str(out_csv)}
-                    row.update(summarize_pqc(df))
-                    qc_rows.append(row)
+                        row = {"pulsar": p, "branch": branch, "qc_csv": str(out_csv)}
+                        row.update(summarize_pqc(df))
+                        return row
+
+                    futures = []
+                    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+                        for pulsar in pulsars:
+                            futures.append(ex.submit(_run_pqc, pulsar))
+                        for fut in tqdm(
+                            as_completed(futures),
+                            total=len(futures),
+                            desc=f"pqc ({branch})",
+                        ):
+                            qc_rows.append(fut.result())
 
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
             if branch in compare_branches:

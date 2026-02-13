@@ -1,0 +1,131 @@
+{
+  "EFF.EBPP.1360.tim": [
+    "EFF.EBPP.1360"
+  ],
+  "EFF.EBPP.1410.tim": [
+    "EFF.EBPP.1410"
+  ],
+  "EFF.EBPP.2639.tim": [
+    "EFF.EBPP.2639"
+  ],
+  "EFF.P200.1380.tim": [
+    "EFF.P200.1365",
+    "EFF.P200.1425"
+  ],
+  "EFF.P217.1380.tim": [
+    "EFF.P217.1365",
+    "EFF.P217.1425"
+  ],
+  "EFF.S110.2487.tim": [
+    "EFF.S110.2487"
+  ],
+  "EFF.S60.4857.tim": [
+    "EFF.S60.4857"
+  ],
+  "GM_GWB_1460_100_b1_pre36.tim": [
+    "GM_GWB_1460_100_b1.1372",
+    "GM_GWB_1460_100_b1.1397",
+    "GM_GWB_1460_100_b1.1422",
+    "GM_GWB_1460_100_b1.1447"
+  ],
+  "GM_GWB_1460_200_b0_post36.tim": [
+    "GM_GWB_1460_200_b0.1285",
+    "GM_GWB_1460_200_b0.1335",
+    "GM_GWB_1460_200_b0.1385",
+    "GM_GWB_1460_200_b0.1435"
+  ],
+  "GM_GWB_500_100_b1_pre36.tim": [
+    "GM_GWB_500_100_b1.406",
+    "GM_GWB_500_100_b1.418",
+    "GM_GWB_500_100_b1.431",
+    "GM_GWB_500_100_b1.443",
+    "GM_GWB_500_100_b1.456",
+    "GM_GWB_500_100_b1.468",
+    "GM_GWB_500_100_b1.481",
+    "GM_GWB_500_100_b1.493"
+  ],
+  "GM_GWB_500_200_b1_post36.tim": [
+    "GM_GWB_500_200_b1.312",
+    "GM_GWB_500_200_b1.337",
+    "GM_GWB_500_200_b1.362",
+    "GM_GWB_500_200_b1.387",
+    "GM_GWB_500_200_b1.412",
+    "GM_GWB_500_200_b1.437",
+    "GM_GWB_500_200_b1.462",
+    "GM_GWB_500_200_b1.487"
+  ],
+  "JBO.DFB.1400.tim": [
+    "JBO.DFB.1400"
+  ],
+  "JBO.DFB.1520.tim": [
+    "JBO.DFB.1520"
+  ],
+  "JBO.DFB.5000.tim": [
+    "JBO.DFB.5000"
+  ],
+  "JBO.MK2.1520.2.tim": [
+    "JBO.MK2.1520"
+  ],
+  "JBO.MK2.1520.tim": [
+    "JBO.MK2.1520.2"
+  ],
+  "JBO.ROACH.1520.tim": [
+    "JBO.ROACH.1420",
+    "JBO.ROACH.1620"
+  ],
+  "LEAP.1396.tim": [
+    "LEAP.1396"
+  ],
+  "NRT.BON.1400.tim": [
+    "NRT.BON.1400"
+  ],
+  "NRT.BON.1600.tim": [
+    "NRT.BON.1600"
+  ],
+  "NRT.BON.2000.tim": [
+    "NRT.BON.2000"
+  ],
+  "NRT.NUPPI.1484.tim": [
+    "NRT.NUPPI.1292",
+    "NRT.NUPPI.1420",
+    "NRT.NUPPI.1548",
+    "NRT.NUPPI.1676"
+  ],
+  "NRT.NUPPI.1854.tim": [
+    "NRT.NUPPI.1662",
+    "NRT.NUPPI.1790",
+    "NRT.NUPPI.1918",
+    "NRT.NUPPI.2046"
+  ],
+  "NRT.NUPPI.2539.tim": [
+    "NRT.NUPPI.2411",
+    "NRT.NUPPI.2667"
+  ],
+  "WSRT.P1.1380.1.tim": [
+    "WSRT.P1.1380.1"
+  ],
+  "WSRT.P1.1380.2.tim": [
+    "WSRT.P1.1380.2"
+  ],
+  "WSRT.P1.2273.tim": [
+    "WSRT.P1.2273.C"
+  ],
+  "WSRT.P1.323.tim": [
+    "WSRT.P1.323.C"
+  ],
+  "WSRT.P1.367.tim": [
+    "WSRT.P1.367.C"
+  ],
+  "WSRT.P1.840.tim": [
+    "WSRT.P1.840"
+  ],
+  "WSRT.P2.1380.tim": [
+    "WSRT.P2.1380"
+  ],
+  "WSRT.P2.2273.tim": [
+    "WSRT.P2.2273"
+  ],
+  "WSRT.P2.350.tim": [
+    "WSRT.P2.350"
+  ]
+}

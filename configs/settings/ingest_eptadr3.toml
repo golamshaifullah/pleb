@@ -1,6 +1,6 @@
 # ---- Required paths / dataset ----
 # home_dir: path to data repository root. allowed: string path. default: (required)
-home_dir = "/work/git_projects/epta_dr3beta/"
+home_dir = "/work/git_projects/epta_dr3alpha/"
 # dataset_name: dataset name or path. allowed: string path or name. default: "." (resolved under home_dir if not path)
 dataset_name = ""
 # results_dir: output base directory. allowed: string path. default: "."
@@ -37,7 +37,7 @@ testing_mode = false
 ingest_mapping_file = "/work/git_projects/pleb/configs/settings/ingest_demo_mapping.json"
 # ingest_output_dir: output root for ingest. allowed: string or empty. default: "" -> None
 #   Output structure: JNAME/JNAME.par, JNAME/JNAME_all.tim, tims/TEL.BE.CENFREQ.tim, tmplts/<orig>.
-ingest_output_dir = "/work/git_projects/epta_dr3beta"
+ingest_output_dir = "/work/git_projects/epta_dr3alpha"
 
 
 # ---- FixDataset apply/commit ----

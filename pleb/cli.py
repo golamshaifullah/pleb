@@ -32,6 +32,7 @@ from pathlib import Path
 import os
 import sys
 import tempfile
+from dataclasses import fields
 
 from .config import PipelineConfig
 from .ingest import ingest_dataset, IngestError
@@ -594,6 +595,62 @@ def _parse_bool(raw: str, name: str) -> bool:
     raise ValueError(f"--{name} expects true/false, got: {raw!r}")
 
 
+def _cli_key_to_cfg_key(key: str) -> str:
+    return key.replace("-", "_")
+
+
+def _unknown_args_to_overrides(unknown: list[str], cfg_keys: set[str]) -> list[str]:
+    """Convert unknown CLI args into config overrides (KEY=VALUE).
+
+    Supports:
+      --foo=bar
+      --foo bar
+      --foo        (sets true)
+      --no-foo     (sets false)
+    """
+    overrides: list[str] = []
+    i = 0
+    while i < len(unknown):
+        tok = unknown[i]
+        if not tok.startswith("--"):
+            i += 1
+            continue
+        raw = tok[2:]
+        if "=" in raw:
+            k, v = raw.split("=", 1)
+            k = _cli_key_to_cfg_key(k)
+            if k.startswith("no_"):
+                k = k[3:]
+                v = "false"
+            if k not in cfg_keys:
+                raise ValueError(f"Unknown config key for CLI override: {k}")
+            overrides.append(f"{k}={v}")
+            i += 1
+            continue
+        k = _cli_key_to_cfg_key(raw)
+        if k.startswith("no_"):
+            k = k[3:]
+            if k not in cfg_keys:
+                raise ValueError(f"Unknown config key for CLI override: {k}")
+            overrides.append(f"{k}=false")
+            i += 1
+            continue
+        # try to consume next token as value
+        if i + 1 < len(unknown) and not unknown[i + 1].startswith("--"):
+            v = unknown[i + 1]
+            if k not in cfg_keys:
+                raise ValueError(f"Unknown config key for CLI override: {k}")
+            overrides.append(f"{k}={v}")
+            i += 2
+            continue
+        # bare flag => true
+        if k not in cfg_keys:
+            raise ValueError(f"Unknown config key for CLI override: {k}")
+        overrides.append(f"{k}=true")
+        i += 1
+    return overrides
+
+
 def main(argv=None) -> int:
     """Run the CLI entry point.
 
@@ -615,7 +672,12 @@ def main(argv=None) -> int:
         return run_workflow(argv)
     if argv and argv[0] == "ingest":
         return run_ingest(argv)
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args, unknown = parser.parse_known_args(argv)
+    cfg_keys = {f.name for f in fields(PipelineConfig)}
+    extra_overrides = _unknown_args_to_overrides(unknown, cfg_keys)
+    if extra_overrides:
+        args.overrides = (args.overrides or []) + extra_overrides
 
     cfg = PipelineConfig.load(args.config)
     # Build config dict from file/stdin/empty, then apply --set overrides,

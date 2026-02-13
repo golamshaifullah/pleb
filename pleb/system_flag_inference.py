@@ -32,12 +32,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import json
+from threading import Lock
 import re
 
 import numpy as np
 import pandas as pd
 
-TELESCOPE_CODES = {"EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR"}
+TELESCOPE_CODES = {"EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR", "NFR"}
 
 DEFAULT_PTA_BY_TEL = {
     "EFF": "EPTA",
@@ -47,6 +48,7 @@ DEFAULT_PTA_BY_TEL = {
     "SRT": "EPTA",
     "LEAP": "EPTA",
     "LOFAR": "EPTA",
+    "NFR": "EPTA",
 }
 
 # Common directive words in tempo2 tim files.
@@ -79,6 +81,23 @@ _WSRT_P2_BANDS = {
     "high2200": (2032, 2178),
 }
 
+_NRT_NUPPI_CENTRES = [
+    1292,
+    1420,
+    1548,
+    1662,
+    1676,
+    1790,
+    1918,
+    1962,
+    2046,
+    2090,
+    2218,
+    2346,
+    2411,
+    2667,
+]
+
 
 def _wsrt_p2_centre_for_freq(freq_mhz: float) -> int:
     """Snap WSRT P2 frequencies onto canonical subband centers."""
@@ -90,6 +109,12 @@ def _wsrt_p2_centre_for_freq(freq_mhz: float) -> int:
         candidates = _WSRT_P2_BANDS["mid1400"]
     else:
         candidates = _WSRT_P2_BANDS["high2200"]
+    return int(min(candidates, key=lambda c: abs(freq_mhz - c)))
+
+
+def _nrt_nuppi_centre_for_freq(freq_mhz: float) -> int:
+    """Snap NRT NUPPI frequencies onto allowed 128 MHz bins."""
+    candidates = sorted(_NRT_NUPPI_CENTRES)
     return int(min(candidates, key=lambda c: abs(freq_mhz - c)))
 
 
@@ -190,6 +215,22 @@ def _infer_telescope_code(timfile: Path) -> Optional[str]:
     toks = stem.split(".")
     if toks and toks[0] in TELESCOPE_CODES:
         return toks[0]
+    return None
+
+
+def _infer_telescope_from_flags(timfile: Path) -> Optional[str]:
+    """Infer telescope from TOA flags/content when filename lacks a telescope code."""
+    try:
+        lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return None
+    for raw in lines:
+        if not is_toa_line(raw):
+            continue
+        flags = _extract_flags(raw)
+        src = " ".join([raw] + [str(v) for v in flags.values()])
+        if "NENUFAR" in src.upper():
+            return "NFR"
     return None
 
 
@@ -401,6 +442,8 @@ def infer_telescope(
 
     val = _infer_telescope_code(timfile)
     if not val:
+        val = _infer_telescope_from_flags(timfile)
+    if not val:
         toks = timfile.name.split(".")
         if toks:
             cand = _norm_token(toks[0])
@@ -544,6 +587,13 @@ def infer_sys_group_pta(
             [_wsrt_p2_centre_for_freq(f) for f in df["freq_mhz"].to_numpy()],
             dtype=int,
         )
+    if tel == "NRT" and backend == "NUPPI":
+        centre = np.array(
+            [_nrt_nuppi_centre_for_freq(f) for f in df["freq_mhz"].to_numpy()],
+            dtype=int,
+        )
+    if tel == "NFR" and backend == "LUPPI":
+        centre = np.array([75] * len(df), dtype=int)
 
     # Vectorised string build
     centre_s = pd.Series(centre, index=df.index, dtype="int64").astype(str)
@@ -726,6 +776,9 @@ def canonicalise_centres(
     return out
 
 
+_MAPPING_TABLE_LOCK = Lock()
+
+
 def update_mapping_table(
     mapping_path: Path, inferred: pd.DataFrame
 ) -> Dict[str, List[str]]:
@@ -743,11 +796,12 @@ def update_mapping_table(
 
             table = update_mapping_table(Path("system_flag_table.json"), inferred)
     """
-    mapping_path.parent.mkdir(parents=True, exist_ok=True)
-    if mapping_path.exists():
-        table = json.loads(mapping_path.read_text(encoding="utf-8"))
-    else:
-        table = {}
+    with _MAPPING_TABLE_LOCK:
+        mapping_path.parent.mkdir(parents=True, exist_ok=True)
+        if mapping_path.exists():
+            table = json.loads(mapping_path.read_text(encoding="utf-8"))
+        else:
+            table = {}
 
     # inferred must include timfile_name + sys
     if "timfile" not in inferred.columns:
@@ -755,12 +809,12 @@ def update_mapping_table(
             "inferred must have column 'timfile' with the tim filename/key"
         )
 
-    for tname, sub in inferred.groupby("timfile"):
-        sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
-        if sys_vals:
-            table[tname] = sys_vals
+        for tname, sub in inferred.groupby("timfile"):
+            sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
+            if sys_vals:
+                table[tname] = sys_vals
 
-    mapping_path.write_text(
-        json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+        mapping_path.write_text(
+            json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     return table

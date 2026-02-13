@@ -27,6 +27,19 @@ Run the pipeline
 
    pleb --config pipeline.toml
 
+CLI overrides
+-------------
+
+Any key from the TOML config can be supplied directly as a CLI flag and will
+override the file value. These are equivalent:
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml --jobs 8 --run_fix_dataset
+   pleb --config pipeline.toml --set jobs=8 --set run_fix_dataset=true
+
+Boolean keys accept ``--key`` (true) and ``--no-key`` (false).
+
 The pipeline prints a run tag pointing to the output directory. Inside that
 directory you will find:
 
