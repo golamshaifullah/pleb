@@ -13,7 +13,11 @@ import subprocess
 import sys
 
 from .logging_utils import get_logger
-from pqc.utils.diagnostics import export_structure_table
+
+try:
+    from pqc.utils.diagnostics import export_structure_table
+except Exception:  # pragma: no cover
+    export_structure_table = None  # type: ignore[assignment]
 
 logger = get_logger("pleb.qc_report")
 
@@ -79,6 +83,11 @@ def generate_qc_report(
 
             report_dir = generate_qc_report(Path("results/run_2024-01-01"))
     """
+    if export_structure_table is None:
+        raise RuntimeError(
+            "qc_report requires `pqc` to be installed. Install extras with `pip install .[qc]`."
+        )
+
     run_dir = Path(run_dir).expanduser().resolve()
     report_dir = (
         Path(report_dir).expanduser().resolve() if report_dir else run_dir / "qc_report"
