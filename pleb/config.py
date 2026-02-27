@@ -416,6 +416,9 @@ class PipelineConfig:
     fix_required_tim_flags: Dict[str, str] = field(default_factory=dict)
     fix_system_flag_mapping_path: Optional[str] = None
     fix_system_flag_table_path: Optional[str] = None
+    fix_generate_alltim_variants: bool = False
+    fix_backend_classifications_path: Optional[str] = None
+    fix_alltim_variants_path: Optional[str] = None
     fix_infer_system_flags: bool = False
     fix_system_flag_overwrite_existing: bool = False
     fix_wsrt_p2_force_sys_by_freq: bool = False
@@ -552,6 +555,14 @@ class PipelineConfig:
             c.fix_system_flag_table_path = (
                 Path(c.fix_system_flag_table_path).expanduser().resolve()
             )
+        if c.fix_backend_classifications_path is not None:
+            c.fix_backend_classifications_path = (
+                Path(c.fix_backend_classifications_path).expanduser().resolve()
+            )
+        if c.fix_alltim_variants_path is not None:
+            c.fix_alltim_variants_path = (
+                Path(c.fix_alltim_variants_path).expanduser().resolve()
+            )
         if c.ingest_mapping_file is not None:
             c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
         if c.ingest_output_dir is not None:
@@ -589,6 +600,12 @@ class PipelineConfig:
             )
         if d.get("fix_system_flag_table_path") is not None:
             d["fix_system_flag_table_path"] = str(d["fix_system_flag_table_path"])
+        if d.get("fix_backend_classifications_path") is not None:
+            d["fix_backend_classifications_path"] = str(
+                d["fix_backend_classifications_path"]
+            )
+        if d.get("fix_alltim_variants_path") is not None:
+            d["fix_alltim_variants_path"] = str(d["fix_alltim_variants_path"])
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -834,6 +851,9 @@ class PipelineConfig:
             fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
             fix_system_flag_mapping_path=opt_str("fix_system_flag_mapping_path"),
             fix_system_flag_table_path=opt_str("fix_system_flag_table_path"),
+            fix_generate_alltim_variants=bool(d.get("fix_generate_alltim_variants", False)),
+            fix_backend_classifications_path=opt_str("fix_backend_classifications_path"),
+            fix_alltim_variants_path=opt_str("fix_alltim_variants_path"),
             fix_infer_system_flags=bool(d.get("fix_infer_system_flags", False)),
             fix_system_flag_overwrite_existing=bool(
                 d.get("fix_system_flag_overwrite_existing", False)

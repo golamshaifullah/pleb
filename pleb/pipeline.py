@@ -198,6 +198,13 @@ def _build_fixdataset_config(
         infer_system_flags=bool(_cfg_get(cfg, "fix_infer_system_flags", False)),
         system_flag_table_path=_cfg_get(cfg, "fix_system_flag_table_path", None),
         system_flag_mapping_path=_cfg_get(cfg, "fix_system_flag_mapping_path", None),
+        generate_alltim_variants=bool(
+            _cfg_get(cfg, "fix_generate_alltim_variants", False)
+        ),
+        backend_classifications_path=_cfg_get(
+            cfg, "fix_backend_classifications_path", None
+        ),
+        alltim_variants_path=_cfg_get(cfg, "fix_alltim_variants_path", None),
         system_flag_overwrite_existing=bool(
             _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
         ),

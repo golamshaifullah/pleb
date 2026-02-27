@@ -1,4 +1,4 @@
-# TEST CONFIG: exhaustive list of PipelineConfig fields + pipeline-only + CLI-only knobs.
+# TEMPLATE CONFIG: exhaustive list of PipelineConfig fields + pipeline-only + CLI-only knobs.
 # This file is intentionally verbose so defaults and implicit behaviors are visible.
 #
 # Legend:
@@ -6,6 +6,22 @@
 # - Commented keys are CLI-only flags (ignored by TOML loader).
 # - Each key has: allowed values, default, and purpose.
 # - Empty string ("") means "unset/None" for optional string fields.
+#
+# ---------------------------------------------------------------------
+# Execution chain (high-level)
+# ---------------------------------------------------------------------
+# Stage 0  : Resolve paths / branch / pulsar selection
+# Stage 1  : Optional FixDataset report/apply (run_fix_dataset / fix_apply)
+# Stage 2  : tempo2 outputs and core plots/tables (run_tempo2 + make_*)
+# Stage 3  : Optional PQC analysis and QC reports (run_pqc / qc_report)
+# Stage 4  : Optional param scan and binary analysis
+#
+# Fast navigation:
+# - Stage 0 keys: home_dir, dataset_name, results_dir, singularity_image, branches, pulsars
+# - Stage 1 keys: run_fix_dataset + all fix_* keys
+# - Stage 2 keys: run_tempo2, epoch, force_rerun, jobs, make_* toggles
+# - Stage 3 keys: run_pqc, pqc_* keys, qc_report*
+# - Stage 4 keys: param_scan_* and binary_only_models
 #
 # Runtime-injected defaults / behavior (not explicit TOML fields):
 # - If outdir_name is empty, make_output_tree uses a timestamped directory name.
@@ -30,6 +46,7 @@
 #
 # Edit the 4 paths below. Keep quotes around strings/paths.
 
+# ==== Stage 0: Inputs and Selection ====
 # ---- Required paths / dataset ----
 # home_dir: path to data repository root. allowed: string path. default: (required)
 home_dir = "/work/git_projects/epta_dr3alpha_0_better/"
@@ -50,6 +67,7 @@ pulsars = "ALL"
 # outdir_name: output subdir name; empty -> auto timestamp. allowed: string or empty. default: "" -> None
 outdir_name = "run_fixdataset_all_fixes"
 
+# ==== Stage 2: tempo2 + Standard Reports ====
 # ---- Core pipeline controls ----
 # epoch: tempo2 epoch as string. allowed: string. default: "55000"
 epoch = "58000"
@@ -72,6 +90,7 @@ make_outlier_reports = true
 # testing_mode: skip change reports (CI convenience). allowed: true/false. default: false
 testing_mode = false
 
+# ==== Stage 3: PQC (optional) ====
 # ---- Optional QC stage (PQC) ----
 # run_pqc: enable PQC stage. allowed: true/false. default: false
 #   Runs pqc to compute QC metrics, flags, and diagnostic tables/plots.
@@ -381,7 +400,7 @@ pqc_glitch_mean_window_days = 500.0
 # pqc_glitch_min_duration_days: minimum glitch duration (days). allowed: float. default: 1000.0
 pqc_glitch_min_duration_days = 1000.0
 
-# ---- Optional QC report artifacts ----
+# ---- Stage 3b: Optional QC report artifacts ----
 # qc_report: generate QC report artifacts. allowed: true/false. default: false
 #   Creates plots and summary tables from pqc outputs.
 qc_report = true
@@ -404,13 +423,14 @@ qc_report_structure_group_cols = "group;sys;freq_bin"
 #   Skips feature plots (solar/phase/freq_bin, etc).
 qc_report_no_feature_plots = false
 
+# ==== Stage 1/4 toggles ====
 # ---- Add-on toggles ----
 # run_fix_dataset: enable FixDataset report/apply stage. allowed: true/false. default: false
 run_fix_dataset = true
 # make_binary_analysis: enable binary analysis table. allowed: true/false. default: false
 make_binary_analysis = true
 
-# ---- Param scan defaults ----
+# ---- Stage 4: Param scan defaults ----
 # param_scan_typical: enable typical scan profile. allowed: true/false. default: false
 param_scan_typical = true
 # param_scan_dm_redchisq_threshold: reduced chi2 threshold for DM scan. allowed: float. default: 2.0
@@ -420,6 +440,7 @@ param_scan_dm_max_order = 4
 # param_scan_btx_max_fb: max FB derivative order. allowed: int >=0. default: 3
 param_scan_btx_max_fb = 3
 
+# ==== Stage 1: FixDataset policy and actions ====
 # ---- FixDataset apply/commit ----
 # fix_apply: apply and commit dataset fixes. allowed: true/false. default: false
 #   If true, modifies files in-place and commits to a branch.
@@ -440,13 +461,28 @@ fix_backup = false
 #   If true, emits a report only without modifying files.
 fix_dry_run = false
 
-# ---- FixDataset switches ----
+# ---- FixDataset switches (ordered by execution in fix_pulsar_dataset) ----
+# NOTE: order below mirrors execution path for easier debugging.
+#
+# Step 1A: pre-cleaning of par/all.tim before include maintenance
+# fix_remove_patterns: list of patterns to remove. allowed: list of strings. default: ["NRT.NUPPI.","NRT.NUXPI."]
+#   Removes matching tim files or INCLUDEs.
+fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
+
+# Step 1B: INCLUDE maintenance on <PSR>_all.tim
 # fix_update_alltim_includes: update INCLUDE lines. allowed: true/false. default: true
 #   Rewrites INCLUDE ordering to match expected layout.
 fix_update_alltim_includes = true
 # fix_min_toas_per_backend_tim: min TOAs per backend tim. allowed: int >=0. default: 10
 #   Used when splitting into per-backend tims.
 fix_min_toas_per_backend_tim = 10
+
+# Step 1C: within-file dedupe (only runs when fix_apply=true)
+# fix_dedupe_toas_within_tim: dedupe TOAs within tim. allowed: true/false. default: false
+#   Removes duplicate TOAs within a tim file.
+fix_dedupe_toas_within_tim = true
+
+# Step 1D: system/group/pta inference and system table updates
 # fix_infer_system_flags: infer system flags. allowed: true/false. default: false
 #   Builds system-flag mapping using signal properties.
 fix_infer_system_flags = true
@@ -466,18 +502,32 @@ fix_backend_overrides = {}
 # fix_raise_on_backend_missing: error if backend missing. allowed: true/false. default: false
 #   If true, missing backend mapping is a hard error.
 fix_raise_on_backend_missing = false
-# fix_dedupe_toas_within_tim: dedupe TOAs within tim. allowed: true/false. default: false
-#   Removes duplicate TOAs within a tim file.
-fix_dedupe_toas_within_tim = true
-# fix_check_duplicate_backend_tims: detect duplicate backend tims. allowed: true/false. default: false
-#   Detects duplicate backend tim files.
-fix_check_duplicate_backend_tims = true
+
+# Step 1E: optional classified variants of _all.tim
+# fix_generate_alltim_variants: write classified _all.tim variants. allowed: true/false. default: false
+#   If true, writes <PSR>_all.<variant>.tim according to variant rules TOML.
+fix_generate_alltim_variants = false
+# fix_backend_classifications_path: classification TOML path. allowed: string or empty. default: "" -> None
+#   TOML containing [classifications] and optional [overrides.timfile_class].
+fix_backend_classifications_path = ""
+# fix_alltim_variants_path: variant rules TOML path. allowed: string or empty. default: "" -> None
+#   TOML containing [variants.<name>] include/exclude class rules.
+fix_alltim_variants_path = ""
+
+# Step 1F: overlap and duplicate diagnostics
 # fix_remove_overlaps_exact: remove exact overlaps. allowed: true/false. default: false
 #   Drops exact duplicates across tim files.
 fix_remove_overlaps_exact = true
+# fix_check_duplicate_backend_tims: detect duplicate backend tims. allowed: true/false. default: false
+#   Detects duplicate backend tim files.
+fix_check_duplicate_backend_tims = true
+
+# Step 1G: enforce required flags on TOA lines
 # fix_required_tim_flags: enforce required flags. allowed: table/dict. default: {}
 #   Ensures required flags appear on each TOA.
 fix_required_tim_flags = { "-pta" = "EPTA" }
+
+# Step 1H: parfile updates (jumps + optional coordinate conversion)
 # fix_insert_missing_jumps: insert missing JUMPs. allowed: true/false. default: true
 #   Adds JUMP parameters for missing backends.
 fix_insert_missing_jumps = true
@@ -493,12 +543,11 @@ fix_ensure_clk = ""
 # fix_ensure_ne_sw: ensure NE_SW parameter. allowed: string or empty. default: "" -> None
 #   If set, enforce this NE_SW in par files.
 fix_ensure_ne_sw = "7.9"
-# fix_remove_patterns: list of patterns to remove. allowed: list of strings. default: ["NRT.NUPPI.","NRT.NUXPI."]
-#   Removes matching tim files or INCLUDEs.
-fix_remove_patterns = ["NRT.NUPPI.", "NRT.NUXPI."]
 # fix_coord_convert: coordinate conversion. allowed: "equatorial_to_ecliptic"|"ecliptic_to_equatorial"|"". default: "" -> None
 #   If set, converts coordinate system in par files.
 fix_coord_convert = ""
+
+# Additional compatibility knobs (used by extended pipeline variants; may be ignored in this runner)
 # fix_prune_missing_includes: drop missing INCLUDEs. allowed: true/false. default: true
 #   Removes INCLUDEs that point to missing files.
 fix_prune_missing_includes = true
@@ -530,7 +579,7 @@ fix_prune_small_system_toas = false
 #   Flag used to group TOAs for pruning.
 fix_prune_small_system_flag = "-sys"
 
-# ---- PQC -> FixDataset application ----
+# ---- FixDataset consumes PQC outputs (optional) ----
 # fix_qc_remove_outliers: apply PQC outliers. allowed: true/false. default: false
 #   Uses PQC outputs to comment/delete TOAs.
 fix_qc_remove_outliers = false
@@ -597,11 +646,11 @@ fix_qc_results_dir = ""
 #   If set, overrides branch subdir for QC outputs.
 fix_qc_branch = ""
 
-# ---- Binary analysis settings ----
+# ---- Stage 4: Binary analysis settings ----
 # binary_only_models: restrict binary models. allowed: list of strings or empty. default: "" -> None
 binary_only_models = ["T2", "BT", "BTX", "ELL1", "DD", "DDK"]
 
-# ---- Plotting controls ----
+# ---- Stage 2/3 output plotting controls ----
 # dpi: plot resolution. allowed: int. default: 120
 #   Affects PDF/PNG output resolution.
 dpi = 150
@@ -609,7 +658,7 @@ dpi = 150
 #   If set, limits covariance heatmap size for large models.
 max_covmat_params = ""
 
-# ---- Ingest mode (mapping-driven) ----
+# ---- Ingest mode (separate workflow path) ----
 # ingest_mapping_file: JSON mapping file path. allowed: string or empty. default: "" -> None
 #   Mapping is required for ingest mode; no autoparse is performed. Unmapped backends error unless ignored.
 ingest_mapping_file = ""

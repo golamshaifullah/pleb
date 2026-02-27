@@ -20,6 +20,10 @@ import json
 import hashlib
 import numpy as np
 import pandas as pd
+try:  # Python 3.11+
+    import tomllib
+except Exception:  # pragma: no cover
+    tomllib = None  # type: ignore
 
 from .logging_utils import get_logger
 from .system_tables import load_table
@@ -86,6 +90,9 @@ class FixDatasetConfig:
         dry_run: Compute changes without writing to disk.
         update_alltim_includes: Update ``INCLUDE`` lines in ``*_all.tim``.
         min_toas_per_backend_tim: Minimum TOAs for a backend tim to be included.
+        generate_alltim_variants: Generate additional ``*_all.<variant>.tim`` files.
+        backend_classifications_path: TOML with class->system mappings.
+        alltim_variants_path: TOML with variant selection rules.
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
         system_flag_table_path: Path to the system-flag table (JSON/TOML).
@@ -134,6 +141,9 @@ class FixDatasetConfig:
     # all.tim maintenance
     update_alltim_includes: bool = True
     min_toas_per_backend_tim: int = 10
+    generate_alltim_variants: bool = False
+    backend_classifications_path: Optional[str] = None
+    alltim_variants_path: Optional[str] = None
 
     # tim flag insertion (applies to per-backend tims under <psr>/tims/)
     # Example: {"-pta": "EPTA", "-be": "P200", "-sys": "SomeSys"}
@@ -390,6 +400,192 @@ def update_alltim_includes(
         "added": len(to_add),
         "to_add": to_add,
         "dropped": dropped,
+    }
+
+
+def _load_toml(path: Path) -> Dict[str, object]:
+    if tomllib is None:
+        raise RuntimeError("tomllib unavailable; Python 3.11+ required for TOML support.")
+    return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+def _collect_timfile_sys_values(timfile: Path) -> Set[str]:
+    vals: Set[str] = set()
+    for raw in timfile.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not is_toa_line(raw):
+            continue
+        parts = raw.strip().split()
+        if "-sys" not in parts:
+            continue
+        i = parts.index("-sys")
+        if i + 1 < len(parts):
+            vals.add(str(parts[i + 1]).strip())
+    return vals
+
+
+def _load_backend_classifications(path: Path) -> Tuple[Dict[str, Set[str]], Dict[str, str]]:
+    data = _load_toml(path)
+    raw_cls = data.get("classifications", {})
+    classes: Dict[str, Set[str]] = {}
+    if isinstance(raw_cls, dict):
+        for cname, vals in raw_cls.items():
+            key = str(cname).strip()
+            if not key or not isinstance(vals, list):
+                continue
+            classes[key] = {str(v).strip() for v in vals if str(v).strip()}
+
+    raw_over = data.get("overrides", {})
+    tim_over: Dict[str, str] = {}
+    if isinstance(raw_over, dict):
+        raw_tim = raw_over.get("timfile_class", {})
+        if isinstance(raw_tim, dict):
+            for tname, cname in raw_tim.items():
+                tn = str(tname).strip()
+                cn = str(cname).strip()
+                if tn and cn:
+                    tim_over[tn] = cn
+    return classes, tim_over
+
+
+def _load_alltim_variants(path: Path) -> Dict[str, Dict[str, object]]:
+    data = _load_toml(path)
+    out: Dict[str, Dict[str, object]] = {}
+    raw = data.get("variants", {})
+    if not isinstance(raw, dict):
+        return out
+    for vname, conf in raw.items():
+        name = str(vname).strip()
+        if not name or not isinstance(conf, dict):
+            continue
+        include = conf.get("include_classes", [])
+        exclude = conf.get("exclude_classes", [])
+        mixed = str(conf.get("mixed_policy", "any")).strip().lower()
+        if mixed not in {"any", "all", "error"}:
+            mixed = "any"
+        out[name] = {
+            "include_classes": [str(x).strip() for x in include if str(x).strip()]
+            if isinstance(include, list)
+            else [],
+            "exclude_classes": [str(x).strip() for x in exclude if str(x).strip()]
+            if isinstance(exclude, list)
+            else [],
+            "mixed_policy": mixed,
+        }
+    return out
+
+
+def _timfile_classes(
+    timfile: Path,
+    class_to_systems: Dict[str, Set[str]],
+    timfile_class_overrides: Dict[str, str],
+) -> Set[str]:
+    if timfile.name in timfile_class_overrides:
+        return {timfile_class_overrides[timfile.name]}
+    systems = _collect_timfile_sys_values(timfile)
+    out: Set[str] = set()
+    for cname, sysvals in class_to_systems.items():
+        if systems & sysvals:
+            out.add(cname)
+    return out
+
+
+def _variant_selects(
+    tim_classes: Set[str],
+    include_classes: Set[str],
+    exclude_classes: Set[str],
+    mixed_policy: str,
+) -> Tuple[bool, Optional[str]]:
+    if tim_classes & exclude_classes:
+        return False, None
+    if mixed_policy == "error" and len(tim_classes) > 1:
+        return False, f"mixed classes: {sorted(tim_classes)}"
+    if mixed_policy == "all":
+        if not tim_classes:
+            return False, None
+        return tim_classes.issubset(include_classes), None
+    return bool(tim_classes & include_classes), None
+
+
+def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    psr = psr_dir.name
+    alltim = psr_dir / f"{psr}_all.tim"
+    if not alltim.exists():
+        return {"psr": psr, "error": f"Missing {alltim.name}"}
+    if not cfg.backend_classifications_path or not cfg.alltim_variants_path:
+        return {"psr": psr, "error": "Missing backend/variant TOML paths"}
+
+    cls_path = Path(cfg.backend_classifications_path)
+    var_path = Path(cfg.alltim_variants_path)
+    if not cls_path.is_absolute():
+        cls_path = psr_dir.parent / cls_path
+    if not var_path.is_absolute():
+        var_path = psr_dir.parent / var_path
+    if not cls_path.exists() or not var_path.exists():
+        return {
+            "psr": psr,
+            "error": "Classification or variant TOML does not exist",
+            "classification_path": str(cls_path),
+            "variants_path": str(var_path),
+        }
+
+    class_to_systems, tim_overrides = _load_backend_classifications(cls_path)
+    variants = _load_alltim_variants(var_path)
+    if not variants:
+        return {"psr": psr, "error": "No variants defined"}
+
+    tims = list_backend_timfiles(psr_dir)
+    tim_classes: Dict[str, Set[str]] = {
+        t.name: _timfile_classes(t, class_to_systems, tim_overrides) for t in tims
+    }
+
+    base_lines = alltim.read_text(encoding="utf-8", errors="ignore").splitlines()
+    header_lines = [ln for ln in base_lines if not ln.strip().startswith("INCLUDE")]
+    out_variants: Dict[str, object] = {}
+
+    for vname, vcfg in variants.items():
+        include = set(vcfg.get("include_classes", []))
+        exclude = set(vcfg.get("exclude_classes", []))
+        mixed_policy = str(vcfg.get("mixed_policy", "any"))
+        selected: List[str] = []
+        skipped_mixed: List[str] = []
+        for t in tims:
+            ok, err = _variant_selects(
+                tim_classes.get(t.name, set()), include, exclude, mixed_policy
+            )
+            if err:
+                skipped_mixed.append(t.name)
+            if ok:
+                selected.append(f"tims/{t.name}")
+
+        target = psr_dir / f"{psr}_all.{vname}.tim"
+        content = list(header_lines)
+        for rel in sorted(selected):
+            content.append(f"INCLUDE {rel}")
+
+        if cfg.dry_run or not cfg.apply:
+            out_variants[vname] = {
+                "path": str(target),
+                "selected_includes": sorted(selected),
+                "skipped_mixed": skipped_mixed,
+                "written": False,
+            }
+            continue
+
+        if cfg.backup and target.exists():
+            _backup_file(target)
+        target.write_text("\n".join(content) + "\n", encoding="utf-8")
+        out_variants[vname] = {
+            "path": str(target),
+            "selected_includes": sorted(selected),
+            "skipped_mixed": skipped_mixed,
+            "written": True,
+        }
+
+    return {
+        "psr": psr,
+        "classification_path": str(cls_path),
+        "variants_path": str(var_path),
+        "variants": out_variants,
     }
 
 
@@ -1289,6 +1485,13 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             except Exception as e:
                 reps.append({"timfile": str(t), "error": str(e)})
         report["steps"].append({"infer_system_flags": reps})
+
+    if cfg.generate_alltim_variants:
+        try:
+            rep = generate_alltim_variants(psr_dir, cfg)
+        except Exception as e:
+            rep = {"error": str(e)}
+        report["steps"].append({"generate_alltim_variants": rep})
 
     # Cheap overlap removal (exact duplicates across known overlapping backend tims)
     if cfg.apply and cfg.remove_overlaps_exact:
