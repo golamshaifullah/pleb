@@ -1,5 +1,7 @@
 # pleb
 
+[![CI](https://github.com/golamshaifullah/pleb/actions/workflows/ci.yml/badge.svg)](https://github.com/golamshaifullah/pleb/actions/workflows/ci.yml)
+
 PTA data-combination pipeline with optional outlier QC.
 
 Docs: https://golamshaifullah.github.io/pleb/
