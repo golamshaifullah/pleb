@@ -57,6 +57,10 @@ jobs:
           else
             python -m pip install sphinx
           fi
+      - name: Validate local docs font asset
+        run: |
+          test -f docs/_static/fonts/Italianno-Regular.ttf
+          ! rg -n "fonts.googleapis.com|fonts.gstatic.com" docs/_static/custom.css
       - name: Build docs
         run: make -C docs html
       - name: Upload docs artifact

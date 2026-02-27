@@ -22,7 +22,10 @@ import json
 try:
     import tomllib  # py3.11+
 except Exception:  # pragma: no cover
-    tomllib = None  # type: ignore
+    try:
+        import tomli as tomllib  # type: ignore
+    except Exception:  # pragma: no cover
+        tomllib = None  # type: ignore
 
 
 PulsarSelection = Union[str, List[str]]  # "ALL" or explicit list
