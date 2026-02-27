@@ -595,9 +595,7 @@ class PipelineConfig:
         if d.get("fix_qc_results_dir") is not None:
             d["fix_qc_results_dir"] = str(d["fix_qc_results_dir"])
         if d.get("fix_system_flag_mapping_path") is not None:
-            d["fix_system_flag_mapping_path"] = str(
-                d["fix_system_flag_mapping_path"]
-            )
+            d["fix_system_flag_mapping_path"] = str(d["fix_system_flag_mapping_path"])
         if d.get("fix_system_flag_table_path") is not None:
             d["fix_system_flag_table_path"] = str(d["fix_system_flag_table_path"])
         if d.get("fix_backend_classifications_path") is not None:
@@ -741,7 +739,9 @@ class PipelineConfig:
             pqc_solar_approach_max_deg=float(d.get("pqc_solar_approach_max_deg", 30.0)),
             pqc_solar_min_points_global=int(d.get("pqc_solar_min_points_global", 30)),
             pqc_solar_min_points_year=int(d.get("pqc_solar_min_points_year", 10)),
-            pqc_solar_min_points_near_zero=int(d.get("pqc_solar_min_points_near_zero", 3)),
+            pqc_solar_min_points_near_zero=int(
+                d.get("pqc_solar_min_points_near_zero", 3)
+            ),
             pqc_solar_tau_min_deg=float(d.get("pqc_solar_tau_min_deg", 2.0)),
             pqc_solar_tau_max_deg=float(d.get("pqc_solar_tau_max_deg", 60.0)),
             pqc_solar_member_eta=float(d.get("pqc_solar_member_eta", 1.0)),
@@ -749,7 +749,9 @@ class PipelineConfig:
             pqc_solar_freq_alpha_min=float(d.get("pqc_solar_freq_alpha_min", 0.0)),
             pqc_solar_freq_alpha_max=float(d.get("pqc_solar_freq_alpha_max", 4.0)),
             pqc_solar_freq_alpha_tol=float(d.get("pqc_solar_freq_alpha_tol", 1e-3)),
-            pqc_solar_freq_alpha_max_iter=int(d.get("pqc_solar_freq_alpha_max_iter", 64)),
+            pqc_solar_freq_alpha_max_iter=int(
+                d.get("pqc_solar_freq_alpha_max_iter", 64)
+            ),
             pqc_orbital_phase_cut_enabled=bool(
                 d.get("pqc_orbital_phase_cut_enabled", False)
             ),
@@ -774,11 +776,15 @@ class PipelineConfig:
             pqc_eclipse_width_min=float(d.get("pqc_eclipse_width_min", 0.01)),
             pqc_eclipse_width_max=float(d.get("pqc_eclipse_width_max", 0.5)),
             pqc_eclipse_member_eta=float(d.get("pqc_eclipse_member_eta", 1.0)),
-            pqc_eclipse_freq_dependence=bool(d.get("pqc_eclipse_freq_dependence", True)),
+            pqc_eclipse_freq_dependence=bool(
+                d.get("pqc_eclipse_freq_dependence", True)
+            ),
             pqc_eclipse_freq_alpha_min=float(d.get("pqc_eclipse_freq_alpha_min", 0.0)),
             pqc_eclipse_freq_alpha_max=float(d.get("pqc_eclipse_freq_alpha_max", 4.0)),
             pqc_eclipse_freq_alpha_tol=float(d.get("pqc_eclipse_freq_alpha_tol", 1e-3)),
-            pqc_eclipse_freq_alpha_max_iter=int(d.get("pqc_eclipse_freq_alpha_max_iter", 64)),
+            pqc_eclipse_freq_alpha_max_iter=int(
+                d.get("pqc_eclipse_freq_alpha_max_iter", 64)
+            ),
             pqc_gaussian_bump_enabled=bool(d.get("pqc_gaussian_bump_enabled", False)),
             pqc_gaussian_bump_min_duration_days=float(
                 d.get("pqc_gaussian_bump_min_duration_days", 60.0)
@@ -796,7 +802,9 @@ class PipelineConfig:
             pqc_gaussian_bump_suppress_overlap=bool(
                 d.get("pqc_gaussian_bump_suppress_overlap", True)
             ),
-            pqc_gaussian_bump_member_eta=float(d.get("pqc_gaussian_bump_member_eta", 1.0)),
+            pqc_gaussian_bump_member_eta=float(
+                d.get("pqc_gaussian_bump_member_eta", 1.0)
+            ),
             pqc_gaussian_bump_freq_dependence=bool(
                 d.get("pqc_gaussian_bump_freq_dependence", True)
             ),
@@ -817,12 +825,18 @@ class PipelineConfig:
             pqc_glitch_delta_chi2_thresh=float(
                 d.get("pqc_glitch_delta_chi2_thresh", 25.0)
             ),
-            pqc_glitch_suppress_overlap=bool(d.get("pqc_glitch_suppress_overlap", True)),
+            pqc_glitch_suppress_overlap=bool(
+                d.get("pqc_glitch_suppress_overlap", True)
+            ),
             pqc_glitch_member_eta=float(d.get("pqc_glitch_member_eta", 1.0)),
             pqc_glitch_peak_tau_days=float(d.get("pqc_glitch_peak_tau_days", 30.0)),
             pqc_glitch_noise_k=float(d.get("pqc_glitch_noise_k", 1.0)),
-            pqc_glitch_mean_window_days=float(d.get("pqc_glitch_mean_window_days", 180.0)),
-            pqc_glitch_min_duration_days=float(d.get("pqc_glitch_min_duration_days", 1000.0)),
+            pqc_glitch_mean_window_days=float(
+                d.get("pqc_glitch_mean_window_days", 180.0)
+            ),
+            pqc_glitch_min_duration_days=float(
+                d.get("pqc_glitch_min_duration_days", 1000.0)
+            ),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),
@@ -851,8 +865,12 @@ class PipelineConfig:
             fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
             fix_system_flag_mapping_path=opt_str("fix_system_flag_mapping_path"),
             fix_system_flag_table_path=opt_str("fix_system_flag_table_path"),
-            fix_generate_alltim_variants=bool(d.get("fix_generate_alltim_variants", False)),
-            fix_backend_classifications_path=opt_str("fix_backend_classifications_path"),
+            fix_generate_alltim_variants=bool(
+                d.get("fix_generate_alltim_variants", False)
+            ),
+            fix_backend_classifications_path=opt_str(
+                "fix_backend_classifications_path"
+            ),
             fix_alltim_variants_path=opt_str("fix_alltim_variants_path"),
             fix_infer_system_flags=bool(d.get("fix_infer_system_flags", False)),
             fix_system_flag_overwrite_existing=bool(
@@ -865,9 +883,7 @@ class PipelineConfig:
             fix_raise_on_backend_missing=bool(
                 d.get("fix_raise_on_backend_missing", False)
             ),
-            fix_dedupe_toas_within_tim=bool(
-                d.get("fix_dedupe_toas_within_tim", True)
-            ),
+            fix_dedupe_toas_within_tim=bool(d.get("fix_dedupe_toas_within_tim", True)),
             fix_dedupe_mjd_tol_sec=float(d.get("fix_dedupe_mjd_tol_sec", 0.0)),
             fix_dedupe_freq_tol_mhz=(
                 None
@@ -900,9 +916,7 @@ class PipelineConfig:
             fix_group_flag=str(d.get("fix_group_flag", "-group")),
             fix_pta_flag=str(d.get("fix_pta_flag", "-pta")),
             fix_pta_value=opt_str("fix_pta_value"),
-            fix_standardize_par_values=bool(
-                d.get("fix_standardize_par_values", True)
-            ),
+            fix_standardize_par_values=bool(d.get("fix_standardize_par_values", True)),
             fix_prune_small_system_toas=bool(
                 d.get("fix_prune_small_system_toas", False)
             ),

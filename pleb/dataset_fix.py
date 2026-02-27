@@ -20,6 +20,7 @@ import json
 import hashlib
 import numpy as np
 import pandas as pd
+
 try:  # Python 3.11+
     import tomllib
 except Exception:  # pragma: no cover
@@ -405,7 +406,9 @@ def update_alltim_includes(
 
 def _load_toml(path: Path) -> Dict[str, object]:
     if tomllib is None:
-        raise RuntimeError("tomllib unavailable; Python 3.11+ required for TOML support.")
+        raise RuntimeError(
+            "tomllib unavailable; Python 3.11+ required for TOML support."
+        )
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
@@ -423,7 +426,9 @@ def _collect_timfile_sys_values(timfile: Path) -> Set[str]:
     return vals
 
 
-def _load_backend_classifications(path: Path) -> Tuple[Dict[str, Set[str]], Dict[str, str]]:
+def _load_backend_classifications(
+    path: Path,
+) -> Tuple[Dict[str, Set[str]], Dict[str, str]]:
     data = _load_toml(path)
     raw_cls = data.get("classifications", {})
     classes: Dict[str, Set[str]] = {}
@@ -463,12 +468,16 @@ def _load_alltim_variants(path: Path) -> Dict[str, Dict[str, object]]:
         if mixed not in {"any", "all", "error"}:
             mixed = "any"
         out[name] = {
-            "include_classes": [str(x).strip() for x in include if str(x).strip()]
-            if isinstance(include, list)
-            else [],
-            "exclude_classes": [str(x).strip() for x in exclude if str(x).strip()]
-            if isinstance(exclude, list)
-            else [],
+            "include_classes": (
+                [str(x).strip() for x in include if str(x).strip()]
+                if isinstance(include, list)
+                else []
+            ),
+            "exclude_classes": (
+                [str(x).strip() for x in exclude if str(x).strip()]
+                if isinstance(exclude, list)
+                else []
+            ),
             "mixed_policy": mixed,
         }
     return out
@@ -1909,7 +1918,9 @@ def infer_and_apply_system_flags(
 
     try:
         tel_vals = inferred.get("tel", pd.Series([], dtype=object))
-        if any(str(t).upper() == "LOFAR" for t in pd.Series(tel_vals).dropna().unique()):
+        if any(
+            str(t).upper() == "LOFAR" for t in pd.Series(tel_vals).dropna().unique()
+        ):
             return {"timfile": str(timfile), "skipped": True, "reason": "LOFAR"}
     except Exception:
         pass
@@ -1965,7 +1976,11 @@ def infer_and_apply_system_flags(
         be_vals = inferred.get("backend", pd.Series([], dtype=object))
         tel_set = {str(t).upper() for t in pd.Series(tel_vals).dropna().unique()}
         be_set = {str(b).upper() for b in pd.Series(be_vals).dropna().unique()}
-        if not (tel_set == {"WSRT"} and be_set == {"P2"} and _is_new_wsrt_p2_timfile(timfile)):
+        if not (
+            tel_set == {"WSRT"}
+            and be_set == {"P2"}
+            and _is_new_wsrt_p2_timfile(timfile)
+        ):
             allow_overwrite = False
     except Exception:
         allow_overwrite = False

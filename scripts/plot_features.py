@@ -29,6 +29,7 @@ def _dim_alpha(base_alpha: float) -> float:
         a = 1.0
     return lo + (hi - lo) * a
 
+
 CIRCULAR_FEATURES = {"orbital_phase"}
 KNOWN_FEATURES = [
     "orbital_phase",
@@ -177,7 +178,11 @@ def main() -> None:
         for feat in features:
             for _, row in struct[struct["feature"] == feat].iterrows():
                 force_all = feat in ("solar_elongation_deg", "orbital_phase")
-                if only_present and not force_all and not bool(row.get("present", False)):
+                if (
+                    only_present
+                    and not force_all
+                    and not bool(row.get("present", False))
+                ):
                     continue
 
                 # filter df for this group

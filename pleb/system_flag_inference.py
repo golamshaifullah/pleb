@@ -350,7 +350,9 @@ def load_system_flag_mapping(path: Path) -> Dict[str, object]:
     def _norm_aliases(val) -> Dict[str, str]:
         if not isinstance(val, dict):
             return {}
-        return {_norm_token(k): _norm_token(v) for k, v in val.items() if str(k).strip()}
+        return {
+            _norm_token(k): _norm_token(v) for k, v in val.items() if str(k).strip()
+        }
 
     out: Dict[str, object] = {}
     out["backend_allowlist"] = _norm_list(data.get("backend_allowlist"))

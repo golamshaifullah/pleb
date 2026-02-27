@@ -38,7 +38,7 @@ addopts = "-q"
 testpaths = ["tests"]
 
 [tool.ruff]
-extend-exclude = ["notebooks"]
+extend-exclude = ["notebooks", "donezip"]
 
 [tool.black]
 line-length = 88

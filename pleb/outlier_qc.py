@@ -458,7 +458,9 @@ def run_pqc_for_parfile(
     )
 
     if settings_out is None:
-        settings_out = out_csv.parent / "run_settings" / f"{parfile.stem}.pqc_settings.toml"
+        settings_out = (
+            out_csv.parent / "run_settings" / f"{parfile.stem}.pqc_settings.toml"
+        )
     settings_out = Path(settings_out)
     settings_out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -588,9 +590,9 @@ def _assert_timfile_metadata(df: pd.DataFrame, source: str) -> None:
                 f"{sample.to_string(index=False)}"
             )
         return
-    raise RuntimeError(f"{source}: no timfile metadata columns found (_timfile/filename).")
-
-
+    raise RuntimeError(
+        f"{source}: no timfile metadata columns found (_timfile/filename)."
+    )
 
 
 def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:

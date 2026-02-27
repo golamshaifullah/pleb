@@ -95,7 +95,9 @@ def _normalize_loop(loop: Any) -> Dict[str, Any]:
     }
 
 
-def _apply_overrides(cfg_dict: Dict[str, Any], set_list: List[str], overrides: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_overrides(
+    cfg_dict: Dict[str, Any], set_list: List[str], overrides: Dict[str, Any]
+) -> Dict[str, Any]:
     d = copy.deepcopy(cfg_dict)
     for item in set_list or []:
         if "=" not in item:
@@ -108,7 +110,9 @@ def _apply_overrides(cfg_dict: Dict[str, Any], set_list: List[str], overrides: D
     return d
 
 
-def _build_cfg(base_dict: Dict[str, Any], set_list: List[str], overrides: Dict[str, Any]) -> PipelineConfig:
+def _build_cfg(
+    base_dict: Dict[str, Any], set_list: List[str], overrides: Dict[str, Any]
+) -> PipelineConfig:
     d = _apply_overrides(base_dict, set_list, overrides)
     return PipelineConfig.from_dict(d)
 
@@ -135,7 +139,11 @@ def _stop_no_changes(ctx: WorkflowContext) -> bool:
     if not ctx.last_fix_summary or not ctx.last_fix_summary.exists():
         return False
     df = pd.read_csv(ctx.last_fix_summary, sep="\t")
-    cols = [c for c in df.columns if c in ("added_includes", "missing_jumps", "removed_lines")]
+    cols = [
+        c
+        for c in df.columns
+        if c in ("added_includes", "missing_jumps", "removed_lines")
+    ]
     if not cols:
         return False
     return int(df[cols].fillna(0).sum().sum()) == 0
@@ -178,7 +186,9 @@ def _should_stop(stop_if: List[Any], ctx: WorkflowContext) -> bool:
     return False
 
 
-def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowContext) -> None:
+def _run_step(
+    step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowContext
+) -> None:
     name = step["name"]
     cfg = _build_cfg(base_dict, step.get("set", []), step.get("overrides", {}))
     if name in ("pipeline", "fix_dataset", "fix_apply", "param_scan"):
@@ -200,10 +210,14 @@ def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowCont
                 repo = Repo(str(home_dir), search_parent_directories=False)
             except InvalidGitRepositoryError:
                 repo = Repo.init(str(home_dir))
-                base_branch = str(getattr(cfg, "fix_base_branch", "") or "main").strip() or "main"
+                base_branch = (
+                    str(getattr(cfg, "fix_base_branch", "") or "main").strip() or "main"
+                )
                 repo.git.checkout("-b", base_branch)
                 try:
-                    repo.git.commit("--allow-empty", "-m", "Initialize ingest repository")
+                    repo.git.commit(
+                        "--allow-empty", "-m", "Initialize ingest repository"
+                    )
                 except Exception as e:
                     raise RuntimeError(
                         "Failed to create initial git commit for fix_apply. "
@@ -211,8 +225,12 @@ def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowCont
                     ) from e
 
     if name == "ingest":
-        if not getattr(cfg, "ingest_mapping_file", None) or not getattr(cfg, "ingest_output_dir", None):
-            raise RuntimeError("ingest step requires ingest_mapping_file and ingest_output_dir in config.")
+        if not getattr(cfg, "ingest_mapping_file", None) or not getattr(
+            cfg, "ingest_output_dir", None
+        ):
+            raise RuntimeError(
+                "ingest step requires ingest_mapping_file and ingest_output_dir in config."
+            )
         set_log_dir(Path(cfg.ingest_output_dir) / "logs")
         ingest_dataset(
             Path(cfg.ingest_mapping_file),
@@ -262,7 +280,9 @@ def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowCont
         out_paths = run_param_scan(
             cfg,
             scan_typical=bool(getattr(cfg, "param_scan_typical", False)),
-            dm_redchisq_threshold=getattr(cfg, "param_scan_dm_redchisq_threshold", None),
+            dm_redchisq_threshold=getattr(
+                cfg, "param_scan_dm_redchisq_threshold", None
+            ),
             dm_max_order=getattr(cfg, "param_scan_dm_max_order", None),
             btx_max_fb=getattr(cfg, "param_scan_btx_max_fb", None),
         )
@@ -276,16 +296,30 @@ def _run_step(step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowCont
         else:
             run_dir = ctx.last_pipeline_run_dir or ctx.last_run_dir
         if not run_dir:
-            raise RuntimeError("qc_report step requires a prior pipeline run or explicit run_dir.")
+            raise RuntimeError(
+                "qc_report step requires a prior pipeline run or explicit run_dir."
+            )
         generate_qc_report(
             run_dir=run_dir,
-            backend_col=str(getattr(cfg, "qc_report_backend_col", None) or getattr(cfg, "pqc_backend_col", "group") or "group"),
-            backend=str(cfg.qc_report_backend) if getattr(cfg, "qc_report_backend", None) else None,
-            report_dir=(Path(cfg.qc_report_dir) if getattr(cfg, "qc_report_dir", None) else None),
+            backend_col=str(
+                getattr(cfg, "qc_report_backend_col", None)
+                or getattr(cfg, "pqc_backend_col", "group")
+                or "group"
+            ),
+            backend=(
+                str(cfg.qc_report_backend)
+                if getattr(cfg, "qc_report_backend", None)
+                else None
+            ),
+            report_dir=(
+                Path(cfg.qc_report_dir) if getattr(cfg, "qc_report_dir", None) else None
+            ),
             no_plots=bool(getattr(cfg, "qc_report_no_plots", False)),
-            structure_group_cols=str(getattr(cfg, "qc_report_structure_group_cols", None))
-            if getattr(cfg, "qc_report_structure_group_cols", None)
-            else None,
+            structure_group_cols=(
+                str(getattr(cfg, "qc_report_structure_group_cols", None))
+                if getattr(cfg, "qc_report_structure_group_cols", None)
+                else None
+            ),
             no_feature_plots=bool(getattr(cfg, "qc_report_no_feature_plots", False)),
         )
         return
@@ -299,7 +333,9 @@ def run_workflow(path: Path) -> WorkflowContext:
     if not config_path:
         raise ValueError("Workflow must specify 'config' (path to pipeline config).")
     base_dict = _load_config_dict(str(config_path))
-    base_dict = _apply_overrides(base_dict, list(wf.get("set", []) or []), dict(wf.get("overrides", {}) or {}))
+    base_dict = _apply_overrides(
+        base_dict, list(wf.get("set", []) or []), dict(wf.get("overrides", {}) or {})
+    )
 
     ctx = WorkflowContext()
 
@@ -318,7 +354,9 @@ def run_workflow(path: Path) -> WorkflowContext:
         lname = lp.get("name") or f"loop_{li}"
         for it in range(1, lp["max_iters"] + 1):
             logger.info("Loop %s (%s/%s)", lname, it, lp["max_iters"])
-            loop_base = _apply_overrides(base_dict, lp.get("set", []), lp.get("overrides", {}))
+            loop_base = _apply_overrides(
+                base_dict, lp.get("set", []), lp.get("overrides", {})
+            )
             for si, step in enumerate(lp["steps"], start=1):
                 logger.info("  Step %s/%s: %s", si, len(lp["steps"]), step["name"])
                 _run_step(step, loop_base, ctx)

@@ -142,9 +142,13 @@ def main() -> None:
             >= 0
         )
     if "exp_dip_member" in df.columns:
-        event_masks["exp_dip"] = df["exp_dip_member"].fillna(False).astype(bool).to_numpy()
+        event_masks["exp_dip"] = (
+            df["exp_dip_member"].fillna(False).astype(bool).to_numpy()
+        )
     if "glitch_member" in df.columns:
-        event_masks["glitch"] = df["glitch_member"].fillna(False).astype(bool).to_numpy()
+        event_masks["glitch"] = (
+            df["glitch_member"].fillna(False).astype(bool).to_numpy()
+        )
     if "gaussian_bump_member" in df.columns:
         event_masks["gaussian_bump"] = (
             df["gaussian_bump_member"].fillna(False).astype(bool).to_numpy()
@@ -159,9 +163,7 @@ def main() -> None:
         )
     if "step_global_id" in df.columns:
         event_masks["step_global"] = (
-            pd.to_numeric(df["step_global_id"], errors="coerce")
-            .fillna(-1)
-            .to_numpy()
+            pd.to_numeric(df["step_global_id"], errors="coerce").fillna(-1).to_numpy()
             >= 0
         )
     if "dm_step_global_id" in df.columns:
@@ -238,7 +240,6 @@ def main() -> None:
             label=str(s),
         )
 
-    both = bad_point & event_member
     bad_only = bad_point & (~event_member)
 
     # Bad points: grey X
@@ -407,7 +408,6 @@ def main() -> None:
                         label=None if ok_mask.any() else str(s),
                     )
             bad_only = bad_point & (~event_member) & valid
-            both = bad_point & event_member & valid
             if bad_only.any():
                 plt.scatter(
                     x[bad_only],

@@ -19,6 +19,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .system_tables import load_table
+
 try:
     from astropy.coordinates import SkyCoord, BarycentricTrueEcliptic
     from astropy.time import Time
@@ -63,8 +65,6 @@ meerkat["recv"] = {"LBAND"}
 meerkat["nchan"] = 16
 meerkat["bw"] = 48
 meerkat["band_top"] = 1650
-
-from .system_tables import load_table
 
 # jumps_per_system mapping extracted from the notebook
 _DEFAULT_JUMPS_PER_SYSTEM = {

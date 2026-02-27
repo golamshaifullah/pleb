@@ -32,7 +32,10 @@ MAPPING_SCHEMA = {
         "par_roots": {"type": "array", "items": {"type": "string"}},
         "template_roots": {"type": "array", "items": {"type": "string"}},
         "ignore_backends": {"type": "array", "items": {"type": "string"}},
-        "pulsar_aliases": {"type": "object", "additionalProperties": {"type": "string"}},
+        "pulsar_aliases": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+        },
         "backends": {
             "type": "object",
             "additionalProperties": {
@@ -126,7 +129,9 @@ def _file_browser(prefix: str, label: str, start_dir: str) -> str:
         entries = sorted(Path(cur).iterdir())
         dirs = [p for p in entries if p.is_dir()]
         files = [p for p in entries if p.is_file()]
-        options = [".. (parent)"] + [f"[D] {p.name}" for p in dirs] + [p.name for p in files]
+        options = (
+            [".. (parent)"] + [f"[D] {p.name}" for p in dirs] + [p.name for p in files]
+        )
         choice = st.selectbox(f"{prefix}_pick", options, key=f"{prefix}_pick")
         if choice == ".. (parent)":
             sel = str(Path(cur).parent)
@@ -149,7 +154,9 @@ def _file_tree(prefix: str, root: Path, max_depth: int = 4) -> str:
         if depth > max_depth:
             return
         try:
-            entries = sorted(cur.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+            entries = sorted(
+                cur.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+            )
         except Exception:
             return
         for p in entries:
@@ -265,7 +272,9 @@ def _editor_block(key_prefix: str, title: str) -> None:
     col1, col2 = st.columns(2)
     state_key = f"{key_prefix}_text"
     with col1:
-        load_path = st.text_input(f"{key_prefix}_load_path", value="", placeholder="Path to .json/.toml")
+        load_path = st.text_input(
+            f"{key_prefix}_load_path", value="", placeholder="Path to .json/.toml"
+        )
         uploaded = st.file_uploader(
             f"{key_prefix}_upload", type=["json", "toml"], accept_multiple_files=False
         )
@@ -282,7 +291,9 @@ def _editor_block(key_prefix: str, title: str) -> None:
             except Exception as e:
                 st.error(f"Load failed: {e}")
     with col2:
-        save_path = st.text_input(f"{key_prefix}_save_path", value="", placeholder="Path to save")
+        save_path = st.text_input(
+            f"{key_prefix}_save_path", value="", placeholder="Path to save"
+        )
         save_fmt = st.selectbox(
             f"{key_prefix}_save_fmt", ["json", "toml"], key=f"{key_prefix}_save_fmt"
         )
@@ -408,9 +419,13 @@ def _ingest_form() -> Dict[str, Any]:
         for key in ("sources", "par_roots", "template_roots"):
             items_key = f"ingest_{key}_items"
             st.session_state[items_key] = list(parsed.get(key, []) or [])
-        st.session_state["ingest_ignore_backends"] = ",".join(parsed.get("ignore_backends", []) or [])
+        st.session_state["ingest_ignore_backends"] = ",".join(
+            parsed.get("ignore_backends", []) or []
+        )
         aliases = parsed.get("pulsar_aliases", {}) or {}
-        st.session_state["ingest_aliases"] = "\n".join([f"{k}={v}" for k, v in aliases.items()])
+        st.session_state["ingest_aliases"] = "\n".join(
+            [f"{k}={v}" for k, v in aliases.items()]
+        )
         back_rows = []
         for name, cfg in (parsed.get("backends", {}) or {}).items():
             back_rows.append(
@@ -425,8 +440,12 @@ def _ingest_form() -> Dict[str, Any]:
         st.session_state["ingest_backends_rows"] = back_rows
 
     data["sources"] = list_paths("sources", "sources", "Root folders to scan")
-    data["par_roots"] = list_paths("par_roots", "par_roots", "PAR file roots (optional)")
-    data["template_roots"] = list_paths("template_roots", "template_roots", "Template roots (optional)")
+    data["par_roots"] = list_paths(
+        "par_roots", "par_roots", "PAR file roots (optional)"
+    )
+    data["template_roots"] = list_paths(
+        "template_roots", "template_roots", "Template roots (optional)"
+    )
 
     st.markdown("**ignore_backends** — backend names to ignore")
     ignore_key = "ingest_ignore_backends"
@@ -479,7 +498,9 @@ def _ingest_form() -> Dict[str, Any]:
                 st.session_state[root_key] = back_rows[i].get("root", "")
             st.text_input("root path", key=root_key)
             source_options = [
-                s for s in (st.session_state.get("ingest_sources_items", []) or []) if str(s).strip()
+                s
+                for s in (st.session_state.get("ingest_sources_items", []) or [])
+                if str(s).strip()
             ]
             if source_options:
                 base_choice = st.selectbox(
@@ -505,18 +526,28 @@ def _ingest_form() -> Dict[str, Any]:
             st.text_input("tim_glob", key=glob_key)
             suf_key = f"{back_key}_{i}_suf"
             if suf_key not in st.session_state:
-                st.session_state[suf_key] = ",".join(back_rows[i].get("ignore_suffixes", ["_all.tim"]))
+                st.session_state[suf_key] = ",".join(
+                    back_rows[i].get("ignore_suffixes", ["_all.tim"])
+                )
             st.text_input("ignore_suffixes (comma)", key=suf_key)
             back_rows[i] = {
                 "name": st.session_state[name_key],
                 "root": st.session_state[root_key],
                 "ignore": bool(st.session_state[ignore_key]),
                 "tim_glob": st.session_state[glob_key],
-                "ignore_suffixes": [s.strip() for s in st.session_state[suf_key].split(",") if s.strip()],
+                "ignore_suffixes": [
+                    s.strip() for s in st.session_state[suf_key].split(",") if s.strip()
+                ],
             }
     if st.button("Add backend mapping", key="backend_add"):
         back_rows.append(
-            {"name": "", "root": "", "ignore": False, "tim_glob": "*.tim", "ignore_suffixes": ["_all.tim"]}
+            {
+                "name": "",
+                "root": "",
+                "ignore": False,
+                "tim_glob": "*.tim",
+                "ignore_suffixes": ["_all.tim"],
+            }
         )
         st.rerun()
 
@@ -582,7 +613,9 @@ def _backend_editor() -> None:
         with st.expander(f"Backend {i + 1}"):
             b["name"] = st.text_input(f"backend_{i}_name", value=b.get("name", ""))
             b["root"] = st.text_input(f"backend_{i}_root", value=b.get("root", ""))
-            b["ignore"] = st.checkbox(f"backend_{i}_ignore", value=bool(b.get("ignore", False)))
+            b["ignore"] = st.checkbox(
+                f"backend_{i}_ignore", value=bool(b.get("ignore", False))
+            )
             b["tim_glob"] = st.text_input(
                 f"backend_{i}_glob", value=b.get("tim_glob", "*.tim")
             )
@@ -591,7 +624,9 @@ def _backend_editor() -> None:
                 value=",".join(b.get("ignore_suffixes", ["_all.tim"])),
                 help="Comma-separated suffixes to ignore",
             )
-            b["ignore_suffixes"] = [s.strip() for s in suffix_txt.split(",") if s.strip()]
+            b["ignore_suffixes"] = [
+                s.strip() for s in suffix_txt.split(",") if s.strip()
+            ]
             if st.button("Remove backend", key=f"backend_{i}_rm"):
                 st.session_state["ingest_backends"].pop(i)
                 st.rerun()
@@ -637,10 +672,14 @@ def main() -> None:
         _editor_block("ingest", "Ingest Mapping")
         ingest_data = _ingest_form()
         if st.button("Load builder fields from ingest text"):
-            st.session_state["ingest_text__sync"] = st.session_state.get("ingest_text", "{}")
+            st.session_state["ingest_text__sync"] = st.session_state.get(
+                "ingest_text", "{}"
+            )
             st.rerun()
         if st.button("Update ingest text view from fields"):
-            st.session_state["ingest_text__pending"] = _serialize_data(ingest_data, "json")
+            st.session_state["ingest_text__pending"] = _serialize_data(
+                ingest_data, "json"
+            )
             st.rerun()
 
     with tabs[1]:
@@ -680,7 +719,9 @@ def main() -> None:
                     st.write(f"Exit code: {code}")
         elif mode == "param_scan":
             config = st.text_input("Param-scan config path", "")
-            extras = st.text_area("Extra CLI args", "--param-scan --scan-typical\n", height=120)
+            extras = st.text_area(
+                "Extra CLI args", "--param-scan --scan-typical\n", height=120
+            )
             if st.button("Run param-scan"):
                 if not config:
                     st.warning("Provide a config path.")
@@ -712,7 +753,14 @@ def main() -> None:
                 if not mapping or not outdir:
                     st.warning("Provide mapping and output directory.")
                 else:
-                    cmd = ["pleb", "ingest", "--mapping", mapping, "--output-dir", outdir]
+                    cmd = [
+                        "pleb",
+                        "ingest",
+                        "--mapping",
+                        mapping,
+                        "--output-dir",
+                        outdir,
+                    ]
                     code, out, err = _run_cmd(cmd)
                     st.code(" ".join(cmd))
                     st.text_area("stdout", out, height=200)

@@ -400,6 +400,7 @@ def _apply_fixdataset_and_commit(
             rep["branch"] = new_branch
             reports.append(rep)
     else:
+
         def _run_fix(p: str) -> Dict[str, object]:
             try:
                 rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / p, fcfg)
@@ -588,10 +589,16 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         logger.info("Testing mode enabled: change reports will be skipped.")
         change_reports_enabled = False
 
-    if reference_branch and reference_branch not in branches_to_run and change_reports_enabled:
+    if (
+        reference_branch
+        and reference_branch not in branches_to_run
+        and change_reports_enabled
+    ):
         branches_to_run.append(reference_branch)
 
-    out_paths = make_output_tree(cfg.results_dir, compare_branches, cfg.outdir_name, lazy=True)
+    out_paths = make_output_tree(
+        cfg.results_dir, compare_branches, cfg.outdir_name, lazy=True
+    )
     logger.info("Writing outputs to: %s", out_paths["tag"])
 
     # Ensure fix-dataset output path exists even if the output tree helper doesn't pre-create it
@@ -665,6 +672,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         rep["branch"] = branch
                         reports.append(rep)
                 else:
+
                     def _run_fix(p: str) -> Dict[str, object]:
                         try:
                             rep = fix_pulsar_dataset(
@@ -691,9 +699,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     "FixDataset report-only stage skipped (run_fix_dataset=false)."
                 )
             else:
-                logger.info(
-                    "FixDataset report-only stage skipped (fix_apply=true)."
-                )
+                logger.info("FixDataset report-only stage skipped (fix_apply=true).")
 
             # tempo2 runs (parallelizable across pulsars)
             if cfg.run_tempo2:
@@ -834,15 +840,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     solar_min_points_near_zero=int(
                         getattr(cfg, "pqc_solar_min_points_near_zero", 3)
                     ),
-                    solar_tau_min_deg=float(
-                        getattr(cfg, "pqc_solar_tau_min_deg", 2.0)
-                    ),
+                    solar_tau_min_deg=float(getattr(cfg, "pqc_solar_tau_min_deg", 2.0)),
                     solar_tau_max_deg=float(
                         getattr(cfg, "pqc_solar_tau_max_deg", 60.0)
                     ),
-                    solar_member_eta=float(
-                        getattr(cfg, "pqc_solar_member_eta", 1.0)
-                    ),
+                    solar_member_eta=float(getattr(cfg, "pqc_solar_member_eta", 1.0)),
                     solar_freq_dependence=bool(
                         getattr(cfg, "pqc_solar_freq_dependence", True)
                     ),
@@ -921,9 +923,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     glitch_suppress_overlap=bool(
                         getattr(cfg, "pqc_glitch_suppress_overlap", True)
                     ),
-                    glitch_member_eta=float(
-                        getattr(cfg, "pqc_glitch_member_eta", 1.0)
-                    ),
+                    glitch_member_eta=float(getattr(cfg, "pqc_glitch_member_eta", 1.0)),
                     glitch_peak_tau_days=float(
                         getattr(cfg, "pqc_glitch_peak_tau_days", 30.0)
                     ),
@@ -943,10 +943,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 if n_jobs == 1:
                     for pulsar in tqdm(pulsars, desc=f"pqc ({branch})"):
                         parfile = (
-                            cfg.home_dir
-                            / cfg.dataset_name
-                            / pulsar
-                            / f"{pulsar}.par"
+                            cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
                         )
                         out_csv = qc_out_dir / f"{pulsar}_qc.csv"
                         settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
@@ -981,13 +978,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         row.update(summarize_pqc(df))
                         qc_rows.append(row)
                 else:
+
                     def _run_pqc(p: str) -> Dict[str, object]:
-                        parfile = (
-                            cfg.home_dir
-                            / cfg.dataset_name
-                            / p
-                            / f"{p}.par"
-                        )
+                        parfile = cfg.home_dir / cfg.dataset_name / p / f"{p}.par"
                         out_csv = qc_out_dir / f"{p}_qc.csv"
                         settings_out = qc_settings_dir / f"{p}.pqc_settings.toml"
                         try:

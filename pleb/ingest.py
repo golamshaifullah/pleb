@@ -25,6 +25,9 @@ import warnings
 import re
 import shutil
 
+from .logging_utils import get_logger
+from .git_tools import checkout, require_clean_repo
+
 try:
     import matplotlib
     import numpy as np
@@ -35,9 +38,6 @@ except Exception:  # pragma: no cover
     pd = None  # type: ignore
 plt = None  # type: ignore
 LineCollection = None  # type: ignore
-
-from .logging_utils import get_logger
-from .git_tools import checkout, require_clean_repo
 
 # Accept ASCII +/-; case-insensitive for J/B. Unicode minus variants are normalized first.
 _PULSAR_RE = re.compile(r"([BJ]\d{4}[+\-]\d{2,4})", re.IGNORECASE)
@@ -217,11 +217,7 @@ def _extract_pulsar_name(path: Path) -> Optional[str]:
     candidates: List[str] = []
     for part in [path.name, *path.parts]:
         # Normalize common Unicode minus variants before matching.
-        norm = (
-            part.replace("\u2212", "-")
-            .replace("\u2013", "-")
-            .replace("\u2014", "-")
-        )
+        norm = part.replace("\u2212", "-").replace("\u2013", "-").replace("\u2014", "-")
         m = _PULSAR_RE.search(norm)
         if m:
             cand = m.group(1)
@@ -346,7 +342,10 @@ def verify_ingest_tims(
                     parts = line.split(",")
                     if len(parts) < 4:
                         continue
-                    row = {headers[i]: parts[i] for i in range(min(len(headers), len(parts)))}
+                    row = {
+                        headers[i]: parts[i]
+                        for i in range(min(len(headers), len(parts)))
+                    }
                     manifest_rows.append(row)
                     src = row.get("src")
                     if src:
@@ -359,14 +358,10 @@ def verify_ingest_tims(
     untracked: Set[str] = set()
     if check_git:
         try:
-            from git import Repo, InvalidGitRepositoryError  # type: ignore
+            from git import Repo  # type: ignore
 
             repo = Repo(str(output_root), search_parent_directories=False)
-            tracked = {
-                p.strip()
-                for p in repo.git.ls_files().splitlines()
-                if p.strip()
-            }
+            tracked = {p.strip() for p in repo.git.ls_files().splitlines() if p.strip()}
             untracked = set(getattr(repo, "untracked_files", []) or [])
         except Exception:
             repo = None
@@ -378,7 +373,9 @@ def verify_ingest_tims(
         all_tim = psr_dir / f"{psr}_all.tim"
         includes: Set[str] = set()
         if check_all_tim and all_tim.exists():
-            for line in all_tim.read_text(encoding="utf-8", errors="ignore").splitlines():
+            for line in all_tim.read_text(
+                encoding="utf-8", errors="ignore"
+            ).splitlines():
                 s = line.strip()
                 if s.startswith("INCLUDE"):
                     parts = s.split(maxsplit=1)
@@ -509,7 +506,10 @@ def _find_clockfiles(roots: Iterable[Path]) -> Dict[str, Path]:
             # Prefer larger file; if equal, prefer newer mtime.
             if new_stat.st_size > cur_stat.st_size:
                 best[name] = clk
-            elif new_stat.st_size == cur_stat.st_size and new_stat.st_mtime > cur_stat.st_mtime:
+            elif (
+                new_stat.st_size == cur_stat.st_size
+                and new_stat.st_mtime > cur_stat.st_mtime
+            ):
                 best[name] = clk
     return best
 
@@ -667,11 +667,14 @@ def _plot_upset(df: pd.DataFrame, out_prefix: Path, title: str) -> None:
 
     # Colors (tab10 fallback)
     tab10 = plt.get_cmap("tab10")
-    color_map = {name: matplotlib.colors.to_hex(tab10(i % 10)) for i, name in enumerate(row_order)}
+    color_map = {
+        name: matplotlib.colors.to_hex(tab10(i % 10))
+        for i, name in enumerate(row_order)
+    }
 
     # Build subset counts
     def row_to_subset(row_bool):
-        return frozenset(l for l, ok in zip(labels, row_bool) if ok)
+        return frozenset(label for label, ok in zip(labels, row_bool) if ok)
 
     subset_counts = Counter()
     for _, r in presence.iterrows():
@@ -792,13 +795,16 @@ def _plot_upset(df: pd.DataFrame, out_prefix: Path, title: str) -> None:
 def _write_ingest_upset_plots(output_root: Path) -> None:
     global plt, LineCollection
     if matplotlib is None or np is None or pd is None:
-        logger.warning("matplotlib/numpy/pandas unavailable; skipping ingest upset plots.")
+        logger.warning(
+            "matplotlib/numpy/pandas unavailable; skipping ingest upset plots."
+        )
         return
     if os.environ.get("DISPLAY", "") == "" and os.environ.get("MPLBACKEND") is None:
         matplotlib.use("Agg")
     if plt is None or LineCollection is None:
         import matplotlib.pyplot as plt_mod
         from matplotlib.collections import LineCollection as LC
+
         plt = plt_mod
         LineCollection = LC
 
@@ -834,10 +840,14 @@ def _write_ingest_upset_plots(output_root: Path) -> None:
 
     if telescopes:
         df_tel = _build_df(telescopes)
-        _plot_upset(df_tel, out_dir / "ingest_upset_telescopes", "Ingest: telescope membership")
+        _plot_upset(
+            df_tel, out_dir / "ingest_upset_telescopes", "Ingest: telescope membership"
+        )
     if backends:
         df_be = _build_df(backends)
-        _plot_upset(df_be, out_dir / "ingest_upset_backends", "Ingest: backend membership")
+        _plot_upset(
+            df_be, out_dir / "ingest_upset_backends", "Ingest: backend membership"
+        )
 
 
 def ingest_dataset(
@@ -869,7 +879,9 @@ def ingest_dataset(
             priority_roots=mapping.priority_roots,
         )
     templates = _find_template_files(mapping.template_roots, mapping.pulsar_aliases)
-    clock_roots = list(mapping.sources) + list(mapping.par_roots) + list(mapping.template_roots)
+    clock_roots = (
+        list(mapping.sources) + list(mapping.par_roots) + list(mapping.template_roots)
+    )
     clock_roots.extend([b.root for b in mapping.backends])
     clockfiles = _find_clockfiles(clock_roots)
 
@@ -985,7 +997,9 @@ def ingest_dataset(
                 for row in tim_manifest
             ],
         }
-        lock_path.write_text(json.dumps(lock_payload, indent=2) + "\n", encoding="utf-8")
+        lock_path.write_text(
+            json.dumps(lock_payload, indent=2) + "\n", encoding="utf-8"
+        )
         if not used_lockfile:
             logger.info("Wrote ingest lockfile: %s", lock_path)
 
@@ -1022,7 +1036,6 @@ def commit_ingest_changes(
     require_clean_repo(repo)
     current = repo.active_branch.name if repo.head.is_valid() else ""
     base = (base_branch or current).strip() or current
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     # Default ingest branch is "main" unless explicitly overridden.
     new_branch = (branch_name or "main").strip() or "main"
 
