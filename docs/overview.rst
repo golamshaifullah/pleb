@@ -1,7 +1,7 @@
 Overview
 ========
 
-The EPTA Data Combination Pipeline ("pleb") is a Python toolkit for combining
+pleb - The EPTA Data Combination Pipeline ("pleb") is a Python toolkit for combining
 pulsar timing data across observing backends and generating diagnostics that
 highlight timing-model quality, residual behavior, and data-set consistency.
 It wraps standard timing workflows (via tempo2 outputs) and adds a structured

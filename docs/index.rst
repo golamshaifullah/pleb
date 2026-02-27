@@ -1,4 +1,4 @@
-EPTA Data Combination Pipeline
+pleb - The EPTA Data Combination Pipeline
 ==============================
 
 .. toctree::
