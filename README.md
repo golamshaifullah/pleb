@@ -2,6 +2,8 @@
 
 PTA data-combination pipeline with optional outlier QC.
 
+Docs: https://golamshaifullah.github.io/pleb/
+
 ## What it does
 
 1. Parses tempo2 timfiles (supports `_all.tim` with `INCLUDE` and `TIME` blocks).
