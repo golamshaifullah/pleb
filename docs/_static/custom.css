@@ -1,0 +1,13 @@
+@font-face {
+  font-family: "Italianno";
+  src: url("fonts/Italianno-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+/* Header/logo: only the word "pleb" */
+.logo-pleb {
+  font-family: "Italianno", cursive;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  font-size: 4em;
+}
