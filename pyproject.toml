@@ -1,13 +1,16 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "wheel", "setuptools_scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pleb"
-version = "0.1.0"
+dynamic = ["version"]
 description = "PTA residual quality-control toolkit."
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Golam Mohiuddin Shaifullah"}]
+urls = {Repository = "https://github.com/golamshaifullah/pleb", Mirror = "https://gitlab.in2p3.fr/epta/pleb", Documentation = "https://github.com/golamshaifullah/pleb"}
 dependencies = [
   "numpy>=1.22",
   "pandas>=1.5",
@@ -19,7 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 libstempo = ["libstempo"]
 plot = ["matplotlib>=3.6"]
-dev = ["pytest"]
+dev = ["pytest", "black", "ruff"]
 qc = ["pqc", "libstempo"]
 gui = ["streamlit>=1.30", "jsonschema>=4.21"]
 
@@ -36,3 +39,10 @@ testpaths = ["tests"]
 
 [tool.ruff]
 extend-exclude = ["notebooks"]
+
+[tool.black]
+line-length = 88
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "node-and-date"
