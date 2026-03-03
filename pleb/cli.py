@@ -327,7 +327,11 @@ def run_qc_report(argv: list[str] | None) -> int:
         raise SystemExit("qc-report requires --run-dir (or run_dir in --config).")
     report_dir = generate_qc_report(
         run_dir=run_dir,
-        backend_col=str(args.backend_col if args.backend_col is not None else (qcfg.backend_col if qcfg else "group")),
+        backend_col=str(
+            args.backend_col
+            if args.backend_col is not None
+            else (qcfg.backend_col if qcfg else "group")
+        ),
         backend=(
             str(args.backend)
             if args.backend is not None
@@ -405,15 +409,9 @@ def run_ingest(argv: list[str] | None) -> int:
         raise SystemExit(str(e)) from e
     ingest_commit_branch = True
     if ingest_commit_branch:
-        branch_name = args.ingest_commit_branch_name or (
-            cfg.ingest_commit_branch_name
-        )
-        base_branch = args.ingest_commit_base_branch or (
-            cfg.ingest_commit_base_branch
-        )
-        commit_message = args.ingest_commit_message or (
-            cfg.ingest_commit_message
-        )
+        branch_name = args.ingest_commit_branch_name or (cfg.ingest_commit_branch_name)
+        base_branch = args.ingest_commit_base_branch or (cfg.ingest_commit_base_branch)
+        commit_message = args.ingest_commit_message or (cfg.ingest_commit_message)
         from .ingest import commit_ingest_changes
 
         new_branch = commit_ingest_changes(

@@ -64,7 +64,9 @@ class IngestConfig:
             "ingest_commit_message": self.ingest_commit_message,
         }
         d["ingest_mapping_file"] = (
-            str(self.ingest_mapping_file) if self.ingest_mapping_file is not None else None
+            str(self.ingest_mapping_file)
+            if self.ingest_mapping_file is not None
+            else None
         )
         d["ingest_output_dir"] = (
             str(self.ingest_output_dir) if self.ingest_output_dir is not None else None
@@ -166,7 +168,9 @@ class ParamScanConfig:
             results_dir=p(d.get("results_dir", ".")),
             reference_branch=str(d.get("reference_branch", "main")),
             pulsars=d.get("pulsars", "ALL"),
-            outdir_name=(None if d.get("outdir_name") in (None, "") else d.get("outdir_name")),
+            outdir_name=(
+                None if d.get("outdir_name") in (None, "") else d.get("outdir_name")
+            ),
             epoch=str(d.get("epoch", "55000")),
             force_rerun=bool(d.get("force_rerun", False)),
             jobs=int(d.get("jobs", 1)),
