@@ -32,6 +32,266 @@ PulsarSelection = Union[str, List[str]]  # "ALL" or explicit list
 
 
 @dataclass(slots=True)
+class IngestConfig:
+    """Configure ingest mode without requiring full pipeline fields."""
+
+    ingest_mapping_file: Optional[Path] = None
+    ingest_output_dir: Optional[Path] = None
+    home_dir: Optional[Path] = None
+    dataset_name: Optional[str] = None
+    ingest_verify: bool = False
+    ingest_commit_branch_name: Optional[str] = None
+    ingest_commit_base_branch: Optional[str] = None
+    ingest_commit_message: Optional[str] = None
+
+    def resolved_output_root(self) -> Path:
+        """Resolve ingest output root from explicit or fallback settings."""
+        if self.ingest_output_dir is not None and str(self.ingest_output_dir).strip():
+            return Path(self.ingest_output_dir).expanduser().resolve()
+        if self.home_dir is not None:
+            ds = self.dataset_name if self.dataset_name not in (None, "") else "."
+            return (Path(self.home_dir).expanduser() / Path(ds)).resolve()
+        raise ValueError(
+            "Ingest output root is undefined. Set ingest_output_dir (or home_dir+dataset_name)."
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "ingest_verify": bool(self.ingest_verify),
+            "dataset_name": self.dataset_name,
+            "ingest_commit_branch_name": self.ingest_commit_branch_name,
+            "ingest_commit_base_branch": self.ingest_commit_base_branch,
+            "ingest_commit_message": self.ingest_commit_message,
+        }
+        d["ingest_mapping_file"] = (
+            str(self.ingest_mapping_file) if self.ingest_mapping_file is not None else None
+        )
+        d["ingest_output_dir"] = (
+            str(self.ingest_output_dir) if self.ingest_output_dir is not None else None
+        )
+        d["home_dir"] = str(self.home_dir) if self.home_dir is not None else None
+        return d
+
+    @staticmethod
+    def from_dict(d: Dict[str, Any]) -> "IngestConfig":
+        if "pipeline" in d and isinstance(d["pipeline"], dict):
+            d = d["pipeline"]
+
+        def p_opt(x: Any) -> Optional[Path]:
+            if x in (None, ""):
+                return None
+            return Path(x)
+
+        def s_opt(x: Any) -> Optional[str]:
+            if x in (None, ""):
+                return None
+            return str(x)
+
+        return IngestConfig(
+            ingest_mapping_file=p_opt(d.get("ingest_mapping_file")),
+            ingest_output_dir=p_opt(d.get("ingest_output_dir")),
+            home_dir=p_opt(d.get("home_dir")),
+            dataset_name=s_opt(d.get("dataset_name")),
+            ingest_verify=bool(d.get("ingest_verify", False)),
+            ingest_commit_branch_name=s_opt(d.get("ingest_commit_branch_name")),
+            ingest_commit_base_branch=s_opt(d.get("ingest_commit_base_branch")),
+            ingest_commit_message=s_opt(d.get("ingest_commit_message")),
+        )
+
+    @staticmethod
+    def load(path: Path) -> "IngestConfig":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        if path.suffix.lower() == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return IngestConfig.from_dict(data)
+        if path.suffix.lower() in (".toml", ".tml"):
+            if tomllib is None:
+                raise RuntimeError(
+                    "TOML config requested but tomllib is unavailable in this Python."
+                )
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            return IngestConfig.from_dict(data)
+        raise ValueError(
+            f"Unsupported config file type: {path.suffix}. Use .json or .toml"
+        )
+
+
+@dataclass(slots=True)
+class ParamScanConfig:
+    """Configure param-scan mode without full pipeline-only options."""
+
+    home_dir: Path
+    singularity_image: Path
+    dataset_name: Optional[str] = None
+    results_dir: Path = Path(".")
+    reference_branch: str = "main"
+    pulsars: PulsarSelection = "ALL"
+    outdir_name: Optional[str] = None
+    epoch: str = "55000"
+    force_rerun: bool = False
+    jobs: int = 1
+    cleanup_output_tree: bool = True
+    cleanup_work_dir: bool = False
+    param_scan_typical: bool = True
+    param_scan_dm_redchisq_threshold: float = 2.0
+    param_scan_dm_max_order: int = 4
+    param_scan_btx_max_fb: int = 3
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        d["home_dir"] = str(d["home_dir"])
+        d["singularity_image"] = str(d["singularity_image"])
+        d["results_dir"] = str(d["results_dir"])
+        return d
+
+    def to_pipeline_config(self) -> "PipelineConfig":
+        return PipelineConfig.from_dict(self.to_dict())
+
+    @staticmethod
+    def from_dict(d: Dict[str, Any]) -> "ParamScanConfig":
+        if "param_scan" in d and isinstance(d["param_scan"], dict):
+            d = d["param_scan"]
+        elif "pipeline" in d and isinstance(d["pipeline"], dict):
+            d = d["pipeline"]
+
+        def p(x: Any) -> Path:
+            return Path(x) if x is not None else Path(".")
+
+        return ParamScanConfig(
+            home_dir=p(d["home_dir"]),
+            singularity_image=p(d["singularity_image"]),
+            dataset_name=d.get("dataset_name", "."),
+            results_dir=p(d.get("results_dir", ".")),
+            reference_branch=str(d.get("reference_branch", "main")),
+            pulsars=d.get("pulsars", "ALL"),
+            outdir_name=(None if d.get("outdir_name") in (None, "") else d.get("outdir_name")),
+            epoch=str(d.get("epoch", "55000")),
+            force_rerun=bool(d.get("force_rerun", False)),
+            jobs=int(d.get("jobs", 1)),
+            cleanup_output_tree=bool(d.get("cleanup_output_tree", True)),
+            cleanup_work_dir=bool(d.get("cleanup_work_dir", False)),
+            param_scan_typical=bool(d.get("param_scan_typical", True)),
+            param_scan_dm_redchisq_threshold=float(
+                d.get("param_scan_dm_redchisq_threshold", 2.0)
+            ),
+            param_scan_dm_max_order=int(d.get("param_scan_dm_max_order", 4)),
+            param_scan_btx_max_fb=int(d.get("param_scan_btx_max_fb", 3)),
+        )
+
+    @staticmethod
+    def load(path: Path) -> "ParamScanConfig":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        if path.suffix.lower() == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return ParamScanConfig.from_dict(data)
+        if path.suffix.lower() in (".toml", ".tml"):
+            if tomllib is None:
+                raise RuntimeError(
+                    "TOML config requested but tomllib is unavailable in this Python."
+                )
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            return ParamScanConfig.from_dict(data)
+        raise ValueError(
+            f"Unsupported config file type: {path.suffix}. Use .json or .toml"
+        )
+
+
+@dataclass(slots=True)
+class QCReportConfig:
+    """Configure QC report mode."""
+
+    run_dir: Path
+    backend_col: str = "group"
+    backend: Optional[str] = None
+    report_dir: Optional[Path] = None
+    no_plots: bool = False
+    structure_group_cols: Optional[str] = None
+    no_feature_plots: bool = False
+
+    @staticmethod
+    def from_dict(d: Dict[str, Any]) -> "QCReportConfig":
+        if "qc_report" in d and isinstance(d["qc_report"], dict):
+            d = d["qc_report"]
+        return QCReportConfig(
+            run_dir=Path(d["run_dir"]),
+            backend_col=str(d.get("backend_col", "group")),
+            backend=(None if d.get("backend") in (None, "") else str(d.get("backend"))),
+            report_dir=(
+                None
+                if d.get("report_dir") in (None, "")
+                else Path(str(d.get("report_dir")))
+            ),
+            no_plots=bool(d.get("no_plots", False)),
+            structure_group_cols=(
+                None
+                if d.get("structure_group_cols") in (None, "")
+                else str(d.get("structure_group_cols"))
+            ),
+            no_feature_plots=bool(d.get("no_feature_plots", False)),
+        )
+
+    @staticmethod
+    def load(path: Path) -> "QCReportConfig":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        if path.suffix.lower() == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return QCReportConfig.from_dict(data)
+        if path.suffix.lower() in (".toml", ".tml"):
+            if tomllib is None:
+                raise RuntimeError(
+                    "TOML config requested but tomllib is unavailable in this Python."
+                )
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            return QCReportConfig.from_dict(data)
+        raise ValueError(
+            f"Unsupported config file type: {path.suffix}. Use .json or .toml"
+        )
+
+
+@dataclass(slots=True)
+class WorkflowRunConfig:
+    """Configure workflow mode."""
+
+    workflow_file: Path
+
+    @staticmethod
+    def from_dict(d: Dict[str, Any]) -> "WorkflowRunConfig":
+        if "workflow" in d and isinstance(d["workflow"], dict):
+            d = d["workflow"]
+        wf = d.get("workflow_file")
+        if wf in (None, ""):
+            raise ValueError(
+                "workflow config requires 'workflow_file' (or [workflow].workflow_file)."
+            )
+        return WorkflowRunConfig(workflow_file=Path(str(wf)))
+
+    @staticmethod
+    def load(path: Path) -> "WorkflowRunConfig":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        if path.suffix.lower() == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return WorkflowRunConfig.from_dict(data)
+        if path.suffix.lower() in (".toml", ".tml"):
+            if tomllib is None:
+                raise RuntimeError(
+                    "TOML config requested but tomllib is unavailable in this Python."
+                )
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            return WorkflowRunConfig.from_dict(data)
+        raise ValueError(
+            f"Unsupported config file type: {path.suffix}. Use .json or .toml"
+        )
+
+
+@dataclass(slots=True)
 class PipelineConfig:
     """Configure the data-combination pipeline.
 

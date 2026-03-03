@@ -25,6 +25,59 @@ Allowed permutations:
 - **Workflows**: any sequence or loop over ``ingest``, ``pipeline``,
   ``fix_apply``, ``param_scan``, ``qc_report``.
 
+Mode-specific config examples
+-----------------------------
+
+Minimal config files for each mode.
+
+Pipeline mode (``pleb --config pipeline.toml``):
+
+.. code-block:: toml
+
+   home_dir = "/data/pulsars"
+   singularity_image = "/images/tempo2.sif"
+   dataset_name = "DR3full"
+   results_dir = "results"
+   branches = ["main"]
+
+Param-scan mode (``pleb --config param_scan.toml --param-scan --scan-typical``):
+
+.. code-block:: toml
+
+   [param_scan]
+   home_dir = "/data/pulsars"
+   singularity_image = "/images/tempo2.sif"
+   dataset_name = "DR3full"
+   results_dir = "results"
+   reference_branch = "main"
+   pulsars = ["J1713+0747"]
+   param_scan_typical = true
+
+Ingest mode (``pleb ingest --config ingest.toml``):
+
+.. code-block:: toml
+
+   [pipeline]
+   ingest_mapping_file = "/data/mapping.json"
+   ingest_output_dir = "/data/epta_ingest"
+   ingest_verify = true
+
+QC report mode (``pleb qc-report --config qc_report.toml``):
+
+.. code-block:: toml
+
+   [qc_report]
+   run_dir = "results/EPTA_combination_report_20260303T120000"
+   backend_col = "group"
+   no_plots = false
+
+Workflow mode (``pleb workflow --config workflow_mode.toml``):
+
+.. code-block:: toml
+
+   [workflow]
+   workflow_file = "configs/workflows/example_iterative.toml"
+
 1. Pipeline run (default)
 -------------------------
 

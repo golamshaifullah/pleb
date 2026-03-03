@@ -30,11 +30,18 @@ import argparse
 from pathlib import Path
 
 import os
+import shlex
 import sys
 import tempfile
 from dataclasses import fields
 
-from .config import PipelineConfig
+from .config import (
+    IngestConfig,
+    ParamScanConfig,
+    PipelineConfig,
+    QCReportConfig,
+    WorkflowRunConfig,
+)
 from .ingest import ingest_dataset, IngestError
 from .logging_utils import set_log_dir
 from .pipeline import run_pipeline
@@ -46,6 +53,35 @@ from .config_io import (
     _parse_value_as_toml_literal,
     _set_dotted_key,
 )
+
+
+def _format_command(argv: list[str] | None) -> str:
+    parts = ["pleb"] + [str(x) for x in (argv or [])]
+    return " ".join(shlex.quote(p) for p in parts)
+
+
+def _write_run_settings(
+    run_dir: Path,
+    argv: list[str] | None,
+    cfg: PipelineConfig | None = None,
+    cfg_data: dict | None = None,
+) -> None:
+    settings_dir = Path(run_dir) / "run_settings"
+    settings_dir.mkdir(parents=True, exist_ok=True)
+    (settings_dir / "command.txt").write_text(
+        _format_command(argv) + "\n", encoding="utf-8"
+    )
+    if cfg is not None:
+        resolved = cfg.resolved()
+        toml = _dump_toml_no_nulls(resolved.to_dict())
+        (settings_dir / "pipeline_config.resolved.toml").write_text(
+            toml, encoding="utf-8"
+        )
+    elif cfg_data is not None:
+        toml = _dump_toml_no_nulls(cfg_data)
+        (settings_dir / "pipeline_config.resolved.toml").write_text(
+            toml, encoding="utf-8"
+        )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -159,11 +195,16 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--run-dir",
         type=Path,
-        required=True,
+        required=False,
         help="Run directory containing qc outputs.",
     )
     p.add_argument(
-        "--backend-col", default="group", help="Backend column name (default: group)."
+        "--config",
+        default=None,
+        help="Optional config file (.toml/.json) for qc-report mode.",
+    )
+    p.add_argument(
+        "--backend-col", default=None, help="Backend column name (default: group)."
     )
     p.add_argument(
         "--backend",
@@ -257,8 +298,13 @@ def build_workflow_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--file",
         dest="workflow_file",
-        required=True,
+        required=False,
         help="Workflow file (.toml or .json).",
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        help="Optional workflow mode config file (.toml/.json).",
     )
     return p
 
@@ -273,17 +319,36 @@ def run_qc_report(argv: list[str] | None) -> int:
         Exit code (0 on success).
     """
     args = build_qc_report_parser().parse_args(argv)
+    qcfg = None
+    if args.config:
+        qcfg = QCReportConfig.load(Path(args.config))
+    run_dir = Path(args.run_dir) if args.run_dir else (qcfg.run_dir if qcfg else None)
+    if run_dir is None:
+        raise SystemExit("qc-report requires --run-dir (or run_dir in --config).")
     report_dir = generate_qc_report(
-        run_dir=Path(args.run_dir),
-        backend_col=str(args.backend_col),
-        backend=(str(args.backend) if args.backend is not None else None),
-        report_dir=(Path(args.report_dir) if args.report_dir else None),
-        no_plots=bool(args.no_plots),
-        structure_group_cols=(
-            str(args.structure_group_cols) if args.structure_group_cols else None
+        run_dir=run_dir,
+        backend_col=str(args.backend_col if args.backend_col is not None else (qcfg.backend_col if qcfg else "group")),
+        backend=(
+            str(args.backend)
+            if args.backend is not None
+            else (qcfg.backend if qcfg else None)
         ),
-        no_feature_plots=bool(args.no_feature_plots),
+        report_dir=(
+            Path(args.report_dir)
+            if args.report_dir
+            else (Path(qcfg.report_dir) if qcfg and qcfg.report_dir else None)
+        ),
+        no_plots=bool(args.no_plots or (qcfg.no_plots if qcfg else False)),
+        structure_group_cols=(
+            str(args.structure_group_cols)
+            if args.structure_group_cols
+            else (qcfg.structure_group_cols if qcfg else None)
+        ),
+        no_feature_plots=bool(
+            args.no_feature_plots or (qcfg.no_feature_plots if qcfg else False)
+        ),
     )
+    _write_run_settings(Path(report_dir), argv, None)
     print(str(report_dir))
     return 0
 
@@ -293,8 +358,19 @@ def run_workflow(argv: list[str] | None) -> int:
     args = build_workflow_parser().parse_args(argv)
     from .workflow import run_workflow as _run
 
-    ctx = _run(Path(args.workflow_file))
+    wcfg = None
+    if args.config:
+        wcfg = WorkflowRunConfig.load(Path(args.config))
+    workflow_file = (
+        Path(args.workflow_file)
+        if args.workflow_file
+        else (wcfg.workflow_file if wcfg else None)
+    )
+    if workflow_file is None:
+        raise SystemExit("workflow requires --file (or workflow_file in --config).")
+    ctx = _run(Path(workflow_file))
     if ctx.last_run_dir:
+        _write_run_settings(Path(ctx.last_run_dir), argv, None)
         print(str(ctx.last_run_dir))
     return 0
 
@@ -302,29 +378,25 @@ def run_workflow(argv: list[str] | None) -> int:
 def run_ingest(argv: list[str] | None) -> int:
     """Run mapping-driven ingest mode."""
     args = build_ingest_parser().parse_args(argv)
-    cfg = None
+    cfg = IngestConfig()
     if args.config:
-        cfg = PipelineConfig.load(args.config)
-    mapping_file = args.ingest_mapping_file or (
-        cfg.ingest_mapping_file if cfg else None
-    )
+        cfg = IngestConfig.load(Path(args.config))
+    mapping_file = args.ingest_mapping_file or cfg.ingest_mapping_file
     if not mapping_file:
         raise SystemExit(
             "Ingest mode requires --mapping or ingest_mapping_file in config."
         )
-    output_root = args.ingest_output_dir or (cfg.ingest_output_dir if cfg else None)
-    if output_root is None and cfg is not None:
-        output_root = Path(cfg.home_dir) / Path(cfg.dataset_name)
-    if output_root is None or str(output_root).strip() == "":
-        raise SystemExit(
-            "Ingest mode requires --output-dir (or ingest_output_dir/home_dir+dataset_name in config)."
-        )
-    set_log_dir(Path(output_root) / "logs")
     try:
-        verify = bool(
-            args.ingest_verify
-            or (getattr(cfg, "ingest_verify", False) if cfg else False)
+        output_root = (
+            Path(args.ingest_output_dir).expanduser().resolve()
+            if args.ingest_output_dir
+            else cfg.resolved_output_root()
         )
+    except ValueError as e:
+        raise SystemExit(str(e)) from e
+    set_log_dir(output_root / "logs")
+    try:
+        verify = bool(args.ingest_verify or cfg.ingest_verify)
         pulsars = _parse_csv_list(args.ingest_pulsars) if args.ingest_pulsars else None
         report = ingest_dataset(
             Path(mapping_file), Path(output_root), verify=verify, pulsars=pulsars
@@ -334,13 +406,13 @@ def run_ingest(argv: list[str] | None) -> int:
     ingest_commit_branch = True
     if ingest_commit_branch:
         branch_name = args.ingest_commit_branch_name or (
-            getattr(cfg, "ingest_commit_branch_name", None) if cfg else None
+            cfg.ingest_commit_branch_name
         )
         base_branch = args.ingest_commit_base_branch or (
-            getattr(cfg, "ingest_commit_base_branch", None) if cfg else None
+            cfg.ingest_commit_base_branch
         )
         commit_message = args.ingest_commit_message or (
-            getattr(cfg, "ingest_commit_message", None) if cfg else None
+            cfg.ingest_commit_message
         )
         from .ingest import commit_ingest_changes
 
@@ -351,6 +423,12 @@ def run_ingest(argv: list[str] | None) -> int:
             commit_message=commit_message,
         )
         print(f"ingest commit branch: {new_branch}")
+    _write_run_settings(
+        Path(output_root) / "ingest_reports",
+        argv,
+        None,
+        cfg_data=cfg.to_dict(),
+    )
     print(str(report["output_root"]))
     return 0
 
@@ -455,7 +533,6 @@ def main(argv=None) -> int:
     if extra_overrides:
         args.overrides = (args.overrides or []) + extra_overrides
 
-    cfg = PipelineConfig.load(args.config)
     # Build config dict from file/stdin/empty, then apply --set overrides,
     # then load via PipelineConfig.load() using a temp TOML.
     cfg_dict = _load_config_dict(args.config)
@@ -473,18 +550,28 @@ def main(argv=None) -> int:
         tmp_path = tmp.name
         tmp.write(_dump_toml_no_nulls(cfg_dict))
         tmp.close()
-        cfg = PipelineConfig.load(tmp_path)
+        # Ingest-only configs should not need full PipelineConfig required fields.
+        ingest_mapping = cfg_dict.get("ingest_mapping_file")
+        if ingest_mapping is None and isinstance(cfg_dict.get("pipeline"), dict):
+            ingest_mapping = cfg_dict["pipeline"].get("ingest_mapping_file")
+        if ingest_mapping and not args.param_scan:
+            mapping_arg = ["--mapping", str(ingest_mapping)]
+            output_arg = []
+            ingest_output = cfg_dict.get("ingest_output_dir")
+            if ingest_output is None and isinstance(cfg_dict.get("pipeline"), dict):
+                ingest_output = cfg_dict["pipeline"].get("ingest_output_dir")
+            if ingest_output:
+                output_arg = ["--output-dir", str(ingest_output)]
+            return run_ingest(mapping_arg + output_arg + ["--config", str(tmp_path)])
+
+        if args.param_scan:
+            pscfg = ParamScanConfig.load(tmp_path)
+            cfg = pscfg.to_pipeline_config()
+        else:
+            cfg = PipelineConfig.load(tmp_path)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
-
-    if getattr(cfg, "ingest_mapping_file", None):
-        mapping_arg = ["--mapping", str(cfg.ingest_mapping_file)]
-        output_arg = []
-        if getattr(cfg, "ingest_output_dir", None):
-            output_arg = ["--output-dir", str(cfg.ingest_output_dir)]
-        config_arg = ["--config", str(args.config)] if args.config else []
-        return run_ingest(mapping_arg + output_arg + config_arg)
 
     if args.param_scan:
         specs: list[str] = []
@@ -517,10 +604,12 @@ def main(argv=None) -> int:
             btx_max_fb=args.scan_btx_max_fb,
             outdir_name=args.scan_outdir,
         )
+        _write_run_settings(Path(out_paths["tag"]), argv, cfg)
         print(str(out_paths["tag"]))
         return 0
 
     out_paths = run_pipeline(cfg)
+    _write_run_settings(Path(out_paths["tag"]), argv, cfg)
     print(str(out_paths["tag"]))
     return 0
 
