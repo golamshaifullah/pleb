@@ -1,51 +1,64 @@
-# pleb
+# pleb - The EPTA Data Combination Pipeline
 
 [![CI](https://github.com/golamshaifullah/pleb/actions/workflows/ci.yml/badge.svg)](https://github.com/golamshaifullah/pleb/actions/workflows/ci.yml)
 
-PTA data-combination pipeline with optional outlier QC.
+`pleb` is a command-line pipeline for ingesting, normalizing, fitting, and
+reporting PTA pulsar timing datasets.
 
 Docs: https://golamshaifullah.github.io/pleb/
 
-## What it does
+## Core capabilities
 
-1. Parses tempo2 timfiles (supports `_all.tim` with `INCLUDE` and `TIME` blocks).
-2. Loads residuals / TOA errors / frequencies from `libstempo`.
-3. Matches TOAs to tim metadata by nearest MJD (tunable tolerance).
-4. Ensures `sys` and `group` exist everywhere using timfile naming conventions.
-5. Detects:
-   - **bad measurements** (day-level FDR using OU innovations),
-   - **transients** (jump + exponential recovery scan).
+- Mapping-driven ingest of raw `.par/.tim/.tmplts` into a canonical tree.
+- Pipeline runs across branches and pulsars with tempo2 fitting and reports.
+- FixDataset stage for dataset hygiene:
+  - flag normalization (`-sys`, `-group`, `-pta`)
+  - include/jump maintenance
+  - overlap handling and deduplication (configurable)
+- Optional QC integration (via `pqc`) for outlier/event tagging.
+- Workflow mode to chain ingest/pipeline/qc-report steps in one run.
+
+## Modes
+
+- `pipeline`: `pleb --config <pipeline.toml>`
+- `ingest`: `pleb ingest --config <ingest.toml>`
+- `qc-report`: `pleb qc-report --config <qc_report.toml>`
+- `workflow`: `pleb workflow --file <workflow.toml>`
 
 ## Quickstart
 
-Run QC (requires installed `pqc` + `libstempo`):
-
+Install from GitHub:
 ```bash
-python scripts/run_qc.py --par DR3full/J1909-3744/J1909-3744.par --out qc.csv
+pip install "git+https://github.com/golamshaifullah/pleb.git"
 ```
 
-Summarize results:
+Minimal pipeline run:
 
 ```bash
-python scripts/diagnose_qc.py --csv qc.csv --backend-col group
+pleb --config configs/settings/epta-dr3.toml
 ```
 
-Plot detected transients:
+Mapping-driven ingest:
 
 ```bash
-python scripts/plot_transients.py --csv qc.csv --backend-col group --outdir plots
+pleb ingest --config configs/settings/ingest_eptadr3.toml
 ```
 
-## Notes
-
-- `sys` and `group` are forced to exist even if the original timfile omitted them.
-- Default match tolerance is 2 seconds. If you see many unmatched rows, raise `--tol-seconds`.
-
-
-## Tests
-
-Run:
+Run a workflow:
 
 ```bash
+pleb workflow --file configs/workflows/ingest_eptadr3.toml
+```
+
+All TOML keys are also available as CLI overrides; CLI values always win:
+
+```bash
+pleb --config configs/settings/epta-dr3.toml --set jobs=8 --set run_fix_dataset=true
+```
+
+## Development
+
+```bash
+python -m pip install -e ".[dev]"
 pytest -q
 ```
