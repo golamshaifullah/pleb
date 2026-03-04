@@ -194,12 +194,32 @@ def _validate_lockfile(
     missing_files = [p for p in missing if not Path(p).exists()]
 
     if missing or added:
+        details_path = lock_path.with_suffix(".validation.json")
+        try:
+            details_path.write_text(
+                json.dumps(
+                    {
+                        "lockfile": str(lock_path),
+                        "missing_from_sources": missing,
+                        "added_in_sources": added,
+                        "missing_files_on_disk": missing_files,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except Exception:
+            details_path = None
+
         msg = [
             "Ingest lockfile validation failed: source tree changed since lockfile was generated.",
             f"lockfile={lock_path}",
             f"missing_from_sources={len(missing)}",
             f"added_in_sources={len(added)}",
         ]
+        if details_path is not None:
+            msg.append(f"details_file={details_path}")
         if missing_files:
             msg.append(f"missing_files_on_disk={len(missing_files)}")
         # Show a small sample to guide debugging.
@@ -1029,9 +1049,19 @@ def commit_ingest_changes(
 
     output_root = Path(output_root).resolve()
     try:
-        repo = Repo(str(output_root), search_parent_directories=False)
+        repo = Repo(str(output_root), search_parent_directories=True)
     except InvalidGitRepositoryError:
         repo = Repo.init(str(output_root))
+    repo_root = (
+        Path(repo.working_tree_dir).resolve()
+        if getattr(repo, "working_tree_dir", None)
+        else output_root
+    )
+    try:
+        rel_output = str(output_root.relative_to(repo_root))
+    except Exception:
+        # Fallback for unusual setups; operate on whole repo.
+        rel_output = "."
 
     require_clean_repo(repo)
     current = repo.active_branch.name if repo.head.is_valid() else ""
@@ -1063,18 +1093,23 @@ def commit_ingest_changes(
     gitignore = output_root / ".gitignore"
     ignore_lines = ["logs/", "results/"]
     if gitignore.exists():
-        existing = set(gitignore.read_text(encoding="utf-8").splitlines())
-        to_add = [ln for ln in ignore_lines if ln not in existing]
+        gitignore_existing = set(gitignore.read_text(encoding="utf-8").splitlines())
+        to_add = [ln for ln in ignore_lines if ln not in gitignore_existing]
         if to_add:
             gitignore.write_text(
-                "\n".join([*existing, *to_add]) + "\n", encoding="utf-8"
+                "\n".join([*gitignore_existing, *to_add]) + "\n", encoding="utf-8"
             )
     else:
         gitignore.write_text("\n".join(ignore_lines) + "\n", encoding="utf-8")
 
-    repo.git.add("-A")
+    repo.git.add("-A", "--", rel_output)
     msg = (commit_message or "Ingest: collected files").strip()
-    if repo.is_dirty(untracked_files=True):
+    staged = [
+        p
+        for p in repo.git.diff("--cached", "--name-only", "--", rel_output).splitlines()
+        if p.strip()
+    ]
+    if staged:
         repo.index.commit(msg)
     else:
         repo.git.commit("--allow-empty", "-m", msg + " (no changes)")
@@ -1085,10 +1120,19 @@ def commit_ingest_changes(
     if raw_branch not in existing:
         repo.git.branch(raw_branch, new_branch)
 
-    dirty = repo.is_dirty(untracked_files=True)
+    dirty_paths = [
+        p
+        for p in repo.git.status("--porcelain", "--", rel_output).splitlines()
+        if p.strip()
+    ]
+    dirty = bool(dirty_paths)
     if dirty:
-        untracked = list(getattr(repo, "untracked_files", []) or [])
-        changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
+        untracked = [p for p in getattr(repo, "untracked_files", []) if p.startswith(rel_output)]
+        changed = [
+            p
+            for p in repo.git.diff("--name-only", "--", rel_output).splitlines()
+            if p.strip()
+        ]
         raise IngestError(
             "Ingest commit left untracked/modified files. "
             f"Untracked={len(untracked)} Changed={len(changed)}"
