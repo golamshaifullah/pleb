@@ -1,0 +1,39 @@
+{
+  "backend_allowlist": [
+    "EDD",
+    "EBPP",
+    "P200",
+    "P217",
+    "S110",
+    "S60",
+    "DFB",
+    "MK2",
+    "ROACH",
+    "BON",
+    "NUPPI",
+    "LUMP",
+    "LUPPI",
+    "P1",
+    "P2",
+    "LEAP"
+  ],
+  "telescope_allowlist": [
+    "EFF",
+    "JBO",
+    "NRT",
+    "WSRT",
+    "LOFAR",
+    "NFR",
+    "LEAP"
+  ],
+  "backend_aliases": {
+    "EFFEDD": "EDD"
+  },
+  "backend_by_timfile": {
+    "EFF.EDD.1400.tim": "EDD",
+    "EFF.EDD.2734.tim": "EDD",
+    "EFF.EDD.1400.S60.tim": "EDD"
+  },
+  "telescope_by_timfile": {}
+}
+

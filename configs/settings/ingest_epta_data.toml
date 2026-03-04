@@ -1,0 +1,11 @@
+# Ingest-only configuration (usable with: pleb ingest --config <this file>)
+
+ingest_mapping_file = "/work/git_projects/pleb/configs/settings/ingest_mapping_epta_data.json"
+ingest_output_dir = "/work/git_projects/epta_dr3alpha_ingest"
+
+# Optional checks/commit behavior
+ingest_verify = true
+ingest_commit_branch_name = ""
+ingest_commit_base_branch = "main"
+ingest_commit_message = "Ingest: EPTA data import"
+

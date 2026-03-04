@@ -1,0 +1,357 @@
+{
+  "sources": [
+    "/work/git_projects/epta-dr3/Tarballs",
+    "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+    "/work/git_projects/epta-dr1"
+  ],
+  "par_roots": [
+    "/work/git_projects/epta-dr3/Tarballs/epta-effelsberg-main",
+    "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+    "/work/git_projects/epta-dr1"
+  ],
+  "template_roots": [
+    "/work/git_projects/epta-dr3/Tarballs/epta-effelsberg-main",
+    "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+    "/work/git_projects/epta-dr1"
+  ],
+  "priority_order": [
+    "dr3",
+    "dr2",
+    "dr1"
+  ],
+  "priority_roots": {
+    "dr3": "/work/git_projects/epta-dr3/Tarballs",
+    "dr2": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+    "dr1": "/work/git_projects/epta-dr1"
+  },
+  "lockfile_path": "/work/git_projects/pleb/configs/settings/ingest_mapping_epta_data.lock.json",
+  "lockfile_strict": true,
+  "ignore_backends": [],
+  "pulsar_aliases": {
+    "B1937+21": "J1939+2134",
+    "B1855+09": "J1857+0943"
+  },
+  "backends": {
+    "EFF.EDD.1400": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/epta-effelsberg-main",
+      "tim_glob": "J*/tims/J*.EFF.P217.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.EDD.2734": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/epta-effelsberg-main",
+      "tim_glob": "J*/tims/J*.EFF.S110.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.EDD.1400.S60": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/epta-effelsberg-main",
+      "tim_glob": "J*/tims/J*.EFF.S60.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "JBO.ROACH.1520": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/epta_jbdata",
+      "tim_glob": "*_jbroach_2ch.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.NUPPI.1484": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/NUPPI_TOAs_20251209",
+      "tim_glob": "*NUPPI_1484_*.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.NUPPI.1854": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/NUPPI_TOAs_20251209",
+      "tim_glob": "*NUPPI_1854_*.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.NUPPI.2154": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/NUPPI_TOAs_20251209",
+      "tim_glob": "*NUPPI_2154_*.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.NUPPI.2539": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/NUPPI_TOAs_20251209",
+      "tim_glob": "*NUPPI_2539_*.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P2.1380": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/WSRT",
+      "tim_glob": "J*-1380.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P2.2273": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/WSRT",
+      "tim_glob": "J*-2200.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P2.350": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/WSRT",
+      "tim_glob": "J*-385.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "LOFAR.LuMP.150": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/LOFAR_toas_4_golam",
+      "tim_glob": "J*.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NFR.LUPPI.75": {
+      "root": "/work/git_projects/epta-dr3/Tarballs/NENUFAR",
+      "tim_glob": "*.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.EBPP.1360": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.EBPP.1360.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.EBPP.1410": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.EBPP.1410.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.EBPP.2639": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.EBPP.2639.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.P200.1380": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.P200.1380.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.P217.1380": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.P217.1380.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.S110.2487": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.S110.2487.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.S60.1420": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.S60.1420.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "EFF.S60.4857": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "EFF.S60.4857.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "JBO.DFB.1400": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "JBO.DFB.1400.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "JBO.DFB.1520": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "JBO.DFB.1520.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "JBO.DFB.5000": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "JBO.DFB.5000.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "JBO.MK2.1520.2": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "JBO.MK2.1520.2.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "JBO.MK2.1520": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "JBO.MK2.1520.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "LEAP.1396": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "LEAP.1396.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.BON.1200": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "NRT.BON.1200.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.BON.1400": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "NRT.BON.1400.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.BON.1600": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "NRT.BON.1600.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "NRT.BON.2000": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "NRT.BON.2000.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.1380.1": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.1380.1.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.1380.2": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.1380.2.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.1380": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.1380.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.2273": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.2273.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.323": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.323.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.328": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.328.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.367": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.367.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.382": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.382.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    },
+    "WSRT.P1.840": {
+      "root": "/work/git_projects/epta-dr2/EPTA-DR2/DR2full",
+      "tim_glob": "WSRT.P1.840.tim",
+      "ignore_suffixes": [
+        "_all.tim",
+        ".bak"
+      ]
+    }
+  }
+}
+

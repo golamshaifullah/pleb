@@ -1,0 +1,53 @@
+[classifications]
+legacy = [
+  "EFF.EBPP.1360",
+  "EFF.EBPP.1410",
+  "EFF.EBPP.2639",
+  "JBO.DFB.1520",
+  "NRT.BON.1400",
+  "NRT.BON.1600",
+  "NRT.BON.2000",
+  "WSRT.P1.328",
+  "WSRT.P1.382",
+  "JBO.DFB.1400",
+  "WSRT.P1.1380",
+  "WSRT.P1.323",
+  "WSRT.P1.367",
+  "WSRT.P1.1380.1",
+  "WSRT.P1.1380.2",
+  "NRT.BON.1200",
+  "JBO.DFB.5000",
+  "WSRT.P1.2273",
+  "WSRT.P1.840",
+  "NRT.DDS.1400",
+]
+cdd = [
+]
+
+new = [
+  "EFF.P200.1380",
+  "EFF.P217.1380",
+  "EFF.S110.2487",
+  "EFF.S60.1420",
+  "EFF.S60.4857",
+  "JBO.ROACH.1520",
+  "LEAP.LEAP.1396",
+  "LOFAR.LuMP.150",
+  "NFR.LUPPI.75",
+  "NRT.NUPPI.1484",
+  "NRT.NUPPI.1854",
+  "NRT.NUPPI.2154",
+  "NRT.NUPPI.2539",
+  "WSRT.P2.1380",
+  "WSRT.P2.1380_2",
+  "WSRT.P2.2273",
+  "WSRT.P2.2273_2",
+  "WSRT.P2.350",
+  "WSRT.P2.350_2",
+]
+
+[overrides.timfile_class]
+"JBO.DFB.1400" = "legacy"
+"JBO.DFB.5000" = "legacy"
+"JBO.MK2.1520" = "legacy"
+"JBO.MK2.1520.2" = "legacy"
