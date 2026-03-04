@@ -5,6 +5,6 @@ ingest_output_dir = "/work/git_projects/EPTA-DR3/epta-dr3-data/"
 
 # Optional checks/commit behavior
 ingest_verify = true
-ingest_commit_branch_name = "raw_0"
-ingest_commit_base_branch = "main"
+ingest_commit_branch_name = "raw_ingest"
+ingest_commit_base_branch = "raw"
 ingest_commit_message = "Ingest: EPTA data import"

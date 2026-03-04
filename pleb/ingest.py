@@ -1040,6 +1040,15 @@ def commit_ingest_changes(
     new_branch = (branch_name or "main").strip() or "main"
 
     existing = {h.name for h in getattr(repo, "heads", [])}
+    if base and base not in existing:
+        fallback = current or ""
+        logger.warning(
+            "Requested ingest base branch '%s' not found in %s; falling back to '%s'.",
+            base,
+            output_root,
+            fallback or "(current HEAD)",
+        )
+        base = fallback
     if not repo.head.is_valid():
         # First commit in a new repo: create branch directly.
         repo.git.checkout("-b", new_branch)
