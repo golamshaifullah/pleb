@@ -2345,4 +2345,8 @@ def wsrt_p2_prefer_dual_channel(
             single_file.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
     result_key = "commented" if mode == "comment" else "deleted"
-    return {"changed_files": changed_files, result_key: int(total_affected), "pairs": details}
+    return {
+        "changed_files": changed_files,
+        result_key: int(total_affected),
+        "pairs": details,
+    }
