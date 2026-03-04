@@ -689,6 +689,10 @@ class PipelineConfig:
     fix_infer_system_flags: bool = False
     fix_system_flag_overwrite_existing: bool = False
     fix_wsrt_p2_force_sys_by_freq: bool = False
+    fix_wsrt_p2_prefer_dual_channel: bool = False
+    fix_wsrt_p2_mjd_tol_sec: float = 0.99e-6
+    fix_wsrt_p2_action: str = "comment"
+    fix_wsrt_p2_comment_prefix: str = "C WSRT_P2_PREFER_DUAL"
     fix_backend_overrides: Dict[str, str] = field(default_factory=dict)
     fix_raise_on_backend_missing: bool = False
     fix_dedupe_toas_within_tim: bool = True
@@ -1145,6 +1149,14 @@ class PipelineConfig:
             ),
             fix_wsrt_p2_force_sys_by_freq=bool(
                 d.get("fix_wsrt_p2_force_sys_by_freq", False)
+            ),
+            fix_wsrt_p2_prefer_dual_channel=bool(
+                d.get("fix_wsrt_p2_prefer_dual_channel", False)
+            ),
+            fix_wsrt_p2_mjd_tol_sec=float(d.get("fix_wsrt_p2_mjd_tol_sec", 0.99e-6)),
+            fix_wsrt_p2_action=str(d.get("fix_wsrt_p2_action", "comment")),
+            fix_wsrt_p2_comment_prefix=str(
+                d.get("fix_wsrt_p2_comment_prefix", "C WSRT_P2_PREFER_DUAL")
             ),
             fix_backend_overrides=dict(d.get("fix_backend_overrides", {})),
             fix_raise_on_backend_missing=bool(

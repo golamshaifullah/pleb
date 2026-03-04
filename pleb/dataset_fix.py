@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 import shutil
 import json
 import hashlib
+import re
 import numpy as np
 import pandas as pd
 
@@ -158,6 +159,10 @@ class FixDatasetConfig:
     system_flag_mapping_path: Optional[str] = None
     system_flag_overwrite_existing: bool = False
     wsrt_p2_force_sys_by_freq: bool = False
+    wsrt_p2_prefer_dual_channel: bool = False
+    wsrt_p2_mjd_tol_sec: float = 0.99e-6
+    wsrt_p2_action: str = "comment"  # "comment" | "delete"
+    wsrt_p2_comment_prefix: str = "C WSRT_P2_PREFER_DUAL"
     backend_overrides: Dict[str, str] = field(
         default_factory=dict
     )  # tim basename -> backend
@@ -1503,6 +1508,24 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         report["steps"].append({"generate_alltim_variants": rep})
 
     # Cheap overlap removal (exact duplicates across known overlapping backend tims)
+    if cfg.apply and cfg.wsrt_p2_prefer_dual_channel:
+        try:
+            rep = wsrt_p2_prefer_dual_channel(
+                psr_dir,
+                mjd_tol_sec=float(cfg.wsrt_p2_mjd_tol_sec),
+                action=str(cfg.wsrt_p2_action or "comment"),
+                comment_prefix=str(
+                    cfg.wsrt_p2_comment_prefix or "C WSRT_P2_PREFER_DUAL"
+                ),
+                apply=cfg.apply,
+                backup=cfg.backup,
+                dry_run=cfg.dry_run,
+            )
+        except Exception as e:
+            rep = {"error": str(e)}
+        report["steps"].append({"wsrt_p2_prefer_dual_channel": rep})
+
+    # Cheap overlap removal (exact duplicates across known overlapping backend tims)
     if cfg.apply and cfg.remove_overlaps_exact:
         try:
             rep = remove_overlaps_exact(
@@ -2075,7 +2098,8 @@ def remove_overlaps_exact(
 ) -> Dict[str, object]:
     """Cheap overlap remover: for known overlapping backend pairs, comment out exact duplicate TOAs in 'drop' files.
 
-    This will NOT attempt fuzzy time/freq matching; it only removes exact duplicates based on first 4 columns.
+    This will NOT attempt fuzzy time/freq matching; it only comments exact duplicates
+    based on first 4 columns.
 
     Args:
         psr_dir: Pulsar directory.
@@ -2119,8 +2143,13 @@ def remove_overlaps_exact(
                     new_lines.append(_cleanline(raw))
                     continue
                 if k in retain_keys and not raw.lstrip().startswith("C"):
-                    # comment this TOA line out
-                    new_lines.append("C " + _cleanline(raw))
+                    # Non-destructive default: keep line but comment it with reason.
+                    new_lines.append(
+                        "C OVERLAP_DUPLICATE(retain="
+                        + retain_name
+                        + ") "
+                        + _cleanline(raw)
+                    )
                     commented += 1
                     file_changed = True
                 else:
@@ -2135,3 +2164,185 @@ def remove_overlaps_exact(
                     drop.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
     return {"changed_files": changed_files, "commented": int(total_commented)}
+
+
+_WSRT_P2_RE = re.compile(r"^(WSRT\.P2\.\d+)(?:_2)?\.tim$", re.IGNORECASE)
+
+
+def _parse_toa_records(
+    timfile: Path,
+) -> Tuple[List[str], List[Tuple[int, str, float, float]]]:
+    """Parse TOA rows from a timfile as (line_idx, file_token, mjd, freq_mhz)."""
+    lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+    recs: List[Tuple[int, str, float, float]] = []
+    for i, raw in enumerate(lines):
+        if not is_toa_line(raw):
+            continue
+        parts = raw.strip().split()
+        if len(parts) < 4:
+            continue
+        try:
+            freq = float(parts[1])
+            mjd = float(parts[2])
+        except Exception:
+            continue
+        recs.append((i, parts[0], mjd, freq))
+    return lines, recs
+
+
+def _dual_channel_epoch_map(
+    recs: List[Tuple[int, str, float, float]],
+    tol_days: float,
+) -> Dict[str, List[float]]:
+    """Return token->epoch_mjd list where at least two channels exist at same epoch."""
+    by_token: Dict[str, List[Tuple[float, float]]] = {}
+    for _, token, mjd, freq in recs:
+        by_token.setdefault(token, []).append((mjd, freq))
+    epochs: Dict[str, List[float]] = {}
+    for token, vals in by_token.items():
+        vals.sort(key=lambda v: v[0])
+        token_epochs: List[float] = []
+        cluster: List[Tuple[float, float]] = []
+        for mjd, freq in vals:
+            if not cluster:
+                cluster = [(mjd, freq)]
+                continue
+            if abs(mjd - cluster[-1][0]) <= tol_days:
+                cluster.append((mjd, freq))
+                continue
+            uniq_freqs = {round(f, 6) for _, f in cluster}
+            if len(cluster) >= 2 and len(uniq_freqs) >= 2:
+                token_epochs.append(float(np.mean([x[0] for x in cluster])))
+            cluster = [(mjd, freq)]
+        if cluster:
+            uniq_freqs = {round(f, 6) for _, f in cluster}
+            if len(cluster) >= 2 and len(uniq_freqs) >= 2:
+                token_epochs.append(float(np.mean([x[0] for x in cluster])))
+        if token_epochs:
+            epochs[token] = sorted(token_epochs)
+    return epochs
+
+
+def wsrt_p2_prefer_dual_channel(
+    psr_dir: Path,
+    *,
+    mjd_tol_sec: float = 0.99e-6,
+    action: str = "comment",
+    comment_prefix: str = "C WSRT_P2_PREFER_DUAL",
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
+    """Prefer dual-channel WSRT P2 TOAs over single-channel duplicates.
+
+    For each WSRT.P2.<band> pair (``*.tim`` vs ``*_2.tim``), detect which file
+    contains dual-channel epochs (same file token + MJD within tolerance, two
+    distinct frequencies). In the other file, TOAs at those epochs are treated
+    as duplicates and handled by ``action``.
+    """
+    mode = str(action or "comment").strip().lower()
+    if mode not in {"comment", "delete"}:
+        mode = "comment"
+    tol_days = float(mjd_tol_sec) / 86400.0
+    tims_by_name = {t.name: t for t in list_backend_timfiles(psr_dir)}
+
+    keys: Dict[str, Dict[str, Path]] = {}
+    for name, tpath in tims_by_name.items():
+        m = _WSRT_P2_RE.match(name)
+        if not m:
+            continue
+        key = m.group(1)
+        bucket = keys.setdefault(key, {})
+        if name.lower().endswith("_2.tim"):
+            bucket["alt"] = tpath
+        else:
+            bucket["base"] = tpath
+
+    changed_files: List[str] = []
+    details: List[Dict[str, object]] = []
+    total_affected = 0
+
+    for key, pair in sorted(keys.items()):
+        base = pair.get("base")
+        alt = pair.get("alt")
+        if base is None or alt is None:
+            continue
+
+        base_lines, base_recs = _parse_toa_records(base)
+        alt_lines, alt_recs = _parse_toa_records(alt)
+        base_dual = _dual_channel_epoch_map(base_recs, tol_days)
+        alt_dual = _dual_channel_epoch_map(alt_recs, tol_days)
+        base_dual_count = sum(len(v) for v in base_dual.values())
+        alt_dual_count = sum(len(v) for v in alt_dual.values())
+
+        if base_dual_count == 0 and alt_dual_count == 0:
+            details.append({"pair": [base.name, alt.name], "skipped": "no_dual_epochs"})
+            continue
+        if base_dual_count > alt_dual_count:
+            dual_file, dual_epochs = base, base_dual
+            single_file, single_lines, single_recs = alt, alt_lines, alt_recs
+        elif alt_dual_count > base_dual_count:
+            dual_file, dual_epochs = alt, alt_dual
+            single_file, single_lines, single_recs = base, base_lines, base_recs
+        else:
+            details.append(
+                {"pair": [base.name, alt.name], "skipped": "ambiguous_dual_epochs"}
+            )
+            continue
+
+        to_mark: List[int] = []
+        for idx, token, mjd, _ in single_recs:
+            epochs = dual_epochs.get(token)
+            if not epochs:
+                continue
+            pos = int(np.searchsorted(np.array(epochs), mjd))
+            neighbors = []
+            if 0 <= pos < len(epochs):
+                neighbors.append(epochs[pos])
+            if pos - 1 >= 0:
+                neighbors.append(epochs[pos - 1])
+            if any(abs(mjd - e) <= tol_days for e in neighbors):
+                to_mark.append(idx)
+
+        if not to_mark:
+            details.append(
+                {
+                    "pair": [base.name, alt.name],
+                    "dual_file": dual_file.name,
+                    "single_file": single_file.name,
+                    "affected": 0,
+                }
+            )
+            continue
+
+        to_mark_set = set(to_mark)
+        out_lines: List[str] = []
+        for i, raw in enumerate(single_lines):
+            if i not in to_mark_set:
+                out_lines.append(_cleanline(raw))
+                continue
+            total_affected += 1
+            if mode == "delete":
+                continue
+            out_lines.append(
+                f"{comment_prefix}(dual={dual_file.name},tol={mjd_tol_sec:.3g}s) "
+                + _cleanline(raw)
+            )
+
+        changed_files.append(str(single_file))
+        details.append(
+            {
+                "pair": [base.name, alt.name],
+                "dual_file": dual_file.name,
+                "single_file": single_file.name,
+                "affected": len(to_mark),
+                "action": mode,
+            }
+        )
+        if not dry_run and apply:
+            if backup:
+                _backup_file(single_file)
+            single_file.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+    result_key = "commented" if mode == "comment" else "deleted"
+    return {"changed_files": changed_files, result_key: int(total_affected), "pairs": details}

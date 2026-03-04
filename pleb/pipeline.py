@@ -211,6 +211,17 @@ def _build_fixdataset_config(
         wsrt_p2_force_sys_by_freq=bool(
             _cfg_get(cfg, "fix_wsrt_p2_force_sys_by_freq", False)
         ),
+        wsrt_p2_prefer_dual_channel=bool(
+            _cfg_get(cfg, "fix_wsrt_p2_prefer_dual_channel", False)
+        ),
+        wsrt_p2_mjd_tol_sec=float(_cfg_get(cfg, "fix_wsrt_p2_mjd_tol_sec", 0.99e-6)),
+        wsrt_p2_action=str(_cfg_get(cfg, "fix_wsrt_p2_action", "comment") or "comment"),
+        wsrt_p2_comment_prefix=str(
+            _cfg_get(
+                cfg, "fix_wsrt_p2_comment_prefix", "C WSRT_P2_PREFER_DUAL"
+            )
+            or "C WSRT_P2_PREFER_DUAL"
+        ),
         backend_overrides=dict(_cfg_get(cfg, "fix_backend_overrides", {}) or {}),
         raise_on_backend_missing=bool(
             _cfg_get(cfg, "fix_raise_on_backend_missing", False)
