@@ -118,6 +118,11 @@ def _nrt_nuppi_centre_for_freq(freq_mhz: float) -> int:
     return int(min(candidates, key=lambda c: abs(freq_mhz - c)))
 
 
+def _jbo_roach_centre_for_freq(freq_mhz: float) -> int:
+    """Snap JBO ROACH frequencies onto legacy two-band centres."""
+    return 1420 if float(freq_mhz) < 1520.0 else 1620
+
+
 class BackendMissingError(RuntimeError):
     """Raised when a backend cannot be inferred automatically.
 
@@ -592,6 +597,11 @@ def infer_sys_group_pta(
     if tel == "NRT" and backend == "NUPPI":
         centre = np.array(
             [_nrt_nuppi_centre_for_freq(f) for f in df["freq_mhz"].to_numpy()],
+            dtype=int,
+        )
+    if tel == "JBO" and backend == "ROACH":
+        centre = np.array(
+            [_jbo_roach_centre_for_freq(f) for f in df["freq_mhz"].to_numpy()],
             dtype=int,
         )
     if tel == "NFR" and backend == "LUPPI":

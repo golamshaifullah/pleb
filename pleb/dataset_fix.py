@@ -694,6 +694,91 @@ def ensure_timfile_flags(
 # -----------------------------
 
 
+def ensure_parfile_defaults(
+    parfile: Path,
+    *,
+    ensure_ephem: Optional[str] = None,
+    ensure_clk: Optional[str] = None,
+    ensure_ne_sw: Optional[str] = None,
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
+    """Ensure selected default parameters exist with requested values.
+
+    This function updates only EPHEM/CLK/NE_SW and does not touch JUMPs.
+    Missing keys are inserted near the top of the parfile.
+    """
+    if not parfile.exists():
+        raise FileNotFoundError(str(parfile))
+
+    wanted: Dict[str, Optional[str]] = {
+        "EPHEM": ensure_ephem,
+        "CLK": ensure_clk,
+        "NE_SW": ensure_ne_sw,
+    }
+    wanted = {k: v for k, v in wanted.items() if v is not None}
+    if not wanted:
+        return {"parfile": str(parfile), "changed": False, "updated": [], "inserted": []}
+
+    lines = parfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+    new_lines: List[str] = []
+    present_keys: Set[str] = set()
+    updated: List[str] = []
+    changed = False
+
+    for raw in lines:
+        line = _cleanline(raw)
+        if not line.strip():
+            new_lines.append(line)
+            continue
+        parts = line.split()
+        key = parts[0]
+        present_keys.add(key)
+        if key in wanted and len(parts) > 1 and parts[1] != str(wanted[key]):
+            parts[1] = str(wanted[key])
+            updated.append(key)
+            changed = True
+        new_lines.append(" ".join(parts))
+
+    to_insert: List[str] = []
+    inserted: List[str] = []
+    for key in ("EPHEM", "CLK", "NE_SW"):
+        if key in wanted and key not in present_keys:
+            to_insert.append(f"{key} {wanted[key]}")
+            inserted.append(key)
+    if to_insert:
+        changed = True
+        insert_at = 0
+        while insert_at < len(new_lines) and (
+            not new_lines[insert_at].strip()
+            or new_lines[insert_at].lstrip().startswith(("C", "#"))
+        ):
+            insert_at += 1
+        new_lines[insert_at:insert_at] = to_insert + [""]
+
+    if dry_run or not apply:
+        return {
+            "parfile": str(parfile),
+            "changed": bool(changed),
+            "updated": sorted(set(updated)),
+            "inserted": inserted,
+        }
+
+    if not changed:
+        return {"parfile": str(parfile), "changed": False, "updated": [], "inserted": []}
+
+    if backup:
+        _backup_file(parfile)
+    parfile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    return {
+        "parfile": str(parfile),
+        "changed": True,
+        "updated": sorted(set(updated)),
+        "inserted": inserted,
+    }
+
+
 def update_parfile_jumps(
     parfile: Path,
     jump_flag: str,
@@ -1562,6 +1647,20 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 tim_reports.append({"timfile": str(t), "error": str(e)})
         report["steps"].append({"ensure_timfile_flags": tim_reports})
 
+    if parfile.exists() and any(
+        v is not None for v in (cfg.ensure_ephem, cfg.ensure_clk, cfg.ensure_ne_sw)
+    ):
+        rep = ensure_parfile_defaults(
+            parfile,
+            ensure_ephem=cfg.ensure_ephem,
+            ensure_clk=cfg.ensure_clk,
+            ensure_ne_sw=cfg.ensure_ne_sw,
+            apply=cfg.apply,
+            backup=cfg.backup,
+            dry_run=cfg.dry_run,
+        )
+        report["steps"].append({"ensure_parfile_defaults": rep})
+
     if cfg.insert_missing_jumps and parfile.exists():
         # gather jump values across backend tim files
         vals: Set[str] = set()
@@ -1573,9 +1672,9 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             jump_flag=str(cfg.jump_flag),
             jump_values=sorted(vals),
             prune_stale_jumps=bool(cfg.prune_stale_jumps),
-            ensure_ephem=cfg.ensure_ephem,
-            ensure_clk=cfg.ensure_clk,
-            ensure_ne_sw=cfg.ensure_ne_sw,
+            ensure_ephem=None,
+            ensure_clk=None,
+            ensure_ne_sw=None,
             apply=cfg.apply,
             backup=cfg.backup,
             dry_run=cfg.dry_run,
