@@ -111,6 +111,7 @@ class FixDatasetConfig:
         ensure_ephem: Ensure EPHEM param exists (optional value).
         ensure_clk: Ensure CLK param exists (optional value).
         ensure_ne_sw: Ensure NE_SW param exists (optional value).
+        force_ne_sw_overwrite: Overwrite existing NE_SW only when True.
         remove_patterns: Remove lines matching these patterns.
         coord_convert: Coordinate conversion mode (``equ2ecl`` or ``ecl2equ``).
         qc_remove_outliers: Apply/remove outliers flagged by PQC.
@@ -185,6 +186,7 @@ class FixDatasetConfig:
     ensure_ephem: Optional[str] = None
     ensure_clk: Optional[str] = None
     ensure_ne_sw: Optional[str] = None
+    force_ne_sw_overwrite: bool = False
 
     # remove known-bad backend strings (used by remove_nuppi_big in the notebook)
     remove_patterns: List[str] = field(
@@ -700,6 +702,7 @@ def ensure_parfile_defaults(
     ensure_ephem: Optional[str] = None,
     ensure_clk: Optional[str] = None,
     ensure_ne_sw: Optional[str] = None,
+    force_ne_sw_overwrite: bool = False,
     apply: bool = False,
     backup: bool = True,
     dry_run: bool = False,
@@ -735,6 +738,14 @@ def ensure_parfile_defaults(
         parts = line.split()
         key = parts[0]
         present_keys.add(key)
+        if (
+            key == "NE_SW"
+            and ensure_ne_sw is not None
+            and not force_ne_sw_overwrite
+            and len(parts) > 1
+        ):
+            new_lines.append(" ".join(parts))
+            continue
         if key in wanted and len(parts) > 1 and parts[1] != str(wanted[key]):
             parts[1] = str(wanted[key])
             updated.append(key)
@@ -1655,6 +1666,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             ensure_ephem=cfg.ensure_ephem,
             ensure_clk=cfg.ensure_clk,
             ensure_ne_sw=cfg.ensure_ne_sw,
+            force_ne_sw_overwrite=bool(cfg.force_ne_sw_overwrite),
             apply=cfg.apply,
             backup=cfg.backup,
             dry_run=cfg.dry_run,

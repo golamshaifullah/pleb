@@ -112,6 +112,18 @@ def main() -> None:
         default=None,
         help="Output directory for feature summary plots",
     )
+    ap.add_argument(
+        "--errorbar-alpha",
+        type=float,
+        default=0.12,
+        help="Alpha for faint residual error bars (used when sigma exists)",
+    )
+    ap.add_argument(
+        "--errorbar-lw",
+        type=float,
+        default=0.4,
+        help="Line width for faint residual error bars",
+    )
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)
@@ -223,6 +235,28 @@ def main() -> None:
 
     # Plot
     plt.figure(figsize=(10, 6))
+    sigma = (
+        pd.to_numeric(df["sigma"], errors="coerce").to_numpy(dtype=float)
+        if "sigma" in df.columns
+        else None
+    )
+    if sigma is not None:
+        eb_mask = np.isfinite(df["mjd"].to_numpy(dtype=float)) & np.isfinite(
+            pd.to_numeric(df[resid_col], errors="coerce").to_numpy(dtype=float)
+        )
+        eb_mask &= np.isfinite(sigma) & (sigma > 0)
+        if eb_mask.any():
+            plt.errorbar(
+                df.loc[eb_mask, "mjd"],
+                df.loc[eb_mask, resid_col],
+                yerr=sigma[eb_mask],
+                fmt="none",
+                ecolor="0.45",
+                elinewidth=float(args.errorbar_lw),
+                alpha=float(args.errorbar_alpha),
+                capsize=0,
+                zorder=1,
+            )
 
     # Regular points by system
     for s in dict.fromkeys(systems):
@@ -380,6 +414,25 @@ def main() -> None:
             if not np.any(valid):
                 continue
             plt.figure(figsize=(7, 5))
+            sigma_feat = (
+                pd.to_numeric(df["sigma"], errors="coerce").to_numpy(dtype=float)
+                if "sigma" in df.columns
+                else None
+            )
+            if sigma_feat is not None:
+                eb_mask = valid & np.isfinite(sigma_feat) & (sigma_feat > 0)
+                if eb_mask.any():
+                    plt.errorbar(
+                        x[eb_mask],
+                        y[eb_mask],
+                        yerr=sigma_feat[eb_mask],
+                        fmt="none",
+                        ecolor="0.45",
+                        elinewidth=float(args.errorbar_lw),
+                        alpha=float(args.errorbar_alpha),
+                        capsize=0,
+                        zorder=1,
+                    )
             for s in dict.fromkeys(systems):
                 mask = (systems == s) & valid
                 if not mask.any():

@@ -457,6 +457,7 @@ class PipelineConfig:
         fix_ensure_ephem: Ensure ephemeris parameter exists.
         fix_ensure_clk: Ensure clock parameter exists.
         fix_ensure_ne_sw: Ensure NE_SW parameter exists.
+        fix_force_ne_sw_overwrite: Overwrite existing NE_SW values when true.
         fix_remove_patterns: Patterns to remove from .par/.tim.
         fix_coord_convert: Optional coordinate conversion.
         fix_qc_remove_outliers: Comment/delete TOAs flagged by pqc outputs.
@@ -708,6 +709,7 @@ class PipelineConfig:
     fix_ensure_ephem: Optional[str] = None
     fix_ensure_clk: Optional[str] = None
     fix_ensure_ne_sw: Optional[str] = None
+    fix_force_ne_sw_overwrite: bool = False
     fix_remove_patterns: List[str] = field(
         default_factory=lambda: ["NRT.NUPPI.", "NRT.NUXPI."]
     )
@@ -1180,6 +1182,7 @@ class PipelineConfig:
             fix_ensure_ephem=opt_str("fix_ensure_ephem"),
             fix_ensure_clk=opt_str("fix_ensure_clk"),
             fix_ensure_ne_sw=opt_str("fix_ensure_ne_sw"),
+            fix_force_ne_sw_overwrite=bool(d.get("fix_force_ne_sw_overwrite", False)),
             fix_remove_patterns=list(
                 d.get("fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."])
             ),

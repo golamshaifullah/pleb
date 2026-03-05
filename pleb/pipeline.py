@@ -238,6 +238,9 @@ def _build_fixdataset_config(
         ensure_ephem=_cfg_get(cfg, "fix_ensure_ephem", None),
         ensure_clk=_cfg_get(cfg, "fix_ensure_clk", None),
         ensure_ne_sw=_cfg_get(cfg, "fix_ensure_ne_sw", None),
+        force_ne_sw_overwrite=bool(
+            _cfg_get(cfg, "fix_force_ne_sw_overwrite", False)
+        ),
         remove_patterns=list(
             _cfg_get(cfg, "fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."]) or []
         ),
