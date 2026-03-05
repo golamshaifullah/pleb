@@ -451,6 +451,7 @@ class PipelineConfig:
         fix_required_tim_flags: Required flags for .tim entries.
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
+        fix_relabel_rules_path: Declarative TOA relabel rules TOML (optional).
         fix_insert_missing_jumps: Insert missing JUMP lines.
         fix_jump_flag: Flag used for inserted jumps.
         fix_prune_stale_jumps: Drop JUMPs not present in timfile flags.
@@ -687,6 +688,7 @@ class PipelineConfig:
     fix_generate_alltim_variants: bool = False
     fix_backend_classifications_path: Optional[str] = None
     fix_alltim_variants_path: Optional[str] = None
+    fix_relabel_rules_path: Optional[str] = None
     fix_infer_system_flags: bool = False
     fix_system_flag_overwrite_existing: bool = False
     fix_wsrt_p2_force_sys_by_freq: bool = False
@@ -836,6 +838,10 @@ class PipelineConfig:
             c.fix_alltim_variants_path = (
                 Path(c.fix_alltim_variants_path).expanduser().resolve()
             )
+        if c.fix_relabel_rules_path is not None:
+            c.fix_relabel_rules_path = (
+                Path(c.fix_relabel_rules_path).expanduser().resolve()
+            )
         if c.ingest_mapping_file is not None:
             c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
         if c.ingest_output_dir is not None:
@@ -877,6 +883,8 @@ class PipelineConfig:
             )
         if d.get("fix_alltim_variants_path") is not None:
             d["fix_alltim_variants_path"] = str(d["fix_alltim_variants_path"])
+        if d.get("fix_relabel_rules_path") is not None:
+            d["fix_relabel_rules_path"] = str(d["fix_relabel_rules_path"])
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -1145,6 +1153,7 @@ class PipelineConfig:
                 "fix_backend_classifications_path"
             ),
             fix_alltim_variants_path=opt_str("fix_alltim_variants_path"),
+            fix_relabel_rules_path=opt_str("fix_relabel_rules_path"),
             fix_infer_system_flags=bool(d.get("fix_infer_system_flags", False)),
             fix_system_flag_overwrite_existing=bool(
                 d.get("fix_system_flag_overwrite_existing", False)

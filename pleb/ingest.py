@@ -1127,7 +1127,9 @@ def commit_ingest_changes(
     ]
     dirty = bool(dirty_paths)
     if dirty:
-        untracked = [p for p in getattr(repo, "untracked_files", []) if p.startswith(rel_output)]
+        untracked = [
+            p for p in getattr(repo, "untracked_files", []) if p.startswith(rel_output)
+        ]
         changed = [
             p
             for p in repo.git.diff("--name-only", "--", rel_output).splitlines()

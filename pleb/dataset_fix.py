@@ -15,6 +15,7 @@ from dataclasses import field
 from .compat import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
+from fnmatch import fnmatch
 import shutil
 import json
 import hashlib
@@ -95,6 +96,7 @@ class FixDatasetConfig:
         generate_alltim_variants: Generate additional ``*_all.<variant>.tim`` files.
         backend_classifications_path: TOML with class->system mappings.
         alltim_variants_path: TOML with variant selection rules.
+        relabel_rules_path: TOML with declarative TOA relabel rules.
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
         system_flag_table_path: Path to the system-flag table (JSON/TOML).
@@ -147,6 +149,7 @@ class FixDatasetConfig:
     generate_alltim_variants: bool = False
     backend_classifications_path: Optional[str] = None
     alltim_variants_path: Optional[str] = None
+    relabel_rules_path: Optional[str] = None
 
     # tim flag insertion (applies to per-backend tims under <psr>/tims/)
     # Example: {"-pta": "EPTA", "-be": "P200", "-sys": "SomeSys"}
@@ -691,6 +694,280 @@ def ensure_timfile_flags(
     }
 
 
+def _token_get_flag(parts: Sequence[str], flag: str) -> Optional[str]:
+    if flag not in parts:
+        return None
+    i = parts.index(flag)
+    if i + 1 >= len(parts):
+        return None
+    return str(parts[i + 1])
+
+
+def _token_set_flag(parts: List[str], flag: str, value: str) -> bool:
+    if flag in parts:
+        i = parts.index(flag)
+        if i + 1 < len(parts) and parts[i + 1] != value:
+            parts[i + 1] = value
+            return True
+        if i + 1 >= len(parts):
+            parts.append(value)
+            return True
+        return False
+    parts.extend([flag, value])
+    return True
+
+
+def _load_relabel_rules(path: Path) -> List[Dict[str, object]]:
+    data = _load_toml(path)
+    raw = data.get("rules", [])
+    if not isinstance(raw, list):
+        return []
+
+    rules: List[Dict[str, object]] = []
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            continue
+        name = str(r.get("name", f"rule_{i+1}")).strip() or f"rule_{i+1}"
+        enabled = bool(r.get("enabled", True))
+        tim_glob = r.get("tim_glob", "*.tim")
+        if isinstance(tim_glob, str):
+            tim_globs = [tim_glob.strip()] if tim_glob.strip() else ["*.tim"]
+        elif isinstance(tim_glob, list):
+            tim_globs = [str(x).strip() for x in tim_glob if str(x).strip()]
+            if not tim_globs:
+                tim_globs = ["*.tim"]
+        else:
+            tim_globs = ["*.tim"]
+
+        def _list_str(key: str) -> Set[str]:
+            v = r.get(key)
+            if v is None:
+                return set()
+            if isinstance(v, str):
+                s = v.strip()
+                return {s} if s else set()
+            if isinstance(v, list):
+                return {str(x).strip() for x in v if str(x).strip()}
+            return set()
+
+        def _opt_float(key: str) -> Optional[float]:
+            v = r.get(key)
+            if v in (None, ""):
+                return None
+            return float(v)
+
+        required_flags: Dict[str, str] = {}
+        rf = r.get("require_flags", {})
+        if isinstance(rf, dict):
+            for k, v in rf.items():
+                ks = str(k).strip()
+                vs = str(v).strip()
+                if ks and vs:
+                    required_flags[ks] = vs
+
+        rules.append(
+            {
+                "name": name,
+                "enabled": enabled,
+                "tim_globs": tim_globs,
+                "match_sys": _list_str("match_sys"),
+                "match_group": _list_str("match_group"),
+                "match_pta": _list_str("match_pta"),
+                "sat_regex": str(r.get("sat_regex", "")).strip(),
+                "line_regex": str(r.get("line_regex", "")).strip(),
+                "mjd_min": _opt_float("mjd_min"),
+                "mjd_max": _opt_float("mjd_max"),
+                "freq_min_mhz": _opt_float("freq_min_mhz"),
+                "freq_max_mhz": _opt_float("freq_max_mhz"),
+                "require_flags": required_flags,
+                "set_sys": (
+                    None
+                    if r.get("set_sys") in (None, "")
+                    else str(r.get("set_sys")).strip()
+                ),
+                "set_group": (
+                    None
+                    if r.get("set_group") in (None, "")
+                    else str(r.get("set_group")).strip()
+                ),
+                "set_pta": (
+                    None
+                    if r.get("set_pta") in (None, "")
+                    else str(r.get("set_pta")).strip()
+                ),
+            }
+        )
+    return rules
+
+
+def apply_relabel_rules(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    psr = psr_dir.name
+    if not cfg.relabel_rules_path:
+        return {"psr": psr, "skipped": True, "reason": "no rules path"}
+
+    rules_path = Path(cfg.relabel_rules_path)
+    if not rules_path.is_absolute():
+        rules_path = psr_dir.parent / rules_path
+    if not rules_path.exists():
+        return {
+            "psr": psr,
+            "error": f"Missing relabel rules file: {rules_path}",
+        }
+
+    rules = _load_relabel_rules(rules_path)
+    if not rules:
+        return {"psr": psr, "rules_path": str(rules_path), "rules": []}
+
+    tims = list_backend_timfiles(psr_dir)
+    out_rules: List[Dict[str, object]] = []
+
+    for rule in rules:
+        if not bool(rule.get("enabled", True)):
+            out_rules.append(
+                {"name": str(rule.get("name", "unnamed")), "enabled": False}
+            )
+            continue
+
+        tim_globs = list(rule.get("tim_globs", ["*.tim"]))
+        files = [
+            t
+            for t in tims
+            if any(fnmatch(t.name, str(g)) for g in tim_globs if str(g).strip())
+        ]
+
+        sat_re = None
+        if str(rule.get("sat_regex", "")).strip():
+            sat_re = re.compile(str(rule.get("sat_regex")))
+        line_re = None
+        if str(rule.get("line_regex", "")).strip():
+            line_re = re.compile(str(rule.get("line_regex")))
+
+        match_sys = set(rule.get("match_sys", set()))
+        match_group = set(rule.get("match_group", set()))
+        match_pta = set(rule.get("match_pta", set()))
+        req_flags = dict(rule.get("require_flags", {}))
+        mjd_min = rule.get("mjd_min")
+        mjd_max = rule.get("mjd_max")
+        freq_min = rule.get("freq_min_mhz")
+        freq_max = rule.get("freq_max_mhz")
+        set_sys = rule.get("set_sys")
+        set_group = rule.get("set_group")
+        set_pta = rule.get("set_pta")
+
+        file_reports: List[Dict[str, object]] = []
+        for tim in files:
+            lines = tim.read_text(encoding="utf-8", errors="ignore").splitlines()
+            changed = False
+            matched = 0
+            changed_lines = 0
+            new_lines: List[str] = []
+            for raw in lines:
+                line = _cleanline(raw)
+                if not is_toa_line(line):
+                    new_lines.append(line)
+                    continue
+                parts = line.split()
+                if len(parts) < 4:
+                    new_lines.append(line)
+                    continue
+
+                try:
+                    freq = float(parts[1])
+                    mjd = float(parts[2])
+                except Exception:
+                    new_lines.append(line)
+                    continue
+
+                sat = parts[0]
+                sys_val = _token_get_flag(parts, "-sys")
+                grp_val = _token_get_flag(parts, "-group")
+                pta_val = _token_get_flag(parts, "-pta")
+
+                if match_sys and (sys_val not in match_sys):
+                    new_lines.append(line)
+                    continue
+                if match_group and (grp_val not in match_group):
+                    new_lines.append(line)
+                    continue
+                if match_pta and (pta_val not in match_pta):
+                    new_lines.append(line)
+                    continue
+                if sat_re is not None and not sat_re.search(sat):
+                    new_lines.append(line)
+                    continue
+                if line_re is not None and not line_re.search(line):
+                    new_lines.append(line)
+                    continue
+                if mjd_min is not None and mjd < float(mjd_min):
+                    new_lines.append(line)
+                    continue
+                if mjd_max is not None and mjd > float(mjd_max):
+                    new_lines.append(line)
+                    continue
+                if freq_min is not None and freq < float(freq_min):
+                    new_lines.append(line)
+                    continue
+                if freq_max is not None and freq > float(freq_max):
+                    new_lines.append(line)
+                    continue
+                flag_miss = False
+                for fk, fv in req_flags.items():
+                    if _token_get_flag(parts, str(fk)) != str(fv):
+                        flag_miss = True
+                        break
+                if flag_miss:
+                    new_lines.append(line)
+                    continue
+
+                matched += 1
+                local_change = False
+                if set_sys is not None:
+                    local_change = (
+                        _token_set_flag(parts, "-sys", str(set_sys)) or local_change
+                    )
+                if set_group is not None:
+                    local_change = (
+                        _token_set_flag(parts, "-group", str(set_group)) or local_change
+                    )
+                if set_pta is not None:
+                    local_change = (
+                        _token_set_flag(parts, "-pta", str(set_pta)) or local_change
+                    )
+                if local_change:
+                    changed = True
+                    changed_lines += 1
+                new_lines.append(" ".join(parts))
+
+            if changed and cfg.apply and not cfg.dry_run:
+                if cfg.backup:
+                    _backup_file(tim)
+                tim.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+            file_reports.append(
+                {
+                    "timfile": str(tim),
+                    "matched_toas": int(matched),
+                    "changed_toas": int(changed_lines),
+                    "changed": bool(changed),
+                }
+            )
+
+        out_rules.append(
+            {
+                "name": str(rule.get("name", "unnamed")),
+                "enabled": True,
+                "tim_globs": tim_globs,
+                "files": file_reports,
+            }
+        )
+
+    return {
+        "psr": psr,
+        "rules_path": str(rules_path),
+        "rules": out_rules,
+    }
+
+
 # -----------------------------
 # par file helpers
 # -----------------------------
@@ -722,7 +999,12 @@ def ensure_parfile_defaults(
     }
     wanted = {k: v for k, v in wanted.items() if v is not None}
     if not wanted:
-        return {"parfile": str(parfile), "changed": False, "updated": [], "inserted": []}
+        return {
+            "parfile": str(parfile),
+            "changed": False,
+            "updated": [],
+            "inserted": [],
+        }
 
     lines = parfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     new_lines: List[str] = []
@@ -777,7 +1059,12 @@ def ensure_parfile_defaults(
         }
 
     if not changed:
-        return {"parfile": str(parfile), "changed": False, "updated": [], "inserted": []}
+        return {
+            "parfile": str(parfile),
+            "changed": False,
+            "updated": [],
+            "inserted": [],
+        }
 
     if backup:
         _backup_file(parfile)
@@ -1595,6 +1882,14 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             except Exception as e:
                 reps.append({"timfile": str(t), "error": str(e)})
         report["steps"].append({"infer_system_flags": reps})
+
+    # Declarative relabeling for splitting/renaming backend groups after PQC.
+    if cfg.relabel_rules_path:
+        try:
+            rep = apply_relabel_rules(psr_dir, cfg)
+        except Exception as e:
+            rep = {"error": str(e)}
+        report["steps"].append({"apply_relabel_rules": rep})
 
     if cfg.generate_alltim_variants:
         try:

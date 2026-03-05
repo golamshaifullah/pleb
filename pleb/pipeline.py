@@ -205,6 +205,7 @@ def _build_fixdataset_config(
             cfg, "fix_backend_classifications_path", None
         ),
         alltim_variants_path=_cfg_get(cfg, "fix_alltim_variants_path", None),
+        relabel_rules_path=_cfg_get(cfg, "fix_relabel_rules_path", None),
         system_flag_overwrite_existing=bool(
             _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
         ),
@@ -238,9 +239,7 @@ def _build_fixdataset_config(
         ensure_ephem=_cfg_get(cfg, "fix_ensure_ephem", None),
         ensure_clk=_cfg_get(cfg, "fix_ensure_clk", None),
         ensure_ne_sw=_cfg_get(cfg, "fix_ensure_ne_sw", None),
-        force_ne_sw_overwrite=bool(
-            _cfg_get(cfg, "fix_force_ne_sw_overwrite", False)
-        ),
+        force_ne_sw_overwrite=bool(_cfg_get(cfg, "fix_force_ne_sw_overwrite", False)),
         remove_patterns=list(
             _cfg_get(cfg, "fix_remove_patterns", ["NRT.NUPPI.", "NRT.NUXPI."]) or []
         ),

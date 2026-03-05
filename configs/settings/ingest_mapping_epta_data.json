@@ -414,6 +414,70 @@
         "_all.tim",
         ".bak"
       ]
+    },
+    "WSRT.P1.1380.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.1380.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.1380.2.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.1380.2.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.2273.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.2273.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.323.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.323.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.328.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.328.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.367.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.367.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.382.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.382.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
+    },
+    "WSRT.P1.840.C": {
+      "root": "/work/git_projects/epta-dr1",
+      "tim_glob": "WSRT.P1.840.tim",
+      "ignore_suffixes": [
+        ".bak",
+        "_all.tim"
+      ]
     }
   }
 }

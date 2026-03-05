@@ -61,6 +61,18 @@ The QC stage is designed to highlight residual outliers, transient events,
 and structured behavior in residuals versus time, frequency, and orbital
 phase. [Coles2011]_ [Keith2013]_
 
+Declarative relabel rules
+-------------------------
+
+For post-QC backend splitting (for example, dividing one ``-sys`` into epoch
+sub-groups), point FixDataset at a TOML rules file:
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml \
+     --set run_fix_dataset=true \
+     --set fix_relabel_rules_path="configs/settings/relabel_rules.example.toml"
+
 Next steps
 ----------
 
