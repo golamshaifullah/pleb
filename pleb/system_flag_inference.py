@@ -38,6 +38,8 @@ import re
 import numpy as np
 import pandas as pd
 
+from .tim_utils import is_toa_line
+
 TELESCOPE_CODES = {"EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR", "NFR"}
 
 DEFAULT_PTA_BY_TEL = {
@@ -49,25 +51,6 @@ DEFAULT_PTA_BY_TEL = {
     "LEAP": "EPTA",
     "LOFAR": "EPTA",
     "NFR": "EPTA",
-}
-
-# Common directive words in tempo2 tim files.
-_TIM_DIRECTIVES = {
-    "FORMAT",
-    "MODE",
-    "TIME",
-    "EFAC",
-    "EQUAD",
-    "ECORR",
-    "JUMP",
-    "INCLUDE",
-    "SKIP",
-    "TRACK",
-    "PHASE",
-    "FREQ",
-    "SCALE",
-    "T2EFAC",
-    "T2EQUAD",
 }
 
 # Regex that finds "-key value" pairs (value = next non-space token).
@@ -183,24 +166,6 @@ class SystemInferenceConfig:
     telescope_aliases: Dict[str, str] = field(default_factory=dict)
     reject_backend_values: Tuple[str, ...] = ("UNK", "UNKNOWN", "")
     reject_telescope_values: Tuple[str, ...] = ("UNK", "UNKNOWN", "")
-
-
-def is_toa_line(raw: str) -> bool:
-    """Return True if a raw line appears to be a TOA data line.
-
-    Args:
-        raw: Raw line from a `.tim` file.
-
-    Returns:
-        True if the line looks like a TOA row.
-    """
-    s = raw.strip()
-    if not s:
-        return False
-    if s.startswith(("C", "#")):
-        return False
-    head = s.split()[0]
-    return head not in _TIM_DIRECTIVES
 
 
 def _extract_flags(line: str) -> Dict[str, str]:

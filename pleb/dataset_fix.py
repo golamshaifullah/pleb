@@ -30,6 +30,18 @@ except Exception:  # pragma: no cover
 
 from .logging_utils import get_logger
 from .system_tables import load_table
+from .tim_utils import (
+    TIM_DIRECTIVES,
+    cleanline,
+    count_toa_lines,
+    extract_flag_values,
+    is_toa_line,
+    list_backend_timfiles,
+    mjd_from_toa_line,
+    parse_include_lines,
+    toa_key_from_line,
+)
+from .tempo2 import build_singularity_prefix, run_subprocess
 
 logger = get_logger("pleb.dataset_fix")
 
@@ -58,24 +70,6 @@ _LEGACY_SYS_ALLOWLIST = {
     "NRT.BON.2000",
 }
 
-# A pragmatic set of header/directive prefixes commonly seen in tempo2 .tim files.
-_TIM_DIRECTIVES = {
-    "FORMAT",
-    "MODE",
-    "TIME",
-    "EFAC",
-    "EQUAD",
-    "ECORR",
-    "JUMP",
-    "INCLUDE",
-    "SKIP",
-    "TRACK",
-    "PHASE",
-    "FREQ",
-    "SCALE",
-}
-
-
 @dataclass(slots=True)
 class FixDatasetConfig:
     """Controls for dataset fixing utilities.
@@ -97,6 +91,7 @@ class FixDatasetConfig:
         backend_classifications_path: TOML with class->system mappings.
         alltim_variants_path: TOML with variant selection rules.
         relabel_rules_path: TOML with declarative TOA relabel rules.
+        jump_reference_variants: Build per-variant reference-system JUMP parfiles.
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
         system_flag_table_path: Path to the system-flag table (JSON/TOML).
@@ -150,6 +145,12 @@ class FixDatasetConfig:
     backend_classifications_path: Optional[str] = None
     alltim_variants_path: Optional[str] = None
     relabel_rules_path: Optional[str] = None
+    jump_reference_variants: bool = False
+    jump_reference_keep_tmp: bool = False
+    jump_reference_jump_flag: str = "-sys"
+    tempo2_home_dir: Optional[str] = None
+    tempo2_dataset_name: Optional[str] = None
+    tempo2_singularity_image: Optional[str] = None
 
     # tim flag insertion (applies to per-backend tims under <psr>/tims/)
     # Example: {"-pta": "EPTA", "-be": "P200", "-sys": "SomeSys"}
@@ -221,106 +222,6 @@ class FixDatasetConfig:
 # -----------------------------
 # tim file helpers
 # -----------------------------
-
-
-def _cleanline(line: str) -> str:
-    """Normalize line endings and trailing spaces."""
-    return line.rstrip("\n").rstrip(" ")
-
-
-def _is_comment_or_blank(line: str) -> bool:
-    """Return True if a line is blank or a comment."""
-    s = line.strip()
-    return (not s) or s.startswith(("C", "#"))
-
-
-def _is_directive(line: str) -> bool:
-    """Return True if a line is a tempo2 directive."""
-    s = line.strip()
-    if not s:
-        return False
-    head = s.split()[0]
-    return head in _TIM_DIRECTIVES
-
-
-def is_toa_line(line: str) -> bool:
-    """Return True if a line appears to be a TOA data line.
-
-    Args:
-        line: Raw line from a .tim file.
-
-    Returns:
-        True if the line looks like a TOA record.
-    """
-    if _is_comment_or_blank(line):
-        return False
-    if _is_directive(line):
-        return False
-    # Remaining lines are usually TOAs.
-    return True
-
-
-def count_toa_lines(timfile: Path) -> int:
-    """Count TOA lines in a .tim file.
-
-    Args:
-        timfile: Path to the .tim file.
-
-    Returns:
-        Number of lines that look like TOA records.
-    """
-    n = 0
-    if not timfile.exists():
-        return 0
-    for raw in timfile.read_text(encoding="utf-8", errors="ignore").splitlines():
-        if is_toa_line(raw):
-            n += 1
-    return n
-
-
-def parse_include_lines(alltim: Path) -> Set[str]:
-    """Parse INCLUDE lines from an all.tim file.
-
-    Args:
-        alltim: Path to the ``<psr>_all.tim`` file.
-
-    Returns:
-        Set of included relative paths (e.g., ``"tims/foo.tim"``).
-    """
-    inc: Set[str] = set()
-    if not alltim.exists():
-        return inc
-    for raw in alltim.read_text(encoding="utf-8", errors="ignore").splitlines():
-        s = raw.strip()
-        if not s:
-            continue
-        if s.startswith("INCLUDE"):
-            parts = s.split(maxsplit=1)
-            if len(parts) == 2:
-                inc.add(parts[1].strip())
-    return inc
-
-
-def list_backend_timfiles(psr_dir: Path) -> List[Path]:
-    """List per-backend tim files for a pulsar.
-
-    Args:
-        psr_dir: Pulsar directory containing ``tims/``.
-
-    Returns:
-        List of backend tim files under ``tims/``.
-    """
-    tims_dir = psr_dir / "tims"
-    if not tims_dir.exists():
-        return []
-    out = []
-    for p in sorted(tims_dir.glob("*.tim")):
-        if p.name.endswith("_all.tim"):
-            continue
-        if p.name.startswith("."):
-            continue
-        out.append(p)
-    return out
 
 
 def _backup_file(path: Path) -> None:
@@ -525,6 +426,228 @@ def _variant_selects(
     return bool(tim_classes & include_classes), None
 
 
+def _parse_tempo2_redchisq(stdout_path: Path) -> Optional[float]:
+    text = (
+        stdout_path.read_text(encoding="utf-8", errors="ignore")
+        if stdout_path.exists()
+        else ""
+    )
+    if not text:
+        return None
+    for pat in (r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)", r"red\s*chisq\s*=\s*([0-9.+\-eE]+)"):
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            try:
+                return float(m.group(1))
+            except Exception:
+                pass
+    return None
+
+
+def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
+    base = alltim.name
+    if base == f"{psr}_all.tim":
+        return "base"
+    pref = f"{psr}_all."
+    if base.startswith(pref) and base.endswith(".tim"):
+        return base[len(pref) : -len(".tim")]
+    return alltim.stem
+
+
+def _parse_tim_system_rows(timfile: Path) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]]]:
+    lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
+    systems: Set[str] = set()
+    errs: Dict[str, List[float]] = {}
+    for raw in lines:
+        if not is_toa_line(raw):
+            continue
+        parts = raw.strip().split()
+        if len(parts) < 4:
+            continue
+        if "-sys" not in parts:
+            continue
+        i = parts.index("-sys")
+        if i + 1 >= len(parts):
+            continue
+        sys_val = parts[i + 1]
+        systems.add(sys_val)
+        try:
+            errs.setdefault(sys_val, []).append(float(parts[3]))
+        except Exception:
+            pass
+
+    by_sys: Dict[str, List[str]] = {s: [] for s in systems}
+    for raw in lines:
+        if is_toa_line(raw):
+            parts = raw.strip().split()
+            if "-sys" in parts:
+                i = parts.index("-sys")
+                if i + 1 < len(parts):
+                    s = parts[i + 1]
+                    if s in by_sys:
+                        by_sys[s].append(raw)
+                        continue
+            continue
+        for s in by_sys:
+            by_sys[s].append(raw)
+
+    return by_sys, sorted(systems), errs
+
+
+def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    psr = psr_dir.name
+    par = psr_dir / f"{psr}.par"
+    if not par.exists():
+        return {"psr": psr, "error": f"Missing par file: {par}"}
+    if not (cfg.tempo2_home_dir and cfg.tempo2_dataset_name and cfg.tempo2_singularity_image):
+        return {
+            "psr": psr,
+            "error": "tempo2 context missing; set tempo2_home_dir/tempo2_dataset_name/tempo2_singularity_image",
+        }
+
+    all_variants = sorted(psr_dir.glob(f"{psr}_all.*.tim"))
+    if not all_variants:
+        return {"psr": psr, "variants": [], "message": "No _all.variant.tim files found"}
+
+    tmp_root = psr_dir / ".pleb_jump_reference_tmp"
+    tmp_root.mkdir(parents=True, exist_ok=True)
+
+    # Build no-JUMP par once.
+    par_lines = par.read_text(encoding="utf-8", errors="ignore").splitlines()
+    no_jump_lines = []
+    for ln in par_lines:
+        s = ln.strip()
+        if not s:
+            no_jump_lines.append(ln)
+            continue
+        if s.split(maxsplit=1)[0] == "JUMP":
+            continue
+        no_jump_lines.append(ln)
+    no_jump_par = tmp_root / f"{psr}.nojump.par"
+    no_jump_par.write_text("\n".join(no_jump_lines) + "\n", encoding="utf-8")
+
+    prefix = build_singularity_prefix(
+        Path(str(cfg.tempo2_home_dir)),
+        Path(str(cfg.tempo2_dataset_name)),
+        Path(str(cfg.tempo2_singularity_image)),
+    )
+
+    out_variants: Dict[str, object] = {}
+    for alltim in all_variants:
+        vname = _variant_name_from_alltim(psr, alltim)
+        include_paths = sorted(parse_include_lines(alltim))
+        system_rows: Dict[str, Dict[str, object]] = {}
+        temp_sys_files: Dict[str, List[Path]] = {}
+
+        for rel in include_paths:
+            src_tim = psr_dir / rel
+            if not src_tim.exists():
+                continue
+            by_sys, systems, errs = _parse_tim_system_rows(src_tim)
+            if not systems:
+                continue
+            for sysv in systems:
+                buf = by_sys.get(sysv, [])
+                if not any(is_toa_line(x) for x in buf):
+                    continue
+                out_tim = tmp_root / f"{src_tim.stem}__{sysv}.tim"
+                out_tim.write_text("\n".join(buf) + "\n", encoding="utf-8")
+                temp_sys_files.setdefault(sysv, []).append(out_tim)
+                r = system_rows.setdefault(
+                    sysv,
+                    {
+                        "system": sysv,
+                        "n_toa": 0,
+                        "toa_err_us": [],
+                        "source_timfiles": set(),
+                        "reduced_chisq": None,
+                    },
+                )
+                r["n_toa"] = int(r["n_toa"]) + int(count_toa_lines(out_tim))
+                r["toa_err_us"].extend(errs.get(sysv, []))
+                r["source_timfiles"].add(src_tim.name)
+
+        # Evaluate each system with no-JUMP par.
+        for sysv, files in temp_sys_files.items():
+            sys_all = tmp_root / f"{psr}_all.{vname}.{sysv}.tim"
+            lines = ["FORMAT 1"]
+            for f in files:
+                lines.append(f"INCLUDE {f.name}")
+            sys_all.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            par_container = f"/data/{psr}/.pleb_jump_reference_tmp/{no_jump_par.name}"
+            tim_container = f"/data/{psr}/.pleb_jump_reference_tmp/{sys_all.name}"
+            log_path = tmp_root / f"{psr}.{vname}.{sysv}.tempo2.log"
+            rc = run_subprocess(prefix + ["tempo2", "-f", par_container, tim_container], log_path)
+            red = _parse_tempo2_redchisq(log_path) if rc == 0 else None
+            system_rows[sysv]["reduced_chisq"] = red
+
+        # Finalize metrics and choose reference system.
+        rows = []
+        for sysv, r in system_rows.items():
+            errs = np.asarray(r.pop("toa_err_us", []), dtype=float)
+            med = float(np.median(errs)) if errs.size else np.nan
+            r["median_toa_err_us"] = med
+            r["source_timfiles"] = ",".join(sorted(r["source_timfiles"]))
+            rows.append(r)
+
+        if not rows:
+            out_variants[vname] = {"variant_alltim": str(alltim), "error": "No systems found"}
+            continue
+
+        # smallest median err first, then largest n_toa, then lexical system.
+        rows_sorted = sorted(
+            rows,
+            key=lambda x: (
+                np.inf if np.isnan(float(x.get("median_toa_err_us", np.nan))) else float(x.get("median_toa_err_us", np.nan)),
+                -int(x.get("n_toa", 0)),
+                str(x.get("system", "")),
+            ),
+        )
+        ref_system = str(rows_sorted[0]["system"])
+
+        csv_path = psr_dir / f"{psr}_jump_reference.{vname}.csv"
+        with open(csv_path, "w", encoding="utf-8") as f:
+            f.write("variant,system,n_toa,median_toa_err_us,reduced_chisq,source_timfiles,reference_system\n")
+            for r in rows_sorted:
+                f.write(
+                    f"{vname},{r['system']},{r['n_toa']},{r['median_toa_err_us']},{r.get('reduced_chisq')},{r.get('source_timfiles')},{ref_system}\n"
+                )
+
+        # Build variant par with jumps for all systems in this variant:
+        # reference fixed at 0 0, others start at 0 with fit flag 1.
+        par_out = psr_dir / f"{psr}.{vname}.par"
+        jump_flag = str(cfg.jump_reference_jump_flag or "-sys")
+        out_lines = []
+        for ln in no_jump_lines:
+            out_lines.append(ln)
+        for r in rows_sorted:
+            sysv = str(r["system"])
+            fit_flag = 0 if sysv == ref_system else 1
+            out_lines.append(f"JUMP {jump_flag} {sysv} 0 {fit_flag}")
+        if cfg.apply and not cfg.dry_run:
+            if cfg.backup and par_out.exists():
+                _backup_file(par_out)
+            par_out.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+        out_variants[vname] = {
+            "variant_alltim": str(alltim),
+            "reference_system": ref_system,
+            "systems": rows_sorted,
+            "csv": str(csv_path),
+            "par_out": str(par_out),
+            "written": bool(cfg.apply and not cfg.dry_run),
+        }
+
+    if not bool(cfg.jump_reference_keep_tmp):
+        try:
+            shutil.rmtree(tmp_root)
+        except Exception:
+            pass
+
+    return {"psr": psr, "variants": out_variants}
+
+
 def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
     psr = psr_dir.name
     alltim = psr_dir / f"{psr}_all.tim"
@@ -608,29 +731,6 @@ def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, 
     }
 
 
-def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
-    """Collect unique values for a flag from TOA lines.
-
-    Args:
-        timfile: Path to the .tim file.
-        flag: Flag key (e.g., ``"-sys"``).
-
-    Returns:
-        Set of unique flag values seen in TOA lines.
-    """
-    vals: Set[str] = set()
-    if not timfile.exists():
-        return vals
-    for raw in timfile.read_text(encoding="utf-8", errors="ignore").splitlines():
-        if not is_toa_line(raw):
-            continue
-        parts = raw.split()
-        for i, tok in enumerate(parts[:-1]):
-            if tok == flag:
-                vals.add(parts[i + 1])
-    return vals
-
-
 def ensure_timfile_flags(
     timfile: Path,
     required: Dict[str, str],
@@ -662,7 +762,7 @@ def ensure_timfile_flags(
     new_lines: List[str] = []
 
     for raw in lines:
-        line = _cleanline(raw)
+        line = cleanline(raw)
         if not is_toa_line(line):
             new_lines.append(line)
             continue
@@ -862,7 +962,7 @@ def apply_relabel_rules(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, objec
             changed_lines = 0
             new_lines: List[str] = []
             for raw in lines:
-                line = _cleanline(raw)
+                line = cleanline(raw)
                 if not is_toa_line(line):
                     new_lines.append(line)
                     continue
@@ -1013,7 +1113,7 @@ def ensure_parfile_defaults(
     changed = False
 
     for raw in lines:
-        line = _cleanline(raw)
+        line = cleanline(raw)
         if not line.strip():
             new_lines.append(line)
             continue
@@ -1121,7 +1221,7 @@ def update_parfile_jumps(
 
     changed = False
     for raw in lines:
-        line = _cleanline(raw)
+        line = cleanline(raw)
         if not line.strip():
             new_lines.append(line)
             continue
@@ -1166,9 +1266,9 @@ def update_parfile_jumps(
 
     # If ensure_* requested but the key is missing entirely, insert it (tempo2 accepts anywhere; keep near top).
     present_keys = {
-        (_cleanline(line_str).split()[0] if _cleanline(line_str).strip() else "")
+        (cleanline(line_str).split()[0] if cleanline(line_str).strip() else "")
         for line_str in lines
-        if _cleanline(line_str).strip()
+        if cleanline(line_str).strip()
     }
     to_insert: List[str] = []
     if ensure_ephem is not None and "EPHEM" not in present_keys:
@@ -1229,20 +1329,6 @@ def update_parfile_jumps(
 # -----------------------------
 # PQC outlier application (optional)
 # -----------------------------
-
-
-def _mjd_from_toa_line(line: str, time_offset_sec: float = 0.0) -> Optional[float]:
-    """Parse an MJD from a TOA line, applying TIME offset (seconds)."""
-    if not is_toa_line(line):
-        return None
-    parts = line.strip().split()
-    if len(parts) < 3:
-        return None
-    try:
-        mjd = float(parts[2])
-    except Exception:
-        return None
-    return mjd + (float(time_offset_sec) / 86400.0)
 
 
 def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
@@ -1417,7 +1503,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 new_lines.append(raw)
                 continue
 
-            mjd = _mjd_from_toa_line(raw, time_offset_sec=time_offset_sec)
+            mjd = mjd_from_toa_line(raw, time_offset_sec=time_offset_sec)
             if mjd is None:
                 new_lines.append(raw)
                 continue
@@ -1898,6 +1984,13 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             rep = {"error": str(e)}
         report["steps"].append({"generate_alltim_variants": rep})
 
+    if cfg.jump_reference_variants:
+        try:
+            rep = build_variant_reference_jump_pars(psr_dir, cfg)
+        except Exception as e:
+            rep = {"error": str(e)}
+        report["steps"].append({"build_variant_reference_jump_pars": rep})
+
     # Cheap overlap removal (exact duplicates across known overlapping backend tims)
     if cfg.apply and cfg.wsrt_p2_prefer_dual_channel:
         try:
@@ -2079,16 +2172,6 @@ OVERLAPPED_TIMFILES: Dict[str, List[str]] = {
 }
 
 
-def _toa_key_from_line(line: str) -> Optional[Tuple[str, str, str, str]]:
-    """Cheap TOA identity key for FORMAT 1: first 4 columns as strings."""
-    if not is_toa_line(line):
-        return None
-    parts = line.strip().split()
-    if len(parts) < 4:
-        return None
-    return (parts[0], parts[1], parts[2], parts[3])
-
-
 def _infer_freq_tol(freqs: np.ndarray, bw: Optional[float]) -> Optional[float]:
     """Infer a frequency tolerance (MHz) from observed spacing or bandwidth."""
     if freqs.size >= 2:
@@ -2130,16 +2213,16 @@ def dedupe_timfile_toas(
     if mjd_tol_sec <= 0.0 and not freq_tol_auto and freq_tol_mhz is None:
         seen: Set[Tuple[str, str, str, str]] = set()
         for raw in lines:
-            key = _toa_key_from_line(raw)
+            key = toa_key_from_line(raw)
             if key is None:
-                new_lines.append(_cleanline(raw))
+                new_lines.append(cleanline(raw))
                 continue
             if key in seen:
                 removed += 1
                 changed = True
                 continue
             seen.add(key)
-            new_lines.append(_cleanline(raw))
+            new_lines.append(cleanline(raw))
     else:
         # Tolerance-based dedupe: same file token + close MJD + close freq.
         tol_days = float(mjd_tol_sec) / 86400.0
@@ -2173,7 +2256,7 @@ def dedupe_timfile_toas(
         kept: List[Tuple[str, float, float]] = []
         for raw, ftoken, mjd, freq in parsed:
             if ftoken is None or mjd is None or freq is None:
-                new_lines.append(_cleanline(raw))
+                new_lines.append(cleanline(raw))
                 continue
             is_dup = False
             for k_ftoken, k_mjd, k_freq in kept:
@@ -2189,7 +2272,7 @@ def dedupe_timfile_toas(
                 changed = True
                 continue
             kept.append((ftoken, mjd, freq))
-            new_lines.append(_cleanline(raw))
+            new_lines.append(cleanline(raw))
 
     if dry_run or not apply or not changed:
         return {
@@ -2278,7 +2361,7 @@ def infer_and_apply_system_flags(
             if not s or s.startswith(("#", "C")):
                 continue
             head = s.split(maxsplit=1)[0]
-            if head in _TIM_DIRECTIVES:
+            if head in TIM_DIRECTIVES:
                 continue
             parts = s.split()
             if "-sys" not in parts:
@@ -2389,7 +2472,7 @@ def infer_and_apply_system_flags(
             if not s or s.startswith(("#", "C")):
                 continue
             head = s.split(maxsplit=1)[0]
-            if head in _TIM_DIRECTIVES:
+            if head in TIM_DIRECTIVES:
                 continue
             if "-gof" in s:
                 has_gof = True
@@ -2467,7 +2550,7 @@ def _timfile_signature(timfile: Path) -> str:
     """Hash signature of TOA keys for duplicate-tim detection (order-independent)."""
     keys: List[str] = []
     for raw in timfile.read_text(encoding="utf-8", errors="ignore").splitlines():
-        k = _toa_key_from_line(raw)
+        k = toa_key_from_line(raw)
         if k is None:
             continue
         keys.append("|".join(k))
@@ -2529,7 +2612,7 @@ def remove_overlaps_exact(
         # Build retain key set
         retain_keys: Set[Tuple[str, str, str, str]] = set()
         for raw in retain.read_text(encoding="utf-8", errors="ignore").splitlines():
-            k = _toa_key_from_line(raw)
+            k = toa_key_from_line(raw)
             if k is not None:
                 retain_keys.add(k)
 
@@ -2544,9 +2627,9 @@ def remove_overlaps_exact(
             file_changed = False
 
             for raw in lines:
-                k = _toa_key_from_line(raw)
+                k = toa_key_from_line(raw)
                 if k is None:
-                    new_lines.append(_cleanline(raw))
+                    new_lines.append(cleanline(raw))
                     continue
                 if k in retain_keys and not raw.lstrip().startswith("C"):
                     # Non-destructive default: keep line but comment it with reason.
@@ -2554,12 +2637,12 @@ def remove_overlaps_exact(
                         "C OVERLAP_DUPLICATE(retain="
                         + retain_name
                         + ") "
-                        + _cleanline(raw)
+                        + cleanline(raw)
                     )
                     commented += 1
                     file_changed = True
                 else:
-                    new_lines.append(_cleanline(raw))
+                    new_lines.append(cleanline(raw))
 
             if file_changed:
                 total_commented += commented
@@ -2725,14 +2808,14 @@ def wsrt_p2_prefer_dual_channel(
         out_lines: List[str] = []
         for i, raw in enumerate(single_lines):
             if i not in to_mark_set:
-                out_lines.append(_cleanline(raw))
+                out_lines.append(cleanline(raw))
                 continue
             total_affected += 1
             if mode == "delete":
                 continue
             out_lines.append(
                 f"{comment_prefix}(dual={dual_file.name},tol={mjd_tol_sec:.3g}s) "
-                + _cleanline(raw)
+                + cleanline(raw)
             )
 
         changed_files.append(str(single_file))

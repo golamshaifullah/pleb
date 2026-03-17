@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from .logging_utils import get_logger
-from .dataset_fix import count_toa_lines, parse_include_lines
+from .tim_utils import count_toa_lines, parse_include_lines
 from .utils import safe_mkdir
 
 logger = get_logger("pleb.tempo2")

@@ -452,6 +452,9 @@ class PipelineConfig:
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_relabel_rules_path: Declarative TOA relabel rules TOML (optional).
+        fix_jump_reference_variants: Build per-variant reference-system jump parfiles.
+        fix_jump_reference_keep_tmp: Keep temporary split tim/par files.
+        fix_jump_reference_jump_flag: Jump flag used in generated variant parfiles.
         fix_insert_missing_jumps: Insert missing JUMP lines.
         fix_jump_flag: Flag used for inserted jumps.
         fix_prune_stale_jumps: Drop JUMPs not present in timfile flags.
@@ -689,6 +692,9 @@ class PipelineConfig:
     fix_backend_classifications_path: Optional[str] = None
     fix_alltim_variants_path: Optional[str] = None
     fix_relabel_rules_path: Optional[str] = None
+    fix_jump_reference_variants: bool = False
+    fix_jump_reference_keep_tmp: bool = False
+    fix_jump_reference_jump_flag: str = "-sys"
     fix_infer_system_flags: bool = False
     fix_system_flag_overwrite_existing: bool = False
     fix_wsrt_p2_force_sys_by_freq: bool = False
@@ -1154,6 +1160,15 @@ class PipelineConfig:
             ),
             fix_alltim_variants_path=opt_str("fix_alltim_variants_path"),
             fix_relabel_rules_path=opt_str("fix_relabel_rules_path"),
+            fix_jump_reference_variants=bool(
+                d.get("fix_jump_reference_variants", False)
+            ),
+            fix_jump_reference_keep_tmp=bool(
+                d.get("fix_jump_reference_keep_tmp", False)
+            ),
+            fix_jump_reference_jump_flag=str(
+                d.get("fix_jump_reference_jump_flag", "-sys")
+            ),
             fix_infer_system_flags=bool(d.get("fix_infer_system_flags", False)),
             fix_system_flag_overwrite_existing=bool(
                 d.get("fix_system_flag_overwrite_existing", False)

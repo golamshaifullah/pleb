@@ -206,6 +206,18 @@ def _build_fixdataset_config(
         ),
         alltim_variants_path=_cfg_get(cfg, "fix_alltim_variants_path", None),
         relabel_rules_path=_cfg_get(cfg, "fix_relabel_rules_path", None),
+        jump_reference_variants=bool(
+            _cfg_get(cfg, "fix_jump_reference_variants", False)
+        ),
+        jump_reference_keep_tmp=bool(
+            _cfg_get(cfg, "fix_jump_reference_keep_tmp", False)
+        ),
+        jump_reference_jump_flag=str(
+            _cfg_get(cfg, "fix_jump_reference_jump_flag", "-sys") or "-sys"
+        ),
+        tempo2_home_dir=str(getattr(cfg, "home_dir", "")),
+        tempo2_dataset_name=str(getattr(cfg, "dataset_name", "")),
+        tempo2_singularity_image=str(getattr(cfg, "singularity_image", "")),
         system_flag_overwrite_existing=bool(
             _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
         ),
