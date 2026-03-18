@@ -33,6 +33,6 @@ From the repo root:
 Notes
 -----
 
-- The GUI uses ``configs/settings/gui_schema.json`` for its settings form.
+- The GUI uses ``configs/schemas/gui_schema.json`` for its settings form.
 - Validation is best-effort and relies on optional ``jsonschema``.
 - For production or automated runs, prefer the CLI or workflow files.

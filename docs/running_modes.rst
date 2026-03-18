@@ -86,7 +86,7 @@ Run mapping-driven ingest (CLI-only):
 
 .. code-block:: bash
 
-   pleb ingest --mapping configs/settings/system_flag_mapping.example.json \
+   pleb ingest --mapping configs/catalogs/system_flags/system_flag_mapping.example.json \
      --output-dir /data/pulsars
 
 Compatibility notes (CLI-only):
@@ -109,7 +109,7 @@ Typical settings file (minimal):
 
 .. code-block:: toml
 
-   # configs/settings/minimal.toml
+   # configs/runs/pipeline/minimal.toml
    dataset_name = "DR3full"
    home_dir = "/data/pulsars"
    results_dir = "/data/pulsar_results"
@@ -126,7 +126,7 @@ Settings with QC and reporting:
 
 .. code-block:: toml
 
-   # configs/settings/qc.toml
+   # configs/runs/pipeline/qc.toml
    dataset_name = "DR3full"
    home_dir = "/data/pulsars"
    results_dir = "/data/pulsar_results"
@@ -146,13 +146,13 @@ Use with the CLI:
 
 .. code-block:: bash
 
-   pleb --config configs/settings/qc.toml
+   pleb --config configs/runs/pipeline/qc.toml
 
 Override in place:
 
 .. code-block:: bash
 
-   pleb --config configs/settings/qc.toml \
+   pleb --config configs/runs/pipeline/qc.toml \
      --set outdir_name="run_qc_debug" \
      --set pqc_outlier_gate_sigma=4.5
 
@@ -173,7 +173,7 @@ Workflow file structure:
 .. code-block:: toml
 
    # configs/workflows/example_iterative.toml
-   config = "configs/settings/test_all_steps.toml"
+   config = "configs/runs/pipeline/test_all_steps.toml"
 
    [[loops]]
    name = "get_jumps"
@@ -198,7 +198,7 @@ Equivalent JSON workflow:
 .. code-block:: json
 
    {
-     "config": "configs/settings/test_all_steps.toml",
+     "config": "configs/runs/pipeline/test_all_steps.toml",
      "loops": [
        {
          "name": "get_jumps",
@@ -214,7 +214,7 @@ Top-level steps (no loop):
 
 .. code-block:: toml
 
-   config = "configs/settings/test_all_steps.toml"
+   config = "configs/runs/pipeline/test_all_steps.toml"
 
    steps = ["pipeline", "qc_report"]
 
@@ -222,7 +222,7 @@ Per-step overrides:
 
 .. code-block:: toml
 
-   config = "configs/settings/test_all_steps.toml"
+   config = "configs/runs/pipeline/test_all_steps.toml"
 
    [[steps]]
    name = "pipeline"
@@ -281,7 +281,7 @@ For scripting or integration into larger systems, use the Python API:
    from pleb.qc_report import generate_qc_report
    from pleb.ingest import ingest_dataset
 
-   cfg = PipelineConfig.load("configs/settings/test_all_steps.toml")
+   cfg = PipelineConfig.load("configs/runs/pipeline/test_all_steps.toml")
    out = run_pipeline(cfg)
 
    run_param_scan(cfg, scan_typical=True)

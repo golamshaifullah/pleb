@@ -71,7 +71,31 @@ sub-groups), point FixDataset at a TOML rules file:
 
    pleb --config pipeline.toml \
      --set run_fix_dataset=true \
-     --set fix_relabel_rules_path="configs/settings/relabel_rules.example.toml"
+     --set fix_relabel_rules_path="configs/rules/relabel/relabel_rules.example.toml"
+
+Declarative overlap rules
+-------------------------
+
+For duplicate-preference policies (for example, prefer dual-channel WSRT P2
+rows over paired single-channel rows), use overlap rules:
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml \
+     --set run_fix_dataset=true \
+     --set fix_overlap_rules_path="configs/rules/overlap/overlap_rules.example.toml"
+
+Exact-overlap keep/drop catalog
+-------------------------------
+
+The exact duplicate overlap map is loaded from
+``configs/system_tables/overlapped_timfiles.toml`` by default. To override:
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml \
+     --set run_fix_dataset=true \
+     --set fix_overlap_exact_catalog_path="configs/system_tables/overlapped_timfiles.toml"
 
 Next steps
 ----------

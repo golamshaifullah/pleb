@@ -206,6 +206,10 @@ def _build_fixdataset_config(
         ),
         alltim_variants_path=_cfg_get(cfg, "fix_alltim_variants_path", None),
         relabel_rules_path=_cfg_get(cfg, "fix_relabel_rules_path", None),
+        overlap_rules_path=_cfg_get(cfg, "fix_overlap_rules_path", None),
+        overlap_exact_catalog_path=_cfg_get(
+            cfg, "fix_overlap_exact_catalog_path", None
+        ),
         jump_reference_variants=bool(
             _cfg_get(cfg, "fix_jump_reference_variants", False)
         ),

@@ -1,0 +1,14 @@
+[variants.legacy]
+include_classes = ["legacy"]
+exclude_classes = []
+mixed_policy = "any"
+
+[variants.new]
+include_classes = ["new"]
+exclude_classes = []
+mixed_policy = "any"
+
+[variants.combined]
+include_classes = ["legacy", "new"]
+exclude_classes = []
+mixed_policy = "any"

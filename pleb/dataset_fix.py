@@ -91,6 +91,8 @@ class FixDatasetConfig:
         backend_classifications_path: TOML with class->system mappings.
         alltim_variants_path: TOML with variant selection rules.
         relabel_rules_path: TOML with declarative TOA relabel rules.
+        overlap_rules_path: TOML with declarative overlap/dedup preference rules.
+        overlap_exact_catalog_path: TOML keep->drop map used by remove_overlaps_exact.
         jump_reference_variants: Build per-variant reference-system JUMP parfiles.
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
@@ -145,6 +147,8 @@ class FixDatasetConfig:
     backend_classifications_path: Optional[str] = None
     alltim_variants_path: Optional[str] = None
     relabel_rules_path: Optional[str] = None
+    overlap_rules_path: Optional[str] = None
+    overlap_exact_catalog_path: Optional[str] = None
     jump_reference_variants: bool = False
     jump_reference_keep_tmp: bool = False
     jump_reference_jump_flag: str = "-sys"
@@ -321,6 +325,38 @@ def _load_toml(path: Path) -> Dict[str, object]:
             "tomllib unavailable; Python 3.11+ required for TOML support."
         )
     return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+def _default_overlap_exact_catalog_path() -> Path:
+    repo_root = Path(__file__).resolve().parent.parent
+    return repo_root / "configs" / "system_tables" / "overlapped_timfiles.toml"
+
+
+def _load_overlap_exact_catalog(path: Path) -> Dict[str, List[str]]:
+    """Load keep->drop overlap mapping from TOML.
+
+    Supported forms:
+    - [overlap_map] with keys as keep timfile names and list[str] values
+    - top-level keys keep->list[str]
+    """
+    data = _load_toml(path)
+    raw = data.get("overlap_map", data)
+    out: Dict[str, List[str]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for keep_name, drop_vals in raw.items():
+        keep = str(keep_name).strip()
+        if not keep:
+            continue
+        if isinstance(drop_vals, str):
+            vals = [drop_vals.strip()] if str(drop_vals).strip() else []
+        elif isinstance(drop_vals, list):
+            vals = [str(v).strip() for v in drop_vals if str(v).strip()]
+        else:
+            vals = []
+        if vals:
+            out[keep] = vals
+    return out
 
 
 def _collect_timfile_sys_values(timfile: Path) -> Set[str]:
@@ -1060,6 +1096,95 @@ def apply_relabel_rules(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, objec
                 "files": file_reports,
             }
         )
+
+    return {
+        "psr": psr,
+        "rules_path": str(rules_path),
+        "rules": out_rules,
+    }
+
+
+def _load_overlap_rules(path: Path) -> List[Dict[str, object]]:
+    """Load declarative overlap rules from TOML.
+
+    Supported kinds:
+    - ``prefer_multichannel``: between a primary/secondary timfile pair, keep
+      the file that contains dual-channel epochs and comment/delete duplicates
+      from the paired file.
+    """
+    data = _load_toml(path)
+    raw = data.get("rules", [])
+    if not isinstance(raw, list):
+        return []
+
+    rules: List[Dict[str, object]] = []
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            continue
+        kind = str(r.get("kind", "prefer_multichannel")).strip().lower()
+        if kind != "prefer_multichannel":
+            continue
+        name = str(r.get("name", f"overlap_rule_{i+1}")).strip() or f"overlap_rule_{i+1}"
+        primary_glob = str(r.get("primary_glob", "")).strip()
+        secondary_glob = str(r.get("secondary_glob", "")).strip()
+        if not primary_glob or not secondary_glob:
+            continue
+        rules.append(
+            {
+                "name": name,
+                "enabled": bool(r.get("enabled", True)),
+                "kind": kind,
+                "primary_glob": primary_glob,
+                "secondary_glob": secondary_glob,
+                "mjd_tol_sec": float(r.get("mjd_tol_sec", 0.99e-6)),
+                "action": str(r.get("action", "comment")).strip().lower(),
+                "comment_prefix": str(
+                    r.get("comment_prefix", "C RULE_PREFER_MULTICHANNEL")
+                ).strip(),
+            }
+        )
+    return rules
+
+
+def apply_overlap_rules(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    """Apply declarative overlap rules to per-backend tim files."""
+    psr = psr_dir.name
+    if not cfg.overlap_rules_path:
+        return {"psr": psr, "skipped": True, "reason": "no overlap rules path"}
+
+    rules_path = Path(cfg.overlap_rules_path)
+    if not rules_path.is_absolute():
+        rules_path = psr_dir.parent / rules_path
+    if not rules_path.exists():
+        return {"psr": psr, "error": f"Missing overlap rules file: {rules_path}"}
+
+    rules = _load_overlap_rules(rules_path)
+    if not rules:
+        return {"psr": psr, "rules_path": str(rules_path), "rules": []}
+
+    out_rules: List[Dict[str, object]] = []
+    for rule in rules:
+        if not bool(rule.get("enabled", True)):
+            out_rules.append(
+                {"name": str(rule.get("name", "unnamed")), "enabled": False}
+            )
+            continue
+
+        rep = prefer_multichannel_pair_rule(
+            psr_dir,
+            primary_glob=str(rule.get("primary_glob")),
+            secondary_glob=str(rule.get("secondary_glob")),
+            mjd_tol_sec=float(rule.get("mjd_tol_sec", 0.99e-6)),
+            action=str(rule.get("action", "comment")),
+            comment_prefix=str(
+                rule.get("comment_prefix", "C RULE_PREFER_MULTICHANNEL")
+            ),
+            apply=cfg.apply,
+            backup=cfg.backup,
+            dry_run=cfg.dry_run,
+        )
+        rep["name"] = str(rule.get("name", "unnamed"))
+        out_rules.append(rep)
 
     return {
         "psr": psr,
@@ -1991,8 +2116,15 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             rep = {"error": str(e)}
         report["steps"].append({"build_variant_reference_jump_pars": rep})
 
-    # Cheap overlap removal (exact duplicates across known overlapping backend tims)
-    if cfg.apply and cfg.wsrt_p2_prefer_dual_channel:
+    # Declarative overlap handling (preferred) for system-specific duplicate policy.
+    if cfg.apply and cfg.overlap_rules_path:
+        try:
+            rep = apply_overlap_rules(psr_dir, cfg)
+        except Exception as e:
+            rep = {"error": str(e)}
+        report["steps"].append({"apply_overlap_rules": rep})
+    # Legacy WSRT-P2 special-case switch (kept for backwards compatibility).
+    elif cfg.apply and cfg.wsrt_p2_prefer_dual_channel:
         try:
             rep = wsrt_p2_prefer_dual_channel(
                 psr_dir,
@@ -2013,7 +2145,11 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     if cfg.apply and cfg.remove_overlaps_exact:
         try:
             rep = remove_overlaps_exact(
-                psr_dir, apply=cfg.apply, backup=cfg.backup, dry_run=cfg.dry_run
+                psr_dir,
+                overlap_catalog_path=cfg.overlap_exact_catalog_path,
+                apply=cfg.apply,
+                backup=cfg.backup,
+                dry_run=cfg.dry_run,
             )
         except Exception as e:
             rep = {"error": str(e)}
@@ -2156,20 +2292,6 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
     )
 
     return detail_path
-
-
-# Known overlapping backend .tim basenames (from legacy FixDataset notebook).
-# These are NOT pulsar-specific; they describe backends that can contain overlapping TOAs.
-OVERLAPPED_TIMFILES: Dict[str, List[str]] = {
-    "EFF.P200.1380.tim": ["EFF.EBPP.1360.tim", "EFF.EBPP.1410.tim"],
-    "EFF.P217.1380.tim": ["EFF.EBPP.1360.tim", "EFF.EBPP.1410.tim"],
-    "EFF.S110.2487.tim": ["EFF.EBPP.2639.tim", "EFF.EBPP.2639.tim"],
-    "JBO.ROACH.1520.tim": ["JBO.DFB.1400.tim", "JBO.DFB.1520.tim"],
-    "JBO.DFB.1520.tim": ["JBO.DFB.1400.tim"],
-    "NRT.NUPPI.1484.tim": ["NRT.BON.1400.tim", "NRT.BON.1600.tim"],
-    "NRT.NUPPI.1854.tim": ["NRT.BON.1600.tim", "NRT.BON.2000.tim"],
-    "NRT.NUPPI.2539.tim": ["NRT.BON.2000.tim"],
-}
 
 
 def _infer_freq_tol(freqs: np.ndarray, bw: Optional[float]) -> Optional[float]:
@@ -2580,7 +2702,8 @@ def find_duplicate_backend_timfiles(timfiles: Sequence[Path]) -> List[List[Path]
 
 def remove_overlaps_exact(
     psr_dir: Path,
-    overlap_map: Dict[str, List[str]] = OVERLAPPED_TIMFILES,
+    overlap_map: Optional[Dict[str, List[str]]] = None,
+    overlap_catalog_path: Optional[str] = None,
     apply: bool = False,
     backup: bool = True,
     dry_run: bool = False,
@@ -2592,7 +2715,9 @@ def remove_overlaps_exact(
 
     Args:
         psr_dir: Pulsar directory.
-        overlap_map: Mapping of keep -> drop backend tim basenames.
+        overlap_map: Mapping of keep -> drop backend tim basenames. If None, load
+            from ``overlap_catalog_path`` or default catalog path.
+        overlap_catalog_path: Optional TOML path for overlap map.
         apply: If True, write changes to disk.
         backup: If True, create a backup before writing.
         dry_run: If True, do not write but return planned changes.
@@ -2600,11 +2725,22 @@ def remove_overlaps_exact(
     Returns:
         Stats dictionary summarizing commented duplicates.
     """
+    loaded_from: Optional[str] = None
+    if overlap_map is None:
+        cat = Path(overlap_catalog_path) if overlap_catalog_path else _default_overlap_exact_catalog_path()
+        if not cat.is_absolute():
+            cat = psr_dir.parent / cat
+        if cat.exists():
+            overlap_map = _load_overlap_exact_catalog(cat)
+            loaded_from = str(cat)
+        else:
+            overlap_map = {}
+
     tims_by_name = {t.name: t for t in list_backend_timfiles(psr_dir)}
     changed_files = []
     total_commented = 0
 
-    for retain_name, drop_list in overlap_map.items():
+    for retain_name, drop_list in (overlap_map or {}).items():
         retain = tims_by_name.get(retain_name)
         if retain is None:
             continue
@@ -2652,11 +2788,10 @@ def remove_overlaps_exact(
                         _backup_file(drop)
                     drop.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
-    return {"changed_files": changed_files, "commented": int(total_commented)}
-
-
-_WSRT_P2_RE = re.compile(r"^(WSRT\.P2\.\d+)(?:_2)?\.tim$", re.IGNORECASE)
-
+    rep = {"changed_files": changed_files, "commented": int(total_commented)}
+    if loaded_from is not None:
+        rep["overlap_catalog"] = loaded_from
+    return rep
 
 def _parse_toa_records(
     timfile: Path,
@@ -2712,70 +2847,71 @@ def _dual_channel_epoch_map(
     return epochs
 
 
-def wsrt_p2_prefer_dual_channel(
+def prefer_multichannel_pair_rule(
     psr_dir: Path,
     *,
+    primary_glob: str,
+    secondary_glob: str,
     mjd_tol_sec: float = 0.99e-6,
     action: str = "comment",
-    comment_prefix: str = "C WSRT_P2_PREFER_DUAL",
+    comment_prefix: str = "C RULE_PREFER_MULTICHANNEL",
     apply: bool = False,
     backup: bool = True,
     dry_run: bool = False,
 ) -> Dict[str, object]:
-    """Prefer dual-channel WSRT P2 TOAs over single-channel duplicates.
+    """Generic overlap rule: prefer file with dual-channel epochs in file pairs.
 
-    For each WSRT.P2.<band> pair (``*.tim`` vs ``*_2.tim``), detect which file
-    contains dual-channel epochs (same file token + MJD within tolerance, two
-    distinct frequencies). In the other file, TOAs at those epochs are treated
-    as duplicates and handled by ``action``.
+    Pairing logic:
+    - files matching ``primary_glob`` create canonical keys by filename.
+    - files matching ``secondary_glob`` are paired to primary by removing one
+      trailing ``_2`` before ``.tim`` (e.g. ``WSRT.P2.1380_2.tim`` -> ``WSRT.P2.1380.tim``).
     """
     mode = str(action or "comment").strip().lower()
     if mode not in {"comment", "delete"}:
         mode = "comment"
     tol_days = float(mjd_tol_sec) / 86400.0
-    tims_by_name = {t.name: t for t in list_backend_timfiles(psr_dir)}
+    tims = list_backend_timfiles(psr_dir)
 
-    keys: Dict[str, Dict[str, Path]] = {}
-    for name, tpath in tims_by_name.items():
-        m = _WSRT_P2_RE.match(name)
-        if not m:
-            continue
-        key = m.group(1)
-        bucket = keys.setdefault(key, {})
-        if name.lower().endswith("_2.tim"):
-            bucket["alt"] = tpath
-        else:
-            bucket["base"] = tpath
+    primary_files = [t for t in tims if fnmatch(t.name, str(primary_glob))]
+    secondary_files = [t for t in tims if fnmatch(t.name, str(secondary_glob))]
+    primary_by_key = {p.name: p for p in primary_files}
+    secondary_by_key: Dict[str, Path] = {}
+    for t in secondary_files:
+        key = re.sub(r"_2(?=\\.tim$)", "", t.name, flags=re.IGNORECASE)
+        secondary_by_key[key] = t
+
+    pairs: List[Tuple[Path, Path]] = []
+    for key, base in sorted(primary_by_key.items()):
+        alt = secondary_by_key.get(key)
+        if alt is not None:
+            pairs.append((base, alt))
 
     changed_files: List[str] = []
     details: List[Dict[str, object]] = []
     total_affected = 0
 
-    for key, pair in sorted(keys.items()):
-        base = pair.get("base")
-        alt = pair.get("alt")
-        if base is None or alt is None:
-            continue
+    for primary, secondary in pairs:
+        p_lines, p_recs = _parse_toa_records(primary)
+        s_lines, s_recs = _parse_toa_records(secondary)
+        p_dual = _dual_channel_epoch_map(p_recs, tol_days)
+        s_dual = _dual_channel_epoch_map(s_recs, tol_days)
+        p_dual_count = sum(len(v) for v in p_dual.values())
+        s_dual_count = sum(len(v) for v in s_dual.values())
 
-        base_lines, base_recs = _parse_toa_records(base)
-        alt_lines, alt_recs = _parse_toa_records(alt)
-        base_dual = _dual_channel_epoch_map(base_recs, tol_days)
-        alt_dual = _dual_channel_epoch_map(alt_recs, tol_days)
-        base_dual_count = sum(len(v) for v in base_dual.values())
-        alt_dual_count = sum(len(v) for v in alt_dual.values())
-
-        if base_dual_count == 0 and alt_dual_count == 0:
-            details.append({"pair": [base.name, alt.name], "skipped": "no_dual_epochs"})
+        if p_dual_count == 0 and s_dual_count == 0:
+            details.append(
+                {"pair": [primary.name, secondary.name], "skipped": "no_dual_epochs"}
+            )
             continue
-        if base_dual_count > alt_dual_count:
-            dual_file, dual_epochs = base, base_dual
-            single_file, single_lines, single_recs = alt, alt_lines, alt_recs
-        elif alt_dual_count > base_dual_count:
-            dual_file, dual_epochs = alt, alt_dual
-            single_file, single_lines, single_recs = base, base_lines, base_recs
+        if p_dual_count > s_dual_count:
+            dual_file, dual_epochs = primary, p_dual
+            single_file, single_lines, single_recs = secondary, s_lines, s_recs
+        elif s_dual_count > p_dual_count:
+            dual_file, dual_epochs = secondary, s_dual
+            single_file, single_lines, single_recs = primary, p_lines, p_recs
         else:
             details.append(
-                {"pair": [base.name, alt.name], "skipped": "ambiguous_dual_epochs"}
+                {"pair": [primary.name, secondary.name], "skipped": "ambiguous_dual_epochs"}
             )
             continue
 
@@ -2796,7 +2932,7 @@ def wsrt_p2_prefer_dual_channel(
         if not to_mark:
             details.append(
                 {
-                    "pair": [base.name, alt.name],
+                    "pair": [primary.name, secondary.name],
                     "dual_file": dual_file.name,
                     "single_file": single_file.name,
                     "affected": 0,
@@ -2821,7 +2957,7 @@ def wsrt_p2_prefer_dual_channel(
         changed_files.append(str(single_file))
         details.append(
             {
-                "pair": [base.name, alt.name],
+                "pair": [primary.name, secondary.name],
                 "dual_file": dual_file.name,
                 "single_file": single_file.name,
                 "affected": len(to_mark),
@@ -2835,7 +2971,36 @@ def wsrt_p2_prefer_dual_channel(
 
     result_key = "commented" if mode == "comment" else "deleted"
     return {
+        "primary_glob": str(primary_glob),
+        "secondary_glob": str(secondary_glob),
         "changed_files": changed_files,
         result_key: int(total_affected),
         "pairs": details,
     }
+
+
+def wsrt_p2_prefer_dual_channel(
+    psr_dir: Path,
+    *,
+    mjd_tol_sec: float = 0.99e-6,
+    action: str = "comment",
+    comment_prefix: str = "C WSRT_P2_PREFER_DUAL",
+    apply: bool = False,
+    backup: bool = True,
+    dry_run: bool = False,
+) -> Dict[str, object]:
+    """Prefer dual-channel WSRT P2 TOAs over single-channel duplicates.
+
+    Legacy wrapper around the generic ``prefer_multichannel_pair_rule``.
+    """
+    return prefer_multichannel_pair_rule(
+        psr_dir,
+        primary_glob="WSRT.P2.*.tim",
+        secondary_glob="WSRT.P2.*_2.tim",
+        mjd_tol_sec=mjd_tol_sec,
+        action=action,
+        comment_prefix=comment_prefix,
+        apply=apply,
+        backup=backup,
+        dry_run=dry_run,
+    )

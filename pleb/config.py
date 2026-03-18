@@ -452,6 +452,8 @@ class PipelineConfig:
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_relabel_rules_path: Declarative TOA relabel rules TOML (optional).
+        fix_overlap_rules_path: Declarative overlap rules TOML (optional).
+        fix_overlap_exact_catalog_path: TOML keep->drop map for exact overlap removal.
         fix_jump_reference_variants: Build per-variant reference-system jump parfiles.
         fix_jump_reference_keep_tmp: Keep temporary split tim/par files.
         fix_jump_reference_jump_flag: Jump flag used in generated variant parfiles.
@@ -692,6 +694,8 @@ class PipelineConfig:
     fix_backend_classifications_path: Optional[str] = None
     fix_alltim_variants_path: Optional[str] = None
     fix_relabel_rules_path: Optional[str] = None
+    fix_overlap_rules_path: Optional[str] = None
+    fix_overlap_exact_catalog_path: Optional[str] = None
     fix_jump_reference_variants: bool = False
     fix_jump_reference_keep_tmp: bool = False
     fix_jump_reference_jump_flag: str = "-sys"
@@ -848,6 +852,14 @@ class PipelineConfig:
             c.fix_relabel_rules_path = (
                 Path(c.fix_relabel_rules_path).expanduser().resolve()
             )
+        if c.fix_overlap_rules_path is not None:
+            c.fix_overlap_rules_path = (
+                Path(c.fix_overlap_rules_path).expanduser().resolve()
+            )
+        if c.fix_overlap_exact_catalog_path is not None:
+            c.fix_overlap_exact_catalog_path = (
+                Path(c.fix_overlap_exact_catalog_path).expanduser().resolve()
+            )
         if c.ingest_mapping_file is not None:
             c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
         if c.ingest_output_dir is not None:
@@ -891,6 +903,12 @@ class PipelineConfig:
             d["fix_alltim_variants_path"] = str(d["fix_alltim_variants_path"])
         if d.get("fix_relabel_rules_path") is not None:
             d["fix_relabel_rules_path"] = str(d["fix_relabel_rules_path"])
+        if d.get("fix_overlap_rules_path") is not None:
+            d["fix_overlap_rules_path"] = str(d["fix_overlap_rules_path"])
+        if d.get("fix_overlap_exact_catalog_path") is not None:
+            d["fix_overlap_exact_catalog_path"] = str(
+                d["fix_overlap_exact_catalog_path"]
+            )
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -1160,6 +1178,8 @@ class PipelineConfig:
             ),
             fix_alltim_variants_path=opt_str("fix_alltim_variants_path"),
             fix_relabel_rules_path=opt_str("fix_relabel_rules_path"),
+            fix_overlap_rules_path=opt_str("fix_overlap_rules_path"),
+            fix_overlap_exact_catalog_path=opt_str("fix_overlap_exact_catalog_path"),
             fix_jump_reference_variants=bool(
                 d.get("fix_jump_reference_variants", False)
             ),

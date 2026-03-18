@@ -97,7 +97,7 @@ Trigger:
 
 .. code-block:: bash
 
-   pleb --config configs/settings/test_all_steps.toml
+   pleb --config configs/runs/pipeline/test_all_steps.toml
 
 Key config flags:
 
@@ -145,7 +145,7 @@ Trigger:
 
 .. code-block:: bash
 
-   pleb --config configs/settings/test_all_steps.toml --param-scan --scan-typical
+   pleb --config configs/runs/pipeline/test_all_steps.toml --param-scan --scan-typical
 
 Notes:
 
@@ -173,7 +173,7 @@ Trigger:
 
 .. code-block:: bash
 
-   pleb ingest --mapping configs/settings/system_flag_mapping.example.json \
+   pleb ingest --mapping configs/catalogs/system_flags/system_flag_mapping.example.json \
      --output-dir /data/pulsars
 
 Notes:
@@ -196,7 +196,7 @@ Trigger:
 
 .. code-block:: bash
 
-   pleb --config configs/settings/test_all_steps.toml --set fix_apply=true
+   pleb --config configs/runs/pipeline/test_all_steps.toml --set fix_apply=true
 
 Workflow permutations
 ---------------------

@@ -124,7 +124,7 @@ Run mapping-driven ingest:
 
 .. code-block:: bash
 
-   pleb ingest --mapping configs/settings/system_flag_mapping.example.json \
+   pleb ingest --mapping configs/catalogs/system_flags/system_flag_mapping.example.json \
      --output-dir /data/pulsars
 
 Workflow subcommand

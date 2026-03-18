@@ -1,0 +1,41 @@
+# Declarative relabel rules for FixDataset.
+# Use with:
+#   --set fix_relabel_rules_path="/work/git_projects/pleb/configs/rules/relabel/relabel_rules.example.toml"
+
+[[rules]]
+name = "wsrt_p2_334_epoch_a"
+enabled = true
+tim_glob = "WSRT.P2.350.tim"
+match_sys = ["WSRT.P2.334"]
+mjd_min = 57000.0
+mjd_max = 57100.0
+set_sys = "WSRT.P2.334.A"
+set_group = "WSRT.P2.334.A"
+
+[[rules]]
+name = "wsrt_p2_334_epoch_b"
+enabled = true
+tim_glob = "WSRT.P2.350.tim"
+match_sys = ["WSRT.P2.334"]
+mjd_min = 57100.0
+set_sys = "WSRT.P2.334.B"
+set_group = "WSRT.P2.334.B"
+
+[[rules]]
+name = "wsrt_p2_366_epoch_a"
+enabled = true
+tim_glob = "WSRT.P2.350.tim"
+match_sys = ["WSRT.P2.366"]
+mjd_min = 57000.0
+mjd_max = 57100.0
+set_sys = "WSRT.P2.366.A"
+set_group = "WSRT.P2.366.A"
+
+[[rules]]
+name = "wsrt_p2_366_epoch_b"
+enabled = true
+tim_glob = "WSRT.P2.350.tim"
+match_sys = ["WSRT.P2.366"]
+mjd_min = 57100.0
+set_sys = "WSRT.P2.366.B"
+set_group = "WSRT.P2.366.B"

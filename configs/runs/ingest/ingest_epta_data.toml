@@ -1,6 +1,6 @@
 # Ingest-only configuration (usable with: pleb ingest --config <this file>)
 
-ingest_mapping_file = "/work/git_projects/pleb/configs/settings/ingest_mapping_epta_data.json"
+ingest_mapping_file = "/work/git_projects/pleb/configs/catalogs/ingest/ingest_mapping_epta_data.json"
 ingest_output_dir = "/work/git_projects/epta-dr3-in2p3/EPTA-DR3/epta-dr3-data/"
 
 # Optional checks/commit behavior

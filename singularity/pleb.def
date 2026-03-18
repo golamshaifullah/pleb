@@ -14,13 +14,11 @@ From: /work/git_projects/PSR_Singularity/psrpta.sif
     export PIP_DISABLE_PIP_VERSION_CHECK=1
     export PIP_IGNORE_REQUIRES_PYTHON=1
 
-    mkdir -p /opt/pleb_data/configs/settings
-    mkdir -p /opt/pleb_data/configs/workflows
+    mkdir -p /opt/pleb_data/configs
     mkdir -p /opt/pleb_data/results
     mkdir -p /opt/pleb_data/logs
 
-    cp -a /opt/pleb/configs/settings/. /opt/pleb_data/configs/settings/
-    cp -a /opt/pleb/configs/workflows/. /opt/pleb_data/configs/workflows/
+    cp -a /opt/pleb/configs/. /opt/pleb_data/configs/
 
     python3 -m pip install -e /opt/pqc
     python3 -m pip install -e /opt/pleb[plot,gui,qc]

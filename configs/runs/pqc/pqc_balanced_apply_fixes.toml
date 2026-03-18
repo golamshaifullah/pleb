@@ -1,0 +1,130 @@
+# PQC-only balanced profile.
+# More conservative than feature_hunt, but still enables broad event detection.
+
+home_dir = "/work/git_projects/epta-dr3-in2p3"
+dataset_name = "EPTA-DR3/epta-dr3-data"
+results_dir = "results"
+singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
+
+branches = ["fix_dataset_discover_jumps_variants"]
+reference_branch = "fix_dataset_discover_jumps_variants"
+pulsars = "ALL"
+jobs = 12
+
+run_tempo2 = true
+make_plots = false
+make_reports = false
+make_covmat = false
+
+run_fix_dataset = true
+fix_apply = true
+fix_branch_name = "fixdataset_pqc_balanced_t2run"
+fix_base_branch = "fix_dataset_discover_jumps_variants"
+fix_commit_message = "FixDataset: pqc balanced + alltim variants with tempo2 run turned on."
+
+fix_generate_alltim_variants = true
+fix_backend_classifications_path = "/work/git_projects/pleb/configs/catalogs/variants/backend_classifications_legacy_new.toml"
+fix_alltim_variants_path = "/work/git_projects/pleb/configs/catalogs/variants/alltim_variants_legacy_new.toml"
+
+run_pqc = true
+qc_report = true
+qc_report_backend_col = "sys"
+
+# Core grouping / merge
+pqc_backend_col = "sys"
+pqc_drop_unmatched = false
+pqc_merge_tol_seconds = 10.0
+
+# Feature engineering
+pqc_add_orbital_phase = true
+pqc_add_solar_elongation = true
+pqc_add_elevation = true
+pqc_add_airmass = true
+pqc_add_parallactic_angle = true
+pqc_add_freq_bin = true
+pqc_freq_bins = 20
+pqc_observatory_path = "/work/mambaforge/envs/pta_pipeline/observatory/observatories.dat"
+
+# Structure diagnostics
+pqc_structure_mode = "both"
+pqc_structure_detrend_features = ["solar_elongation_deg", "orbital_phase", "freq_bin"]
+pqc_structure_test_features = ["solar_elongation_deg", "orbital_phase", "freq_bin"]
+pqc_structure_group_cols = "sys"
+pqc_structure_nbins = 12
+pqc_structure_min_per_bin = 3
+pqc_structure_p_thresh = 0.01
+
+# Robust outlier diagnostics
+pqc_robust_enabled = true
+pqc_robust_scope = "backend"
+pqc_robust_z_thresh = 3.0
+pqc_outlier_gate_enabled = false
+pqc_event_instrument = true
+
+# Generic transient controls
+pqc_tau_corr_minutes = 30.0
+pqc_fdr_q = 0.01
+pqc_mark_only_worst_per_day = true
+pqc_tau_rec_days = 7.0
+pqc_window_mult = 5.0
+pqc_min_points = 6
+pqc_delta_chi2_thresh = 25.0
+pqc_exp_dip_min_duration_days = 21.0
+
+# Step detectors (balanced)
+pqc_step_enabled = false
+pqc_step_min_points = 20
+pqc_step_delta_chi2_thresh = 25.0
+pqc_step_scope = "both"
+
+pqc_dm_step_enabled = false
+pqc_dm_step_min_points = 20
+pqc_dm_step_delta_chi2_thresh = 25.0
+pqc_dm_step_scope = "both"
+
+# Solar / eclipse
+pqc_solar_events_enabled = true
+pqc_solar_approach_max_deg = 30.0
+pqc_solar_min_points_global = 30
+pqc_solar_min_points_year = 10
+pqc_solar_min_points_near_zero = 3
+pqc_solar_tau_min_deg = 2.0
+pqc_solar_tau_max_deg = 60.0
+pqc_solar_member_eta = 1.0
+pqc_solar_freq_dependence = true
+
+pqc_orbital_phase_cut_enabled = true
+pqc_orbital_phase_cut_center = 0.25
+pqc_orbital_phase_cut = ""
+pqc_orbital_phase_cut_sigma = 3.0
+pqc_orbital_phase_cut_nbins = 18
+pqc_orbital_phase_cut_min_points = 20
+
+pqc_eclipse_events_enabled = true
+pqc_eclipse_center_phase = 0.25
+pqc_eclipse_min_points = 30
+pqc_eclipse_width_min = 0.01
+pqc_eclipse_width_max = 0.5
+pqc_eclipse_member_eta = 1.0
+pqc_eclipse_freq_dependence = true
+
+# Gaussian bumps / glitches
+pqc_gaussian_bump_enabled = true
+pqc_gaussian_bump_min_duration_days = 60.0
+pqc_gaussian_bump_max_duration_days = 1500.0
+pqc_gaussian_bump_n_durations = 6
+pqc_gaussian_bump_min_points = 20
+pqc_gaussian_bump_delta_chi2_thresh = 25.0
+pqc_gaussian_bump_suppress_overlap = true
+pqc_gaussian_bump_member_eta = 1.0
+pqc_gaussian_bump_freq_dependence = true
+
+pqc_glitch_enabled = true
+pqc_glitch_min_points = 30
+pqc_glitch_delta_chi2_thresh = 25.0
+pqc_glitch_suppress_overlap = true
+pqc_glitch_member_eta = 1.0
+pqc_glitch_peak_tau_days = 30.0
+pqc_glitch_noise_k = 1.0
+pqc_glitch_mean_window_days = 180.0
+pqc_glitch_min_duration_days = 1000.0

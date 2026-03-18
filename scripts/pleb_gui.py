@@ -686,7 +686,7 @@ def main() -> None:
         st.markdown("### Settings Form (schema-driven)")
         schema_path = st.text_input(
             "Settings schema path",
-            value="configs/settings/gui_schema.json",
+            value="configs/schemas/gui_schema.json",
         )
         schema = _load_gui_schema(schema_path)
         _render_settings_form(schema)

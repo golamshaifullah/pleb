@@ -1,0 +1,58 @@
+[classifications]
+legacy = [
+  "EFF.EBPP.1360",
+  "EFF.EBPP.1410",
+  "EFF.EBPP.2639",
+  "JBO.DFB.1520",
+  "NRT.BON.1400",
+  "NRT.BON.1600",
+  "NRT.BON.2000",
+  "WSRT.P1.328",
+  "WSRT.P1.382",
+  "JBO.DFB.1400",
+  "WSRT.P1.1380",
+  "WSRT.P1.323",
+  "WSRT.P1.367",
+  "WSRT.P1.1380.1",
+  "WSRT.P1.1380.2",
+  "NRT.BON.1200",
+  "JBO.DFB.5000",
+  "WSRT.P1.2273",
+  "WSRT.P1.840",
+  "NRT.DDS.1400",
+]
+
+new = [
+  "EFF.P200.1365",
+  "EFF.P200.1425",
+  "EFF.P217.1365",
+  "EFF.P217.1425",
+  "EFF.S110.2487",
+  "EFF.S60.4857",
+  "LEAP.1396",
+  "EFF.EDD.1400",
+  "EFF.EDD.2734",
+  "NRT.NUPPI.1292",
+  "NRT.NUPPI.1420",
+  "NRT.NUPPI.1548",
+  "NRT.NUPPI.1676",
+  "NRT.NUPPI.1662",
+  "NRT.NUPPI.1790",
+  "NRT.NUPPI.1918",
+  "NRT.NUPPI.2046",
+  "NRT.NUPPI.1962",
+  "NRT.NUPPI.2090",
+  "NRT.NUPPI.2218",
+  "NRT.NUPPI.2346",
+  "NRT.NUPPI.2411",
+  "NRT.NUPPI.2667",
+  "WSRT.P2.350",
+  "WSRT.P2.1380",
+  "WSRT.P2.2273"
+]
+
+[overrides.timfile_class]
+"NRT.NUPPI.1484.tim" = "new"
+"NRT.NUPPI.1854.tim" = "new"
+"NRT.NUPPI.2154.tim" = "new"
+"NRT.NUPPI.2539.tim" = "new"

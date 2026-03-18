@@ -35,13 +35,13 @@ pip install "git+https://github.com/golamshaifullah/pleb.git"
 Minimal pipeline run:
 
 ```bash
-pleb --config configs/settings/epta-dr3.toml
+pleb --config configs/runs/pipeline/epta-dr3-v0.toml
 ```
 
 Mapping-driven ingest:
 
 ```bash
-pleb ingest --config configs/settings/ingest_eptadr3.toml
+pleb ingest --config configs/runs/ingest/ingest_eptadr3.toml
 ```
 
 Run a workflow:
@@ -53,7 +53,7 @@ pleb workflow --file configs/workflows/ingest_eptadr3.toml
 All TOML keys are also available as CLI overrides; CLI values always win:
 
 ```bash
-pleb --config configs/settings/epta-dr3.toml --set jobs=8 --set run_fix_dataset=true
+pleb --config configs/runs/pipeline/epta-dr3-v0.toml --set jobs=8 --set run_fix_dataset=true
 ```
 
 ## Development

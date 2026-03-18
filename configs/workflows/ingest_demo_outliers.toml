@@ -4,12 +4,12 @@
 # - ingest_output_dir
 # - fix_qc_results_dir (points at qc outputs from the pipeline step)
 
-config = "configs/settings/ingest_demo.toml"
+config = "configs/runs/ingest/ingest_demo.toml"
 
 steps = [
   { name = "ingest", overrides = {
       ingest_output_dir = "/work/git_projects/epta_dir",
-      ingest_mapping_file = "configs/settings/ingest_demo_mapping.json",
+      ingest_mapping_file = "configs/catalogs/ingest/ingest_demo_mapping.json",
       ingest_commit_branch_name = "main",
       ingest_commit_base_branch = "main",
       ingest_commit_message = "Ingest: collected files",

@@ -1,0 +1,43 @@
+# FixDataset profile: enforce default parfile values (and add if missing)
+# Usage:
+#   pleb --config /work/git_projects/pleb/configs/runs/fixdataset/fixdataset_par_defaults.toml
+
+home_dir = "/work/git_projects/epta-dr3-in2p3"
+dataset_name = "EPTA-DR3/epta-dr3-data"
+results_dir = "results"
+singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
+
+reference_branch = "fix_dataset_discover_jumps_variants"
+jobs = 10
+
+# Keep pipeline stages off; run only FixDataset.
+run_tempo2 = false
+make_plots = false
+make_reports = false
+make_covmat = false
+run_pqc = false
+qc_report = false
+
+run_fix_dataset = true
+fix_apply = true
+fix_branch_name = "fix_dataset_par_defaults"
+fix_base_branch = "fix_dataset_discover_jumps_variants"
+fix_commit_message = "FixDataset: enforce par defaults (EPHEM/CLK/NE_SW)"
+
+fix_backup = false
+fix_dry_run = false
+
+# Core: enforce/add these in each .par
+fix_ensure_ephem = "DE440"
+fix_ensure_clk = "TT(BIPM2024)"
+fix_ensure_ne_sw = "7.9"
+fix_force_ne_sw_overwrite = false
+
+# Keep unrelated fix actions off.
+fix_update_alltim_includes = false
+fix_infer_system_flags = false
+fix_insert_missing_jumps = false
+fix_prune_stale_jumps = false
+fix_dedupe_toas_within_tim = false
+fix_check_duplicate_backend_tims = false
+fix_generate_alltim_variants = false

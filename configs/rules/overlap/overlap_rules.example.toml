@@ -1,0 +1,21 @@
+# Declarative overlap rules for FixDataset.
+# Usage:
+#   --set fix_overlap_rules_path="configs/rules/overlap/overlap_rules.example.toml"
+
+[[rules]]
+name = "wsrt_p2_prefer_dual_channel"
+enabled = true
+kind = "prefer_multichannel"
+
+# Pairing is done by matching primary files, then mapping secondary
+# filenames by removing one trailing "_2" before ".tim".
+primary_glob = "WSRT.P2.*.tim"
+secondary_glob = "WSRT.P2.*_2.tim"
+
+# Duplicate match tolerance in seconds (MJD-domain comparison).
+mjd_tol_sec = 9.9e-7
+
+# "comment" (default) or "delete"
+action = "comment"
+comment_prefix = "C WSRT_P2_PREFER_DUAL"
+

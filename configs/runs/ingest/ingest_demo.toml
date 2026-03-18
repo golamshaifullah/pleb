@@ -612,7 +612,7 @@ max_covmat_params = ""
 # ---- Ingest mode (mapping-driven) ----
 # ingest_mapping_file: JSON mapping file path. allowed: string or empty. default: "" -> None
 #   Mapping is required for ingest mode; no autoparse is performed. Unmapped backends error unless ignored.
-ingest_mapping_file = "configs/settings/ingest_demo_mapping.json"
+ingest_mapping_file = "configs/catalogs/ingest/ingest_demo_mapping.json"
 # ingest_output_dir: output root for ingest. allowed: string or empty. default: "" -> None
 #   Output structure: JNAME/JNAME.par, JNAME/JNAME_all.tim, tims/TEL.BE.CENFREQ.tim, tmplts/<orig>.
 ingest_output_dir = "/work/git_projects/epta_pleb"

@@ -42,7 +42,7 @@ Then:
 JSON schema
 -----------
 
-Schema file: ``configs/ingest_mapping.schema.json``.
+Schema file: ``configs/schemas/ingest_mapping.schema.json``.
 
 .. code-block:: json
 

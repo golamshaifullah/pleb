@@ -1,4 +1,4 @@
-config = "/work/git_projects/pleb/configs/settings/ingest_eptadr3.toml"
+config = "configs/runs/ingest/ingest_eptadr3.toml"
 
 [[loops]]
 name = "ingest_then_fix"

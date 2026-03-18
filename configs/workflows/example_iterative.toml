@@ -1,4 +1,4 @@
-config = "configs/settings/test_all_steps.toml"
+config = "configs/runs/pipeline/test_all_steps.toml"
 
 [[loops]]
 name = "get_jumps"
