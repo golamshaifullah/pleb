@@ -19,9 +19,15 @@ import json
 import subprocess
 import sys
 import os
+from fnmatch import fnmatch
 from contextlib import contextmanager
+import re
 
 import pandas as pd
+try:  # Python 3.11+
+    import tomllib
+except Exception:  # pragma: no cover
+    tomllib = None  # type: ignore
 
 from .logging_utils import get_logger
 
@@ -102,6 +108,7 @@ class PTAQCConfig:
         glitch_noise_k: Noise-aware threshold multiplier.
         glitch_mean_window_days: Rolling-mean window (days) for zero-crossing.
         glitch_min_duration_days: Minimum glitch duration (days).
+        backend_profiles_path: Optional TOML file with per-backend pqc overrides.
     """
 
     backend_col: str = "group"
@@ -227,6 +234,7 @@ class PTAQCConfig:
     glitch_noise_k: float = 1.0
     glitch_mean_window_days: float = 180.0
     glitch_min_duration_days: float = 1000.0
+    backend_profiles_path: str | None = None
 
 
 @contextmanager
@@ -240,6 +248,165 @@ def _pushd(path: Path):
         yield
     finally:
         os.chdir(old)
+
+
+def _load_backend_profiles(path: Path) -> list[tuple[str, Dict[str, Any]]]:
+    """Load per-backend PQC override profiles from TOML.
+
+    TOML format:
+        [backend_profiles]
+        "LOFAR.*" = { robust_z_thresh = 6.0, fdr_q = 0.02 }
+        "WSRT.P2.334" = { delta_chi2_thresh = 18.0 }
+    """
+    if tomllib is None:
+        raise RuntimeError("tomllib unavailable; Python 3.11+ required.")
+    data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+    raw = data.get("backend_profiles", {})
+    out: list[tuple[str, Dict[str, Any]]] = []
+    if not isinstance(raw, dict):
+        return out
+    for patt, vals in raw.items():
+        p = str(patt).strip()
+        if not p or not isinstance(vals, dict):
+            continue
+        out.append((p, dict(vals)))
+    return out
+
+
+def _match_backend_overrides(
+    backend_value: str, profiles: list[tuple[str, Dict[str, Any]]]
+) -> Dict[str, Any]:
+    """Resolve profile overrides for a backend value.
+
+    Priority:
+    1) exact match
+    2) fnmatch glob match (in declaration order)
+    """
+    out: Dict[str, Any] = {}
+    for patt, vals in profiles:
+        if patt == backend_value:
+            out.update(vals)
+    if out:
+        return out
+    for patt, vals in profiles:
+        if fnmatch(backend_value, patt):
+            out.update(vals)
+    return out
+
+
+def _extract_flag_value(line: str, flag: str) -> Optional[str]:
+    parts = line.strip().split()
+    if flag not in parts:
+        return None
+    i = parts.index(flag)
+    if i + 1 >= len(parts):
+        return None
+    return str(parts[i + 1])
+
+
+def _is_toa_line(raw: str) -> bool:
+    s = raw.strip()
+    if not s:
+        return False
+    if s.startswith(("C", "#")):
+        return False
+    head = s.split()[0]
+    return head not in {
+        "FORMAT",
+        "MODE",
+        "TIME",
+        "EFAC",
+        "EQUAD",
+        "ECORR",
+        "JUMP",
+        "INCLUDE",
+        "SKIP",
+        "TRACK",
+        "PHASE",
+        "FREQ",
+        "SCALE",
+        "T2EFAC",
+        "T2EQUAD",
+    }
+
+
+def _prepare_backend_filtered_par(
+    parfile: Path,
+    backend_col: str,
+    backend_value: str,
+    work_dir: Path,
+) -> Optional[Path]:
+    """Create a temporary par/all.tim pair filtered to one backend value."""
+    psr = parfile.stem
+    alltim = parfile.with_name(f"{psr}_all.tim")
+    if not alltim.exists():
+        return None
+
+    flag = backend_col if backend_col.startswith("-") else f"-{backend_col}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    tmp_par = work_dir / parfile.name
+    tmp_all = work_dir / alltim.name
+    tmp_par.write_text(parfile.read_text(encoding="utf-8", errors="ignore"), encoding="utf-8")
+
+    include_lines: list[str] = []
+    direct_toas: list[str] = []
+    for raw in alltim.read_text(encoding="utf-8", errors="ignore").splitlines():
+        s = raw.strip()
+        if s.startswith("INCLUDE"):
+            parts = s.split(maxsplit=1)
+            if len(parts) == 2:
+                include_lines.append(parts[1].strip())
+        elif _is_toa_line(raw):
+            v = _extract_flag_value(raw, flag)
+            if v == backend_value:
+                direct_toas.append(raw.rstrip("\n"))
+
+    filtered_includes: list[str] = []
+    for rel in include_lines:
+        src = alltim.parent / rel
+        if not src.exists():
+            continue
+        kept: list[str] = []
+        for raw in src.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if not _is_toa_line(raw):
+                kept.append(raw.rstrip("\n"))
+                continue
+            v = _extract_flag_value(raw, flag)
+            if v == backend_value:
+                kept.append(raw.rstrip("\n"))
+        if not any(_is_toa_line(x) for x in kept):
+            continue
+        dst = work_dir / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        filtered_includes.append(rel)
+
+    if not filtered_includes and not direct_toas:
+        return None
+
+    out_lines = ["FORMAT 1"]
+    if direct_toas:
+        direct_file = work_dir / "__direct.tim"
+        direct_file.write_text("\n".join(direct_toas) + "\n", encoding="utf-8")
+        out_lines.append("INCLUDE __direct.tim")
+    for rel in filtered_includes:
+        out_lines.append(f"INCLUDE {rel}")
+    tmp_all.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    return tmp_par
+
+
+def _row_key_series(df: pd.DataFrame, backend_col: str) -> pd.Series:
+    b = df.get(backend_col, pd.Series([""] * len(df), index=df.index)).astype(str)
+    mjd = pd.to_numeric(df.get("mjd", pd.Series([pd.NA] * len(df), index=df.index)), errors="coerce").round(12)
+    freq = pd.to_numeric(df.get("freq", pd.Series([pd.NA] * len(df), index=df.index)), errors="coerce").round(6)
+    if "_timfile" in df.columns:
+        t = df["_timfile"].astype(str)
+    elif "filename" in df.columns:
+        t = df["filename"].astype(str)
+    else:
+        t = pd.Series([""] * len(df), index=df.index)
+    return b + "|" + mjd.astype(str) + "|" + freq.astype(str) + "|" + t
 
 
 def run_pqc_for_parfile(
@@ -313,180 +480,226 @@ def run_pqc_for_parfile(
             "If you're installing from a local zip/folder: pip install <path-to-pqc>."
         ) from e
 
-    merge_cfg = MergeConfig(tol_days=float(cfg.merge_tol_seconds) / 86400.0)
-    bad_cfg = BadMeasConfig(
-        tau_corr_days=float(cfg.tau_corr_minutes) / (60.0 * 24.0),
-        fdr_q=float(cfg.fdr_q),
-        mark_only_worst_per_day=bool(cfg.mark_only_worst_per_day),
-    )
-    tr_cfg = TransientConfig(
-        tau_rec_days=float(cfg.tau_rec_days),
-        window_mult=float(cfg.window_mult),
-        min_points=int(cfg.min_points),
-        delta_chi2_thresh=float(cfg.delta_chi2_thresh),
-        suppress_overlap=bool(cfg.suppress_overlap),
-        instrument=bool(cfg.event_instrument),
-    )
-    dip_cfg = ExpDipConfig(min_duration_days=float(cfg.exp_dip_min_duration_days))
-    feature_cfg = FeatureConfig(
-        add_orbital_phase=bool(cfg.add_orbital_phase),
-        add_solar_elongation=bool(cfg.add_solar_elongation),
-        add_elevation=bool(cfg.add_elevation),
-        add_airmass=bool(cfg.add_airmass),
-        add_parallactic_angle=bool(cfg.add_parallactic_angle),
-        add_freq_bin=bool(cfg.add_freq_bin),
-        freq_bins=int(cfg.freq_bins),
-        observatory_path=(str(cfg.observatory_path) if cfg.observatory_path else None),
-    )
-    struct_cfg = StructureConfig(
-        mode=str(cfg.structure_mode),
-        detrend_features=(
-            tuple(cfg.structure_detrend_features)
-            if cfg.structure_detrend_features
-            else StructureConfig().detrend_features
-        ),
-        structure_features=(
-            tuple(cfg.structure_test_features)
-            if cfg.structure_test_features
-            else StructureConfig().structure_features
-        ),
-        nbins=int(cfg.structure_nbins),
-        min_per_bin=int(cfg.structure_min_per_bin),
-        p_thresh=float(cfg.structure_p_thresh),
-        circular_features=(
-            tuple(cfg.structure_circular_features)
-            if cfg.structure_circular_features
-            else StructureConfig().circular_features
-        ),
-        structure_group_cols=(
-            tuple(cfg.structure_group_cols) if cfg.structure_group_cols else None
-        ),
-    )
-
-    step_cfg = StepConfig(
-        enabled=bool(cfg.step_enabled),
-        min_points=int(cfg.step_min_points),
-        delta_chi2_thresh=float(cfg.step_delta_chi2_thresh),
-        scope=str(cfg.step_scope),
-        instrument=bool(cfg.event_instrument),
-    )
-    dm_cfg = StepConfig(
-        enabled=bool(cfg.dm_step_enabled),
-        min_points=int(cfg.dm_step_min_points),
-        delta_chi2_thresh=float(cfg.dm_step_delta_chi2_thresh),
-        scope=str(cfg.dm_step_scope),
-        instrument=bool(cfg.event_instrument),
-    )
-    robust_cfg = RobustOutlierConfig(
-        enabled=bool(cfg.robust_enabled),
-        z_thresh=float(cfg.robust_z_thresh),
-        scope=str(cfg.robust_scope),
-    )
-    gate_cfg = OutlierGateConfig(
-        enabled=bool(cfg.outlier_gate_enabled),
-        sigma_thresh=float(cfg.outlier_gate_sigma),
-        resid_col=(
-            str(cfg.outlier_gate_resid_col) if cfg.outlier_gate_resid_col else None
-        ),
-        sigma_col=(
-            str(cfg.outlier_gate_sigma_col) if cfg.outlier_gate_sigma_col else None
-        ),
-    )
-    solar_cfg = SolarCutConfig(
-        enabled=bool(cfg.solar_events_enabled),
-        approach_max_deg=float(cfg.solar_approach_max_deg),
-        min_points_global=int(cfg.solar_min_points_global),
-        min_points_year=int(cfg.solar_min_points_year),
-        min_points_near_zero=int(cfg.solar_min_points_near_zero),
-        tau_min_deg=float(cfg.solar_tau_min_deg),
-        tau_max_deg=float(cfg.solar_tau_max_deg),
-        member_eta=float(cfg.solar_member_eta),
-        freq_dependence=bool(cfg.solar_freq_dependence),
-        freq_alpha_min=float(cfg.solar_freq_alpha_min),
-        freq_alpha_max=float(cfg.solar_freq_alpha_max),
-        freq_alpha_tol=float(cfg.solar_freq_alpha_tol),
-        freq_alpha_max_iter=int(cfg.solar_freq_alpha_max_iter),
-    )
-    orbital_cfg = OrbitalPhaseCutConfig(
-        enabled=bool(cfg.orbital_phase_cut_enabled),
-        center_phase=float(cfg.orbital_phase_cut_center),
-        limit_phase=(
-            float(cfg.orbital_phase_cut) if cfg.orbital_phase_cut is not None else None
-        ),
-        sigma_thresh=float(cfg.orbital_phase_cut_sigma),
-        nbins=int(cfg.orbital_phase_cut_nbins),
-        min_points=int(cfg.orbital_phase_cut_min_points),
-    )
-    eclipse_cfg = EclipseConfig(
-        enabled=bool(cfg.eclipse_events_enabled),
-        center_phase=float(cfg.eclipse_center_phase),
-        min_points=int(cfg.eclipse_min_points),
-        width_min=float(cfg.eclipse_width_min),
-        width_max=float(cfg.eclipse_width_max),
-        member_eta=float(cfg.eclipse_member_eta),
-        freq_dependence=bool(cfg.eclipse_freq_dependence),
-        freq_alpha_min=float(cfg.eclipse_freq_alpha_min),
-        freq_alpha_max=float(cfg.eclipse_freq_alpha_max),
-        freq_alpha_tol=float(cfg.eclipse_freq_alpha_tol),
-        freq_alpha_max_iter=int(cfg.eclipse_freq_alpha_max_iter),
-    )
-    bump_cfg = GaussianBumpConfig(
-        enabled=bool(cfg.gaussian_bump_enabled),
-        min_duration_days=float(cfg.gaussian_bump_min_duration_days),
-        max_duration_days=float(cfg.gaussian_bump_max_duration_days),
-        n_durations=int(cfg.gaussian_bump_n_durations),
-        min_points=int(cfg.gaussian_bump_min_points),
-        delta_chi2_thresh=float(cfg.gaussian_bump_delta_chi2_thresh),
-        suppress_overlap=bool(cfg.gaussian_bump_suppress_overlap),
-        member_eta=float(cfg.gaussian_bump_member_eta),
-        freq_dependence=bool(cfg.gaussian_bump_freq_dependence),
-        freq_alpha_min=float(cfg.gaussian_bump_freq_alpha_min),
-        freq_alpha_max=float(cfg.gaussian_bump_freq_alpha_max),
-        freq_alpha_tol=float(cfg.gaussian_bump_freq_alpha_tol),
-        freq_alpha_max_iter=int(cfg.gaussian_bump_freq_alpha_max_iter),
-    )
-    glitch_cfg = GlitchConfig(
-        enabled=bool(cfg.glitch_enabled),
-        min_points=int(cfg.glitch_min_points),
-        delta_chi2_thresh=float(cfg.glitch_delta_chi2_thresh),
-        suppress_overlap=bool(cfg.glitch_suppress_overlap),
-        member_eta=float(cfg.glitch_member_eta),
-        peak_tau_days=float(cfg.glitch_peak_tau_days),
-        noise_k=float(cfg.glitch_noise_k),
-        mean_window_days=float(cfg.glitch_mean_window_days),
-        min_duration_days=float(cfg.glitch_min_duration_days),
-    )
-
-    if settings_out is None:
-        settings_out = (
-            out_csv.parent / "run_settings" / f"{parfile.stem}.pqc_settings.toml"
+    def _run_once(par_in: Path, cfg_in: PTAQCConfig, settings_path: Optional[Path]) -> pd.DataFrame:
+        merge_cfg = MergeConfig(tol_days=float(cfg_in.merge_tol_seconds) / 86400.0)
+        bad_cfg = BadMeasConfig(
+            tau_corr_days=float(cfg_in.tau_corr_minutes) / (60.0 * 24.0),
+            fdr_q=float(cfg_in.fdr_q),
+            mark_only_worst_per_day=bool(cfg_in.mark_only_worst_per_day),
         )
-    settings_out = Path(settings_out)
-    settings_out.parent.mkdir(parents=True, exist_ok=True)
-
-    # libstempo/tempo2 sometimes emit scratch outputs in the CWD; isolate per pulsar.
-    with _pushd(out_csv.parent):
-        df = qc_run(
-            parfile,
-            backend_col=str(cfg.backend_col),
-            bad_cfg=bad_cfg,
-            tr_cfg=tr_cfg,
-            dip_cfg=dip_cfg,
-            merge_cfg=merge_cfg,
-            feature_cfg=feature_cfg,
-            struct_cfg=struct_cfg,
-            step_cfg=step_cfg,
-            dm_cfg=dm_cfg,
-            robust_cfg=robust_cfg,
-            gate_cfg=gate_cfg,
-            solar_cfg=solar_cfg,
-            orbital_cfg=orbital_cfg,
-            eclipse_cfg=eclipse_cfg,
-            bump_cfg=bump_cfg,
-            glitch_cfg=glitch_cfg,
-            drop_unmatched=bool(cfg.drop_unmatched),
-            settings_out=settings_out,
+        tr_cfg = TransientConfig(
+            tau_rec_days=float(cfg_in.tau_rec_days),
+            window_mult=float(cfg_in.window_mult),
+            min_points=int(cfg_in.min_points),
+            delta_chi2_thresh=float(cfg_in.delta_chi2_thresh),
+            suppress_overlap=bool(cfg_in.suppress_overlap),
+            instrument=bool(cfg_in.event_instrument),
         )
+        dip_cfg = ExpDipConfig(min_duration_days=float(cfg_in.exp_dip_min_duration_days))
+        feature_cfg = FeatureConfig(
+            add_orbital_phase=bool(cfg_in.add_orbital_phase),
+            add_solar_elongation=bool(cfg_in.add_solar_elongation),
+            add_elevation=bool(cfg_in.add_elevation),
+            add_airmass=bool(cfg_in.add_airmass),
+            add_parallactic_angle=bool(cfg_in.add_parallactic_angle),
+            add_freq_bin=bool(cfg_in.add_freq_bin),
+            freq_bins=int(cfg_in.freq_bins),
+            observatory_path=(str(cfg_in.observatory_path) if cfg_in.observatory_path else None),
+        )
+        struct_cfg = StructureConfig(
+            mode=str(cfg_in.structure_mode),
+            detrend_features=(
+                tuple(cfg_in.structure_detrend_features)
+                if cfg_in.structure_detrend_features
+                else StructureConfig().detrend_features
+            ),
+            structure_features=(
+                tuple(cfg_in.structure_test_features)
+                if cfg_in.structure_test_features
+                else StructureConfig().structure_features
+            ),
+            nbins=int(cfg_in.structure_nbins),
+            min_per_bin=int(cfg_in.structure_min_per_bin),
+            p_thresh=float(cfg_in.structure_p_thresh),
+            circular_features=(
+                tuple(cfg_in.structure_circular_features)
+                if cfg_in.structure_circular_features
+                else StructureConfig().circular_features
+            ),
+            structure_group_cols=(
+                tuple(cfg_in.structure_group_cols) if cfg_in.structure_group_cols else None
+            ),
+        )
+
+        step_cfg = StepConfig(
+            enabled=bool(cfg_in.step_enabled),
+            min_points=int(cfg_in.step_min_points),
+            delta_chi2_thresh=float(cfg_in.step_delta_chi2_thresh),
+            scope=str(cfg_in.step_scope),
+            instrument=bool(cfg_in.event_instrument),
+        )
+        dm_cfg = StepConfig(
+            enabled=bool(cfg_in.dm_step_enabled),
+            min_points=int(cfg_in.dm_step_min_points),
+            delta_chi2_thresh=float(cfg_in.dm_step_delta_chi2_thresh),
+            scope=str(cfg_in.dm_step_scope),
+            instrument=bool(cfg_in.event_instrument),
+        )
+        robust_cfg = RobustOutlierConfig(
+            enabled=bool(cfg_in.robust_enabled),
+            z_thresh=float(cfg_in.robust_z_thresh),
+            scope=str(cfg_in.robust_scope),
+        )
+        gate_cfg = OutlierGateConfig(
+            enabled=bool(cfg_in.outlier_gate_enabled),
+            sigma_thresh=float(cfg_in.outlier_gate_sigma),
+            resid_col=(
+                str(cfg_in.outlier_gate_resid_col) if cfg_in.outlier_gate_resid_col else None
+            ),
+            sigma_col=(
+                str(cfg_in.outlier_gate_sigma_col) if cfg_in.outlier_gate_sigma_col else None
+            ),
+        )
+        solar_cfg = SolarCutConfig(
+            enabled=bool(cfg_in.solar_events_enabled),
+            approach_max_deg=float(cfg_in.solar_approach_max_deg),
+            min_points_global=int(cfg_in.solar_min_points_global),
+            min_points_year=int(cfg_in.solar_min_points_year),
+            min_points_near_zero=int(cfg_in.solar_min_points_near_zero),
+            tau_min_deg=float(cfg_in.solar_tau_min_deg),
+            tau_max_deg=float(cfg_in.solar_tau_max_deg),
+            member_eta=float(cfg_in.solar_member_eta),
+            freq_dependence=bool(cfg_in.solar_freq_dependence),
+            freq_alpha_min=float(cfg_in.solar_freq_alpha_min),
+            freq_alpha_max=float(cfg_in.solar_freq_alpha_max),
+            freq_alpha_tol=float(cfg_in.solar_freq_alpha_tol),
+            freq_alpha_max_iter=int(cfg_in.solar_freq_alpha_max_iter),
+        )
+        orbital_cfg = OrbitalPhaseCutConfig(
+            enabled=bool(cfg_in.orbital_phase_cut_enabled),
+            center_phase=float(cfg_in.orbital_phase_cut_center),
+            limit_phase=(
+                float(cfg_in.orbital_phase_cut) if cfg_in.orbital_phase_cut is not None else None
+            ),
+            sigma_thresh=float(cfg_in.orbital_phase_cut_sigma),
+            nbins=int(cfg_in.orbital_phase_cut_nbins),
+            min_points=int(cfg_in.orbital_phase_cut_min_points),
+        )
+        eclipse_cfg = EclipseConfig(
+            enabled=bool(cfg_in.eclipse_events_enabled),
+            center_phase=float(cfg_in.eclipse_center_phase),
+            min_points=int(cfg_in.eclipse_min_points),
+            width_min=float(cfg_in.eclipse_width_min),
+            width_max=float(cfg_in.eclipse_width_max),
+            member_eta=float(cfg_in.eclipse_member_eta),
+            freq_dependence=bool(cfg_in.eclipse_freq_dependence),
+            freq_alpha_min=float(cfg_in.eclipse_freq_alpha_min),
+            freq_alpha_max=float(cfg_in.eclipse_freq_alpha_max),
+            freq_alpha_tol=float(cfg_in.eclipse_freq_alpha_tol),
+            freq_alpha_max_iter=int(cfg_in.eclipse_freq_alpha_max_iter),
+        )
+        bump_cfg = GaussianBumpConfig(
+            enabled=bool(cfg_in.gaussian_bump_enabled),
+            min_duration_days=float(cfg_in.gaussian_bump_min_duration_days),
+            max_duration_days=float(cfg_in.gaussian_bump_max_duration_days),
+            n_durations=int(cfg_in.gaussian_bump_n_durations),
+            min_points=int(cfg_in.gaussian_bump_min_points),
+            delta_chi2_thresh=float(cfg_in.gaussian_bump_delta_chi2_thresh),
+            suppress_overlap=bool(cfg_in.gaussian_bump_suppress_overlap),
+            member_eta=float(cfg_in.gaussian_bump_member_eta),
+            freq_dependence=bool(cfg_in.gaussian_bump_freq_dependence),
+            freq_alpha_min=float(cfg_in.gaussian_bump_freq_alpha_min),
+            freq_alpha_max=float(cfg_in.gaussian_bump_freq_alpha_max),
+            freq_alpha_tol=float(cfg_in.gaussian_bump_freq_alpha_tol),
+            freq_alpha_max_iter=int(cfg_in.gaussian_bump_freq_alpha_max_iter),
+        )
+        glitch_cfg = GlitchConfig(
+            enabled=bool(cfg_in.glitch_enabled),
+            min_points=int(cfg_in.glitch_min_points),
+            delta_chi2_thresh=float(cfg_in.glitch_delta_chi2_thresh),
+            suppress_overlap=bool(cfg_in.glitch_suppress_overlap),
+            member_eta=float(cfg_in.glitch_member_eta),
+            peak_tau_days=float(cfg_in.glitch_peak_tau_days),
+            noise_k=float(cfg_in.glitch_noise_k),
+            mean_window_days=float(cfg_in.glitch_mean_window_days),
+            min_duration_days=float(cfg_in.glitch_min_duration_days),
+        )
+        if settings_path is None:
+            settings_path = out_csv.parent / "run_settings" / f"{par_in.stem}.pqc_settings.toml"
+        settings_path = Path(settings_path)
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        with _pushd(out_csv.parent):
+            return qc_run(
+                par_in,
+                backend_col=str(cfg_in.backend_col),
+                bad_cfg=bad_cfg,
+                tr_cfg=tr_cfg,
+                dip_cfg=dip_cfg,
+                merge_cfg=merge_cfg,
+                feature_cfg=feature_cfg,
+                struct_cfg=struct_cfg,
+                step_cfg=step_cfg,
+                dm_cfg=dm_cfg,
+                robust_cfg=robust_cfg,
+                gate_cfg=gate_cfg,
+                solar_cfg=solar_cfg,
+                orbital_cfg=orbital_cfg,
+                eclipse_cfg=eclipse_cfg,
+                bump_cfg=bump_cfg,
+                glitch_cfg=glitch_cfg,
+                drop_unmatched=bool(cfg_in.drop_unmatched),
+                settings_out=settings_path,
+            )
+
+    df = _run_once(parfile, cfg, settings_out)
+
+    if cfg.backend_profiles_path:
+        prof_path = Path(str(cfg.backend_profiles_path))
+        profiles = _load_backend_profiles(prof_path)
+        if profiles:
+            if str(cfg.backend_col) not in df.columns:
+                logger.warning(
+                    "pqc backend profiles requested, but backend column '%s' is missing.",
+                    cfg.backend_col,
+                )
+            else:
+                key_base = _row_key_series(df, str(cfg.backend_col))
+                idx_by_key = {k: i for i, k in enumerate(key_base.astype(str))}
+                backends = sorted({str(x) for x in df[str(cfg.backend_col)].dropna().unique()})
+                for be in backends:
+                    overrides = _match_backend_overrides(be, profiles)
+                    if not overrides:
+                        continue
+                    payload = asdict(cfg)
+                    payload.update(overrides)
+                    payload["backend_profiles_path"] = None
+                    cfg_be = PTAQCConfig(**payload)
+                    tmp = out_csv.parent / ".pqc_backend_profiles" / parfile.stem / re.sub(r"[^A-Za-z0-9._-]+", "_", be)
+                    tmp_par = _prepare_backend_filtered_par(parfile, str(cfg.backend_col), be, tmp)
+                    if tmp_par is None:
+                        continue
+                    be_settings = out_csv.parent / "run_settings" / f"{parfile.stem}.{be}.pqc_settings.toml"
+                    try:
+                        df_be = _run_once(tmp_par, cfg_be, be_settings)
+                    except Exception as e:
+                        logger.warning("pqc backend profile run failed for %s: %s", be, e)
+                        continue
+                    key_be = _row_key_series(df_be, str(cfg.backend_col)).astype(str)
+                    shared_cols = [c for c in df_be.columns if c in df.columns]
+                    matched = 0
+                    for j, k in enumerate(key_be):
+                        i = idx_by_key.get(k)
+                        if i is None:
+                            continue
+                        matched += 1
+                        for c in shared_cols:
+                            df.iat[i, df.columns.get_loc(c)] = df_be.iat[j, df_be.columns.get_loc(c)]
+                    logger.info(
+                        "Applied pqc backend profile for %s: overrides=%s matched_rows=%d",
+                        be,
+                        ",".join(sorted(overrides.keys())),
+                        matched,
+                    )
 
     _assert_timfile_metadata(df, source=str(parfile))
     df.to_csv(out_csv, index=False)

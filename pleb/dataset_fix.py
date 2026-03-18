@@ -152,6 +152,7 @@ class FixDatasetConfig:
     jump_reference_variants: bool = False
     jump_reference_keep_tmp: bool = False
     jump_reference_jump_flag: str = "-sys"
+    jump_reference_csv_dir: Optional[str] = None
     tempo2_home_dir: Optional[str] = None
     tempo2_dataset_name: Optional[str] = None
     tempo2_singularity_image: Optional[str] = None
@@ -547,6 +548,15 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
 
     tmp_root = psr_dir / ".pleb_jump_reference_tmp"
     tmp_root.mkdir(parents=True, exist_ok=True)
+    dataset_root = psr_dir.parent
+    if cfg.jump_reference_csv_dir:
+        csv_base = Path(str(cfg.jump_reference_csv_dir))
+        if not csv_base.is_absolute():
+            csv_base = dataset_root / csv_base
+    else:
+        csv_base = dataset_root / "results" / "jump_reference"
+    csv_base = csv_base / psr
+    csv_base.mkdir(parents=True, exist_ok=True)
 
     # Build no-JUMP par once.
     par_lines = par.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -642,7 +652,7 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
         )
         ref_system = str(rows_sorted[0]["system"])
 
-        csv_path = psr_dir / f"{psr}_jump_reference.{vname}.csv"
+        csv_path = csv_base / f"{psr}_jump_reference.{vname}.csv"
         with open(csv_path, "w", encoding="utf-8") as f:
             f.write("variant,system,n_toa,median_toa_err_us,reduced_chisq,source_timfiles,reference_system\n")
             for r in rows_sorted:

@@ -1,0 +1,13 @@
+# Per-backend PQC override profiles.
+#
+# Matching priority:
+# 1) exact backend key
+# 2) glob pattern (fnmatch), in file order
+# 3) global PQC defaults from the main run config
+#
+# Backend key should match your `pqc_backend_col` values (commonly "sys").
+
+[backend_profiles]
+"LOFAR.*" = { robust_z_thresh = 6.5, fdr_q = 0.02 }
+"NFR.LUPPI.75" = { robust_z_thresh = 6.0, delta_chi2_thresh = 20.0 }
+"WSRT.P2.334" = { step_delta_chi2_thresh = 16.0, dm_step_delta_chi2_thresh = 16.0 }

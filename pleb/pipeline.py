@@ -219,6 +219,7 @@ def _build_fixdataset_config(
         jump_reference_jump_flag=str(
             _cfg_get(cfg, "fix_jump_reference_jump_flag", "-sys") or "-sys"
         ),
+        jump_reference_csv_dir=_cfg_get(cfg, "fix_jump_reference_csv_dir", None),
         tempo2_home_dir=str(getattr(cfg, "home_dir", "")),
         tempo2_dataset_name=str(getattr(cfg, "dataset_name", "")),
         tempo2_singularity_image=str(getattr(cfg, "singularity_image", "")),
@@ -961,6 +962,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     glitch_min_duration_days=float(
                         getattr(cfg, "pqc_glitch_min_duration_days", 1000.0)
                     ),
+                    backend_profiles_path=getattr(
+                        cfg, "pqc_backend_profiles_path", None
+                    ),
                 )
                 qc_out_dir = out_paths["qc"] / branch
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
@@ -1153,6 +1157,10 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     ),
                     no_feature_plots=bool(
                         getattr(cfg, "qc_report_no_feature_plots", False)
+                    ),
+                    compact_pdf=bool(getattr(cfg, "qc_report_compact_pdf", False)),
+                    compact_pdf_name=str(
+                        getattr(cfg, "qc_report_compact_pdf_name", "qc_compact_report.pdf")
                     ),
                 )
                 logger.info("QC report written to: %s", report_dir)

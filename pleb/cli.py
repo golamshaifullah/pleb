@@ -222,6 +222,16 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
         help="Skip feature (e.g., orbital phase/solar) plots.",
     )
     p.add_argument(
+        "--compact-pdf",
+        action="store_true",
+        help="Generate a compact composite PDF report.",
+    )
+    p.add_argument(
+        "--compact-pdf-name",
+        default=None,
+        help="Filename for compact PDF (default: qc_compact_report.pdf).",
+    )
+    p.add_argument(
         "--report-dir",
         type=Path,
         default=None,
@@ -350,6 +360,12 @@ def run_qc_report(argv: list[str] | None) -> int:
         ),
         no_feature_plots=bool(
             args.no_feature_plots or (qcfg.no_feature_plots if qcfg else False)
+        ),
+        compact_pdf=bool(args.compact_pdf or (qcfg.compact_pdf if qcfg else False)),
+        compact_pdf_name=str(
+            args.compact_pdf_name
+            if args.compact_pdf_name is not None
+            else (qcfg.compact_pdf_name if qcfg else "qc_compact_report.pdf")
         ),
     )
     _write_run_settings(Path(report_dir), argv, None)

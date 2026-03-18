@@ -85,6 +85,34 @@ rows over paired single-channel rows), use overlap rules:
      --set run_fix_dataset=true \
      --set fix_overlap_rules_path="configs/rules/overlap/overlap_rules.example.toml"
 
+Per-backend PQC profiles
+------------------------
+
+To override PQC thresholds for selected backends while keeping global defaults
+as fallback:
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml \
+     --set run_pqc=true \
+     --set pqc_backend_col="sys" \
+     --set pqc_backend_profiles_path="configs/rules/pqc/backend_profiles.example.toml"
+
+Compact PDF report
+------------------
+
+To generate a compact final PDF summary of likely bad TOAs (with plots):
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml \
+     --set qc_report=true \
+     --set qc_report_compact_pdf=true \
+     --set qc_report_compact_pdf_name="qc_compact_report.pdf"
+
+The compact report also writes per-backend action CSVs under
+``<qc_report_dir>/action_lists/`` with exact flagged TOAs and reason columns.
+
 Exact-overlap keep/drop catalog
 -------------------------------
 

@@ -215,6 +215,8 @@ class QCReportConfig:
     no_plots: bool = False
     structure_group_cols: Optional[str] = None
     no_feature_plots: bool = False
+    compact_pdf: bool = False
+    compact_pdf_name: str = "qc_compact_report.pdf"
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "QCReportConfig":
@@ -236,6 +238,8 @@ class QCReportConfig:
                 else str(d.get("structure_group_cols"))
             ),
             no_feature_plots=bool(d.get("no_feature_plots", False)),
+            compact_pdf=bool(d.get("compact_pdf", False)),
+            compact_pdf_name=str(d.get("compact_pdf_name", "qc_compact_report.pdf")),
         )
 
     @staticmethod
@@ -426,6 +430,7 @@ class PipelineConfig:
         pqc_glitch_noise_k: Noise-aware threshold multiplier.
         pqc_glitch_mean_window_days: Rolling-mean window (days) for zero-crossing.
         pqc_glitch_min_duration_days: Minimum glitch duration (days).
+        pqc_backend_profiles_path: Optional TOML with per-backend pqc overrides.
         qc_report: Generate pqc report artifacts after the run.
         qc_report_backend_col: Backend column name for reports (optional).
         qc_report_backend: Optional backend key to plot.
@@ -433,6 +438,8 @@ class PipelineConfig:
         qc_report_no_plots: Skip transient plots in reports.
         qc_report_structure_group_cols: Structure grouping override for reports.
         qc_report_no_feature_plots: Skip feature plots in reports.
+        qc_report_compact_pdf: Generate compact composite PDF report.
+        qc_report_compact_pdf_name: Filename for compact PDF report.
         run_fix_dataset: Enable FixDataset stage.
         make_binary_analysis: Enable binary analysis table.
         param_scan_typical: Enable typical param-scan profile.
@@ -457,6 +464,7 @@ class PipelineConfig:
         fix_jump_reference_variants: Build per-variant reference-system jump parfiles.
         fix_jump_reference_keep_tmp: Keep temporary split tim/par files.
         fix_jump_reference_jump_flag: Jump flag used in generated variant parfiles.
+        fix_jump_reference_csv_dir: Output directory for jump-reference CSV files.
         fix_insert_missing_jumps: Insert missing JUMP lines.
         fix_jump_flag: Flag used for inserted jumps.
         fix_prune_stale_jumps: Drop JUMPs not present in timfile flags.
@@ -655,6 +663,7 @@ class PipelineConfig:
     pqc_glitch_noise_k: float = 1.0
     pqc_glitch_mean_window_days: float = 180.0
     pqc_glitch_min_duration_days: float = 1000.0
+    pqc_backend_profiles_path: Optional[str] = None
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -664,6 +673,8 @@ class PipelineConfig:
     qc_report_no_plots: bool = False
     qc_report_structure_group_cols: Optional[str] = None
     qc_report_no_feature_plots: bool = False
+    qc_report_compact_pdf: bool = False
+    qc_report_compact_pdf_name: str = "qc_compact_report.pdf"
 
     # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
     run_fix_dataset: bool = False
@@ -699,6 +710,7 @@ class PipelineConfig:
     fix_jump_reference_variants: bool = False
     fix_jump_reference_keep_tmp: bool = False
     fix_jump_reference_jump_flag: str = "-sys"
+    fix_jump_reference_csv_dir: Optional[str] = None
     fix_infer_system_flags: bool = False
     fix_system_flag_overwrite_existing: bool = False
     fix_wsrt_p2_force_sys_by_freq: bool = False
@@ -832,6 +844,10 @@ class PipelineConfig:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
             c.fix_qc_results_dir = Path(c.fix_qc_results_dir).expanduser().resolve()
+        if c.pqc_backend_profiles_path is not None:
+            c.pqc_backend_profiles_path = (
+                Path(c.pqc_backend_profiles_path).expanduser().resolve()
+            )
         if c.fix_system_flag_mapping_path is not None:
             c.fix_system_flag_mapping_path = (
                 Path(c.fix_system_flag_mapping_path).expanduser().resolve()
@@ -909,6 +925,8 @@ class PipelineConfig:
             d["fix_overlap_exact_catalog_path"] = str(
                 d["fix_overlap_exact_catalog_path"]
             )
+        if d.get("pqc_backend_profiles_path") is not None:
+            d["pqc_backend_profiles_path"] = str(d["pqc_backend_profiles_path"])
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -1142,6 +1160,7 @@ class PipelineConfig:
             pqc_glitch_min_duration_days=float(
                 d.get("pqc_glitch_min_duration_days", 1000.0)
             ),
+            pqc_backend_profiles_path=opt_str("pqc_backend_profiles_path"),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),
@@ -1151,6 +1170,10 @@ class PipelineConfig:
             qc_report_no_plots=bool(d.get("qc_report_no_plots", False)),
             qc_report_structure_group_cols=opt_str("qc_report_structure_group_cols"),
             qc_report_no_feature_plots=bool(d.get("qc_report_no_feature_plots", False)),
+            qc_report_compact_pdf=bool(d.get("qc_report_compact_pdf", False)),
+            qc_report_compact_pdf_name=str(
+                d.get("qc_report_compact_pdf_name", "qc_compact_report.pdf")
+            ),
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),
             param_scan_typical=bool(d.get("param_scan_typical", False)),
@@ -1189,6 +1212,7 @@ class PipelineConfig:
             fix_jump_reference_jump_flag=str(
                 d.get("fix_jump_reference_jump_flag", "-sys")
             ),
+            fix_jump_reference_csv_dir=opt_str("fix_jump_reference_csv_dir"),
             fix_infer_system_flags=bool(d.get("fix_infer_system_flags", False)),
             fix_system_flag_overwrite_existing=bool(
                 d.get("fix_system_flag_overwrite_existing", False)
