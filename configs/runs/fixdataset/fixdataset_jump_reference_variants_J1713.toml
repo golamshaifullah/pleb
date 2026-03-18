@@ -1,26 +1,26 @@
 # Minimal test case: reference-system jump generation for one pulsar only.
 
-home_dir = "/work/git_projects/epta-dr3-in2p3"
-dataset_name = "EPTA-DR3/epta-dr3-data"
+home_dir = "/tmp/epta_1713_new"
+dataset_name = ""
 results_dir = "results"
 singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 
-branches = ["fix_dataset_discover_jumps_variants"]
-reference_branch = "fix_dataset_discover_jumps_variants"
+branches = ["main"]
+reference_branch = "main"
 pulsars = ["J1713+0747"]
 jobs = 1
 
-run_tempo2 = false
-make_plots = false
-make_reports = false
-make_covmat = false
-run_pqc = false
-qc_report = false
+run_tempo2 = true
+make_plots = true
+make_reports = true
+make_covmat = true
+run_pqc = true
+qc_report = true
 
 run_fix_dataset = true
 fix_apply = true
-fix_base_branch = "fix_dataset_discover_jumps_variants"
-fix_branch_name = "fixdataset_variant_jump_reference_J1713_test"
+fix_base_branch = "main"
+fix_branch_name = "AB_test_new"
 fix_commit_message = "FixDataset: test variant reference jump parfiles for J1713+0747"
 
 fix_generate_alltim_variants = true
