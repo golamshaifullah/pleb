@@ -87,12 +87,15 @@ def _write_run_settings(
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser.
 
-    Returns:
-        An :class:`argparse.ArgumentParser` configured with pipeline options.
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured with top-level pipeline and param-scan options.
 
-    Notes:
-        This parser is used by :func:`main` and includes both pipeline and
-        param-scan options. The ``qc-report`` subcommand uses a separate parser.
+    Notes
+    -----
+    The ``qc-report``, ``ingest``, and ``workflow`` commands use dedicated
+    subcommand parsers.
     """
     p = argparse.ArgumentParser(
         description="Data combination diagnostics pipeline (tempo2 + plots + reports)."
@@ -185,8 +188,10 @@ def build_parser() -> argparse.ArgumentParser:
 def build_qc_report_parser() -> argparse.ArgumentParser:
     """Build the CLI parser for the ``qc-report`` subcommand.
 
-    Returns:
-        An :class:`argparse.ArgumentParser` configured for PQC report options.
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured for QC-report options.
     """
     p = argparse.ArgumentParser(
         description="Generate PQC report summaries and plots from a run directory."
@@ -244,7 +249,13 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
 
 
 def build_ingest_parser() -> argparse.ArgumentParser:
-    """Build the CLI parser for the ingest subcommand."""
+    """Build the CLI parser for ingest mode.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured for ingest-only options.
+    """
     p = argparse.ArgumentParser(
         description="Ingest pulsar timing files into canonical layout."
     )
@@ -302,7 +313,13 @@ def build_ingest_parser() -> argparse.ArgumentParser:
 
 
 def build_workflow_parser() -> argparse.ArgumentParser:
-    """Build the CLI parser for the workflow subcommand."""
+    """Build the CLI parser for workflow mode.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured for workflow-file execution options.
+    """
     p = argparse.ArgumentParser(description="Run a multi-step workflow file.")
     p.add_argument("workflow", nargs="?", help=argparse.SUPPRESS)
     p.add_argument(
@@ -320,13 +337,17 @@ def build_workflow_parser() -> argparse.ArgumentParser:
 
 
 def run_qc_report(argv: list[str] | None) -> int:
-    """Generate QC diagnostics and plots for PQC CSVs in a run directory.
+    """Run the ``qc-report`` subcommand.
 
-    Args:
-        argv: Optional CLI argument list (defaults to ``sys.argv`` parsing).
+    Parameters
+    ----------
+    argv : list of str, optional
+        Optional CLI argument list.
 
-    Returns:
-        Exit code (0 on success).
+    Returns
+    -------
+    int
+        Exit code (``0`` on success).
     """
     args = build_qc_report_parser().parse_args(argv)
     qcfg = None
@@ -374,7 +395,18 @@ def run_qc_report(argv: list[str] | None) -> int:
 
 
 def run_workflow(argv: list[str] | None) -> int:
-    """Run a workflow file and print the last run directory."""
+    """Run the ``workflow`` subcommand.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Optional CLI argument list.
+
+    Returns
+    -------
+    int
+        Process exit code.
+    """
     args = build_workflow_parser().parse_args(argv)
     from .workflow import run_workflow as _run
 
@@ -396,7 +428,18 @@ def run_workflow(argv: list[str] | None) -> int:
 
 
 def run_ingest(argv: list[str] | None) -> int:
-    """Run mapping-driven ingest mode."""
+    """Run the ``ingest`` subcommand.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Optional CLI argument list.
+
+    Returns
+    -------
+    int
+        Process exit code.
+    """
     args = build_ingest_parser().parse_args(argv)
     cfg = IngestConfig()
     if args.config:
@@ -450,11 +493,15 @@ def run_ingest(argv: list[str] | None) -> int:
 def _parse_csv_list(raw: str | None) -> list[str] | None:
     """Parse a comma-separated list string.
 
-    Args:
-        raw: Comma-separated list string, or ``None``.
+    Parameters
+    ----------
+    raw : str or None
+        Comma-separated list string.
 
-    Returns:
-        A list of stripped items, or ``None`` if the input is empty.
+    Returns
+    -------
+    list of str or None
+        Stripped tokens, or ``None`` for empty input.
     """
     if raw is None:
         return None
@@ -522,15 +569,22 @@ def _unknown_args_to_overrides(unknown: list[str], cfg_keys: set[str]) -> list[s
 def main(argv=None) -> int:
     """Run the CLI entry point.
 
-    Args:
-        argv: Optional argument list (defaults to ``sys.argv``).
+    Parameters
+    ----------
+    argv : list of str, optional
+        Optional argument list (defaults to ``sys.argv``).
 
-    Returns:
+    Returns
+    -------
+    int
         Process exit code.
 
-    Raises:
-        FileNotFoundError: If a specified config or scan file cannot be found.
-        SystemExit: If required scan specifications are missing.
+    Raises
+    ------
+    FileNotFoundError
+        If a specified config or scan file cannot be found.
+    SystemExit
+        If required scan specifications are missing.
     """
     if argv is None:
         argv = sys.argv[1:]

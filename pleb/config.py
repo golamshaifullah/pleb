@@ -33,7 +33,13 @@ PulsarSelection = Union[str, List[str]]  # "ALL" or explicit list
 
 @dataclass(slots=True)
 class IngestConfig:
-    """Configure ingest mode without requiring full pipeline fields."""
+    """Configuration model for ingest-only CLI mode.
+
+    Notes
+    -----
+    This config intentionally decouples ingest from full pipeline execution so
+    users can ingest/commit datasets without specifying Tempo2/PQC settings.
+    """
 
     ingest_mapping_file: Optional[Path] = None
     ingest_output_dir: Optional[Path] = None
@@ -122,7 +128,14 @@ class IngestConfig:
 
 @dataclass(slots=True)
 class ParamScanConfig:
-    """Configure param-scan mode without full pipeline-only options."""
+    """Configuration model for parameter-scan mode.
+
+    Notes
+    -----
+    Statistical scan thresholds in this model (for example reduced
+    chi-square gates and tested derivative orders) are passed through to
+    :mod:`pleb.param_scan`; this class only stores and validates values.
+    """
 
     home_dir: Path
     singularity_image: Path
@@ -206,7 +219,7 @@ class ParamScanConfig:
 
 @dataclass(slots=True)
 class QCReportConfig:
-    """Configure QC report mode."""
+    """Configuration model for QC-report generation mode."""
 
     run_dir: Path
     backend_col: str = "group"
@@ -264,7 +277,14 @@ class QCReportConfig:
 
 @dataclass(slots=True)
 class WorkflowRunConfig:
-    """Configure workflow mode."""
+    """Configuration model for workflow-file execution mode.
+
+    Parameters
+    ----------
+    workflow_file : pathlib.Path
+        Path to workflow definition (TOML/JSON) executed by
+        :func:`pleb.workflow.run_workflow`.
+    """
 
     workflow_file: Path
 

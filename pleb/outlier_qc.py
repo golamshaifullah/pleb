@@ -1,12 +1,59 @@
-"""Optional PQC integration for outlier detection.
+"""Optional PQC integration for per-TOA quality control.
 
-This module wraps the external ``pqc`` package to generate per-TOA quality
-control flags and summary statistics. It is designed to fail gracefully when
-``pqc`` or its dependencies are not installed.
+This module converts :class:`PTAQCConfig` values into ``pqc`` detector
+configuration objects, runs ``pqc`` per pulsar, and writes a per-TOA QC table.
+It also supports per-backend override profiles and subprocess isolation for
+``libstempo``-related crashes.
 
-See Also:
-    pleb.pipeline.run_pipeline: Pipeline stage that invokes PQC.
-    pleb.dataset_fix: Optional application of PQC flags to data.
+Notes
+-----
+The QC CSV produced here is intentionally *diagnostic* rather than a final
+truth label. It carries detector outputs such as:
+
+- ``bad_ou``: outlier evidence from the OU-innovation bad-measurement model.
+- ``bad_mad``: robust outlier evidence from MAD-based detectors.
+- ``bad_hard``: optional hard sigma-gate failures.
+- ``bad_point``: combined outlier indicator after event-aware reconciliation.
+- ``event_member``: coherent-event membership (transient/step/solar/etc.).
+- ``outlier_any``: compatibility field from ``pqc`` (``bad_point OR event``).
+
+Statistical concepts used by the wrapped PQC pipeline include:
+
+1. False discovery rate (FDR) control
+   Controls expected fraction of false positives among detections.
+   A typical Benjamini-Hochberg decision rule marks p-values ``p_(i)`` where
+   ``p_(i) <= (i/m) q`` for rank ``i``, number of tests ``m``, and target
+   FDR ``q``.
+2. OU-correlated innovations
+   Residuals are tested under a short-timescale correlated process to avoid
+   over-flagging clustered noise as independent outliers.
+3. Robust z-scores with MAD
+   Robust scale estimate: ``MAD = median(|x - median(x)|)`` and
+   ``sigma_robust ~= 1.4826 * MAD`` (for Gaussian data) gives outlier score
+   ``|x - median(x)| / sigma_robust``.
+4. Delta-chi-square model comparison
+   Event detectors compare null vs alternative local models; large
+   ``Delta chi^2`` supports structured deviations.
+
+Worked example
+--------------
+If residuals in one backend include a coherent eclipse-like dip, robust/MAD
+detectors may initially mark those TOAs. Event detectors can then model the
+dip and reclassify those points as ``event_member`` so ``bad_point`` is cleared.
+
+References
+----------
+- PQC documentation:
+  https://golamshaifullah.github.io/pqc/index.html
+- Benjamini, Y. & Hochberg, Y. 1995, *JRSS-B*, 57(1), 289-300.
+- Rousseeuw, P. J. & Croux, C. 1993, *JASA*, 88(424), 1273-1283.
+
+See Also
+--------
+pleb.pipeline.run_pipeline
+    Pipeline stage that invokes this module.
+pleb.dataset_fix.apply_pqc_outliers
+    Optional downstream action stage (comment/delete flagged TOAs).
 """
 
 from __future__ import annotations
@@ -37,79 +84,52 @@ logger = get_logger("pleb.qc")
 
 @dataclass(slots=True)
 class PTAQCConfig:
-    """Configuration for the optional pqc outlier detection stage.
+    """Configuration for the optional ``pqc`` detection stage.
 
     This stage is intentionally optional: the pipeline runs without ``pqc``
     installed and will skip QC if dependencies are missing.
 
-    Attributes:
-        backend_col: Backend grouping column used by PQC.
-        drop_unmatched: Drop TOAs without matching tim metadata.
-        merge_tol_seconds: Merge tolerance for matching (seconds).
-        tau_corr_minutes: OU correlation time for bad-measurement detection.
-        fdr_q: FDR threshold for bad-measurement detection.
-        mark_only_worst_per_day: Mark only the worst TOA per day.
-        tau_rec_days: Recovery time for transient scan (days).
-        window_mult: Window multiplier for transient scan.
-        min_points: Minimum points for transient scan.
-        delta_chi2_thresh: Delta-chi2 threshold for transient scan.
-        suppress_overlap: Suppress overlapping transient windows.
-        exp_dip_min_duration_days: Minimum exponential dip duration (days).
-        step_enabled: Enable step-change detection.
-        step_min_points: Minimum points for step detection.
-        step_delta_chi2_thresh: Delta-chi2 threshold for step detection.
-        step_scope: Scope for step detection (global/branch/both).
-        dm_step_enabled: Enable DM-like step detection.
-        dm_step_min_points: Minimum points for DM step detection.
-        dm_step_delta_chi2_thresh: Delta-chi2 threshold for DM step detection.
-        dm_step_scope: Scope for DM step detection.
-        robust_enabled: Enable robust MAD-based outlier detection.
-        robust_z_thresh: Z threshold for robust outliers.
-        robust_scope: Scope for robust outlier detection.
-        add_orbital_phase: Add orbital-phase feature.
-        add_solar_elongation: Add solar-elongation feature.
-        add_elevation: Add elevation feature.
-        add_airmass: Add airmass feature.
-        add_parallactic_angle: Add parallactic-angle feature.
-        add_freq_bin: Add frequency-bin feature.
-        freq_bins: Number of frequency bins.
-        observatory_path: Observatory file path for alt/az features.
-        structure_mode: Feature-structure mode.
-        structure_detrend_features: Features to detrend against.
-        structure_test_features: Features to test for structure.
-        structure_nbins: Bin count for structure tests.
-        structure_min_per_bin: Minimum points per bin.
-        structure_p_thresh: p-value threshold for structure detection.
-        structure_circular_features: Features with circular topology.
-        structure_group_cols: Grouping columns for structure tests.
-        outlier_gate_enabled: Enable hard sigma gate for outliers.
-        outlier_gate_sigma: Sigma threshold for outlier gate.
-        outlier_gate_resid_col: Residual column for outlier gate.
-        outlier_gate_sigma_col: Sigma column for outlier gate.
-        event_instrument: Enable per-event membership diagnostics.
-        gaussian_bump_enabled: Enable Gaussian-bump event detection.
-        gaussian_bump_min_duration_days: Minimum bump duration in days.
-        gaussian_bump_max_duration_days: Maximum bump duration in days.
-        gaussian_bump_n_durations: Number of duration grid points.
-        gaussian_bump_min_points: Minimum points for bump detection.
-        gaussian_bump_delta_chi2_thresh: Delta-chi2 threshold for bump detection.
-        gaussian_bump_suppress_overlap: Suppress overlapping bumps.
-        gaussian_bump_member_eta: Per-point membership SNR threshold.
-        gaussian_bump_freq_dependence: Fit 1/f^alpha dependence.
-        gaussian_bump_freq_alpha_min: Lower bound for alpha.
-        gaussian_bump_freq_alpha_max: Upper bound for alpha.
-        gaussian_bump_freq_alpha_tol: Optimization tolerance for alpha.
-        gaussian_bump_freq_alpha_max_iter: Max iterations for alpha optimizer.
-        glitch_enabled: Enable glitch event detection.
-        glitch_min_points: Minimum points for glitch detection.
-        glitch_delta_chi2_thresh: Delta-chi2 threshold for glitch detection.
-        glitch_suppress_overlap: Suppress overlapping glitches.
-        glitch_member_eta: Per-point membership SNR threshold.
-        glitch_peak_tau_days: Peak exponential timescale for glitch model.
-        glitch_noise_k: Noise-aware threshold multiplier.
-        glitch_mean_window_days: Rolling-mean window (days) for zero-crossing.
-        glitch_min_duration_days: Minimum glitch duration (days).
-        backend_profiles_path: Optional TOML file with per-backend pqc overrides.
+    Attributes
+    ----------
+    backend_col : str
+        Backend grouping column used by PQC.
+    drop_unmatched : bool
+        Drop TOAs without matching tim metadata.
+    merge_tol_seconds : float
+        Merge tolerance for row reconciliation (seconds).
+    tau_corr_minutes : float
+        OU correlation timescale for bad-measurement detection.
+    fdr_q : float
+        FDR threshold for bad-measurement detection.
+    robust_z_thresh : float
+        Robust z-score threshold for MAD-based outlier checks.
+    delta_chi2_thresh : float
+        Delta-chi-square threshold for transient scan.
+    step_delta_chi2_thresh : float
+        Delta-chi-square threshold for step detection.
+    dm_step_delta_chi2_thresh : float
+        Delta-chi-square threshold for DM-step detection.
+    structure_p_thresh : float
+        P-value cutoff for feature-structure screening.
+    outlier_gate_sigma : float
+        Sigma threshold for optional hard outlier gate.
+    backend_profiles_path : str or None
+        Optional TOML path with per-backend PQC overrides.
+
+    Notes
+    -----
+    Key statistical knobs and interpretation:
+
+    - ``fdr_q``: target false discovery rate for bad-measurement detection.
+      Lower values reduce false positives but may reduce sensitivity.
+    - ``tau_corr_minutes``: OU correlation timescale; larger values treat
+      neighboring TOAs as more correlated.
+    - ``robust_z_thresh``: robust-z threshold for MAD outlier detectors.
+      Typical values 4--7; lower values are more aggressive.
+    - ``delta_chi2_thresh`` and event-specific variants: evidence threshold for
+      structured alternatives relative to baseline models.
+    - ``structure_p_thresh``: significance cutoff for feature-domain structure
+      tests. Interpret as a screening threshold, not definitive causality.
     """
 
     backend_col: str = "group"
@@ -416,23 +436,67 @@ def run_pqc_for_parfile(
     cfg: PTAQCConfig,
     settings_out: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """Run pqc on a pulsar parfile and write a CSV.
+    """Run ``pqc`` for one pulsar and write per-TOA QC output.
 
-    Args:
-        parfile: Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
-        out_csv: Output CSV path.
-        cfg: pqc configuration.
+    Parameters
+    ----------
+    parfile : pathlib.Path
+        Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
+    out_csv : pathlib.Path
+        Output CSV path.
+    cfg : PTAQCConfig
+        PQC configuration.
+    settings_out : pathlib.Path, optional
+        Optional destination for resolved PQC settings TOML.
 
-    Returns:
-        The QC table produced by pqc.
+    Returns
+    -------
+    pandas.DataFrame
+        QC table produced by ``pqc``.
 
-    Raises:
-        RuntimeError: If pqc cannot be imported.
+    Raises
+    ------
+    RuntimeError
+        If ``pqc`` cannot be imported.
 
-    Examples:
-        Run PQC for a pulsar and write CSV output::
+    Notes
+    -----
+    Statistical sequence delegated to ``pqc``:
 
-            df = run_pqc_for_parfile(Path("J1234+5678.par"), Path("qc.csv"), PTAQCConfig())
+    1. Merge timing arrays and tim metadata.
+    2. Build optional features (orbital phase, solar elongation, etc.).
+    3. Run outlier detectors (OU/FDR, robust MAD, optional hard gate).
+    4. Run event detectors (transients, steps, DM-steps, solar/eclipses,
+       Gaussian bumps, glitches).
+    5. Reconcile labels so coherent events are not treated as point outliers.
+
+    Per-backend profiles
+    ^^^^^^^^^^^^^^^^^^^^
+    When ``cfg.backend_profiles_path`` is set, this function performs a second
+    backend-filtered run for each matched backend and merges shared columns back
+    into the baseline result using a row key built from backend, MJD, frequency,
+    and timfile identity.
+
+    Caveats
+    -------
+    - ``outlier_any`` is a compatibility field and may include event members.
+      For editing actions, prefer explicit columns/policies (e.g. ``bad_point``).
+    - Delta-chi-square thresholds are heuristic unless calibrated for the
+      specific cadence/noise regime.
+
+    References
+    ----------
+    - PQC docs: https://golamshaifullah.github.io/pqc/index.html
+
+    Examples
+    --------
+    Run PQC for a pulsar and write CSV output::
+
+        df = run_pqc_for_parfile(
+            Path("J1234+5678.par"),
+            Path("qc.csv"),
+            PTAQCConfig(),
+        )
     """
     parfile = Path(parfile)
     out_csv = Path(out_csv)
@@ -714,19 +778,36 @@ def run_pqc_for_parfile_subprocess(
     timeout: Optional[float] = None,
     settings_out: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """Run pqc in a subprocess to isolate segfaults from libstempo.
+    """Run :func:`run_pqc_for_parfile` in a subprocess.
 
-    Args:
-        parfile: Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
-        out_csv: Output CSV path.
-        cfg: pqc configuration.
-        timeout: Optional timeout in seconds.
+    Parameters
+    ----------
+    parfile : pathlib.Path
+        Path to ``<PSR>.par`` (expects sibling ``<PSR>_all.tim``).
+    out_csv : pathlib.Path
+        Output CSV path.
+    cfg : PTAQCConfig
+        PQC configuration.
+    timeout : float, optional
+        Optional timeout in seconds.
+    settings_out : pathlib.Path, optional
+        Optional destination for resolved PQC settings TOML.
 
-    Returns:
-        QC dataframe read back from the CSV.
+    Returns
+    -------
+    pandas.DataFrame
+        QC table loaded from the output CSV.
 
-    Raises:
-        RuntimeError: If the subprocess fails or does not write an output CSV.
+    Raises
+    ------
+    RuntimeError
+        If the subprocess fails or output CSV is not produced.
+
+    Notes
+    -----
+    This isolates ``libstempo``/C-extension failures from the parent process.
+    The payload is serialized to JSON and replayed in a clean Python child.
+    A deterministic environment copy is passed to preserve PATH/TEMPO2 context.
     """
     parfile = Path(parfile)
     out_csv = Path(out_csv)
@@ -819,18 +900,29 @@ def _assert_timfile_metadata(df: pd.DataFrame, source: str) -> None:
 
 
 def summarize_pqc(df: pd.DataFrame) -> Dict[str, Any]:
-    """Return a compact summary of a pqc output dataframe.
+    """Return compact counts from a ``pqc`` output table.
 
-    Args:
-        df: QC output dataframe.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        QC output dataframe.
 
-    Returns:
-        Summary dictionary with counts of TOAs and flagged items.
+    Returns
+    -------
+    dict
+        Summary dictionary with TOA and flag counts.
 
-    Examples:
-        Summarize PQC output::
+    Notes
+    -----
+    This is a descriptive summary only; it does not estimate uncertainty.
+    Interpreting rates such as ``n_bad / n_toas`` assumes stationarity over the
+    analyzed span, which often does not hold for backend changes and events.
 
-            summary = summarize_pqc(df)
+    Examples
+    --------
+    Summarize PQC output::
+
+        summary = summarize_pqc(df)
     """
     out: Dict[str, Any] = {"n_toas": int(len(df))}
     if "bad" in df.columns:

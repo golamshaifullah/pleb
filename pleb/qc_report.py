@@ -1,7 +1,27 @@
-"""Generate PQC report artifacts from pipeline outputs.
+"""Generate report artifacts from existing ``pqc`` CSV outputs.
 
-This module wraps helper scripts that produce diagnostic text, transient plots,
-feature plots, and structure summaries from PQC CSV outputs.
+This module is a post-processing/reporting layer. It does not re-run ``pqc``;
+instead it reads ``*_qc.csv`` files, renders helper-script diagnostics, and can
+assemble a compact PDF with actionable per-backend tables.
+
+Notes
+-----
+Compact decisions are derived from two logical sets:
+
+- outlier set (by default union of ``outlier_any``, ``bad_point``,
+  robust/bad-mad columns, etc.)
+- event set (transient, solar, eclipse, Gaussian bump, glitch, orbital flags)
+
+Decision rules:
+
+- ``BAD_TOA``: outlier and not event
+- ``REVIEW_EVENT``: outlier and event
+- ``EVENT``: event and not outlier
+- ``KEEP``: neither set
+
+References
+----------
+- PQC docs: https://golamshaifullah.github.io/pqc/index.html
 """
 
 from __future__ import annotations
@@ -39,6 +59,29 @@ def _bool_series(df: pd.DataFrame, col: str) -> pd.Series:
 def _build_compact_decisions(
     df: pd.DataFrame, outlier_cols: Optional[list[str]] = None
 ) -> pd.DataFrame:
+    """Build compact decision labels from raw QC columns.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Per-TOA QC table from ``pqc``.
+    outlier_cols : list of str, optional
+        Explicit outlier columns to union. If omitted, a compatibility default
+        set is used.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of ``df`` with additional columns:
+        ``decision``, ``outlier_any_compact``, ``event_any_compact``,
+        ``decision_reason``.
+
+    Notes
+    -----
+    This function performs Boolean set logic, not probabilistic inference.
+    ``REVIEW_EVENT`` is intentionally conservative: it highlights rows that are
+    simultaneously outlier-like and event-like for human inspection.
+    """
     out = df.copy()
     outlier_any = pd.Series([False] * len(out), index=out.index)
     cols = (
@@ -408,32 +451,63 @@ def generate_qc_report(
     compact_pdf_name: str = "qc_compact_report.pdf",
     compact_outlier_cols: Optional[list[str]] = None,
 ) -> Path:
-    """Generate diagnostics and transient plots for pqc outputs.
+    """Generate diagnostics, plots, and optional compact PDF from QC CSVs.
 
-    Args:
-        run_dir: Pipeline run directory that contains pqc outputs.
-        backend_col: Column name used for backend grouping.
-        backend: Optional backend key filter for plotting.
-        report_dir: Output directory (default: <run_dir>/qc_report).
-        no_plots: If True, skip transient plots.
-        structure_group_cols: Optional grouping columns for structure summaries.
-        no_feature_plots: If True, skip feature plots.
-        compact_pdf: If True, generate a compact composite PDF report.
-        compact_pdf_name: Output PDF filename under report_dir.
-        compact_outlier_cols: Optional list of QC columns to define outliers in
-            compact decisions/reporting.
+    Parameters
+    ----------
+    run_dir : pathlib.Path
+        Pipeline run directory containing PQC outputs.
+    backend_col : str, optional
+        Column name used for backend grouping.
+    backend : str, optional
+        Optional backend key filter for plotting.
+    report_dir : pathlib.Path, optional
+        Output directory. Defaults to ``<run_dir>/qc_report``.
+    no_plots : bool, optional
+        If ``True``, skip transient plots.
+    structure_group_cols : str, optional
+        Grouping columns for structure summaries.
+    no_feature_plots : bool, optional
+        If ``True``, skip feature plots.
+    compact_pdf : bool, optional
+        If ``True``, generate a compact composite PDF report.
+    compact_pdf_name : str, optional
+        Output PDF filename under ``report_dir``.
+    compact_outlier_cols : list of str, optional
+        QC columns used to define outliers in compact decisions/reporting.
 
-    Returns:
-        Path to the report directory.
+    Returns
+    -------
+    pathlib.Path
+        Report directory path.
 
-    Raises:
-        FileNotFoundError: If the run directory does not exist.
-        RuntimeError: If required PQC CSVs or helper scripts are missing.
+    Raises
+    ------
+    FileNotFoundError
+        If ``run_dir`` does not exist.
+    RuntimeError
+        If required PQC CSVs or helper scripts are missing.
 
-    Examples:
-        Generate a QC report from a run directory::
+    Notes
+    -----
+    Statistical interpretation:
 
-            report_dir = generate_qc_report(Path("results/run_2024-01-01"))
+    - Report plots are descriptive diagnostics, not hypothesis tests by
+      themselves.
+    - Counts in compact pages are useful for triage but should be interpreted
+      with cadence/system context.
+    - If ``compact_outlier_cols`` is set, compact decision logic is driven only
+      by those columns.
+
+    References
+    ----------
+    - PQC docs: https://golamshaifullah.github.io/pqc/index.html
+
+    Examples
+    --------
+    Generate a QC report from a run directory::
+
+        report_dir = generate_qc_report(Path("results/run_2024-01-01"))
     """
     if export_structure_table is None:
         raise RuntimeError(

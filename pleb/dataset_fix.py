@@ -1,12 +1,41 @@
-"""FixDataset utilities for cleaning and normalizing EPTA datasets.
+"""FixDataset utilities for cleaning and normalizing pulsar datasets.
 
-This module provides lightweight, file-based cleanup utilities for `.par` and
-`.tim` data, adapted from the FixDataset notebook workflow. It can run in a
-report-only mode (default) or apply edits with backups.
+This module implements deterministic file-level transformations for ``.par``
+and ``.tim`` trees: include maintenance, flag standardization,
+deduplication, JUMP maintenance, declarative relabel/overlap rules, and
+optional QC-driven comment/delete actions.
 
-See Also:
-    pleb.config.PipelineConfig: Pipeline settings for FixDataset integration.
-    pleb.pipeline.run_pipeline: Orchestrates FixDataset in the full pipeline.
+Notes
+-----
+Statistical operations in this module are lightweight and mostly descriptive:
+
+- Reference-system selection uses robust ranking by median TOA uncertainty and
+  TOA count (a pragmatic proxy for a stable timing anchor).
+- Deduplication can use user-defined tolerance or auto-derived frequency
+  tolerance from channel spacing.
+- QC application consumes precomputed ``pqc`` flags; this module does not fit
+  statistical models itself.
+
+Worked example
+--------------
+For a variant ``J1713+0747_all.new.tim``, reference-system generation:
+
+1. Split included backend timfiles by ``-sys``.
+2. Count TOAs per system and compute median TOA error (microseconds).
+3. Choose system with smallest median error; tie-break by largest TOA count.
+4. Write ``J1713+0747.new.par`` with ``JUMP -sys <system> 0 <fitflag>`` lines.
+
+References
+----------
+- PQC docs (for consumed QC flags):
+  https://golamshaifullah.github.io/pqc/index.html
+
+See Also
+--------
+pleb.config.PipelineConfig
+    Pipeline-level integration settings.
+pleb.pipeline.run_pipeline
+    Orchestrates FixDataset execution and reporting.
 """
 
 from __future__ import annotations
@@ -533,6 +562,40 @@ def _parse_tim_system_rows(timfile: Path) -> Tuple[Dict[str, List[str]], List[st
 
 
 def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    """Create per-variant JUMP templates and reference-system diagnostics.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory containing ``<PSR>.par`` and variant include files
+        ``<PSR>_all.<variant>.tim``.
+    cfg : FixDatasetConfig
+        FixDataset configuration. Requires Tempo2 container context via
+        ``tempo2_home_dir``, ``tempo2_dataset_name``, and
+        ``tempo2_singularity_image``.
+
+    Returns
+    -------
+    dict
+        Per-variant report including selected reference system, system metrics,
+        CSV path, and output ``<PSR>.<variant>.par`` path.
+
+    Notes
+    -----
+    Reference system choice is a deterministic rank:
+
+    1. smallest median TOA uncertainty (microseconds),
+    2. then largest TOA count,
+    3. then lexical system name.
+
+    ``median`` is used because it is robust to heavy-tailed TOA-error
+    distributions and occasional bad uncertainty values. This is a pragmatic
+    quality proxy, not a formal optimal estimator of timing precision.
+
+    The function runs ``tempo2`` for each system-only temporary include file and
+    stores reduced chi-square as diagnostic context; reduced chi-square is *not*
+    currently used in the ranking rule.
+    """
     psr = psr_dir.name
     par = psr_dir / f"{psr}.par"
     if not par.exists():
@@ -699,6 +762,32 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
 
 
 def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    """Generate ``_all.<variant>.tim`` include files from class catalogs.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory containing ``<PSR>_all.tim`` and backend tim files.
+    cfg : FixDatasetConfig
+        Configuration with ``backend_classifications_path`` and
+        ``alltim_variants_path``.
+
+    Returns
+    -------
+    dict
+        Report describing variant outputs and selected include lines.
+
+    Notes
+    -----
+    Variant membership is set logic over backend classes:
+
+    - include classes define required or permissive membership
+    - exclude classes remove matched entries
+    - mixed-policy resolves files tagged with multiple classes
+
+    This function performs deterministic filtering only; no statistical fitting
+    is involved.
+    """
     psr = psr_dir.name
     alltim = psr_dir / f"{psr}_all.tim"
     if not alltim.exists():
@@ -951,6 +1040,33 @@ def _load_relabel_rules(path: Path) -> List[Dict[str, object]]:
 
 
 def apply_relabel_rules(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+    """Apply declarative per-line relabel rules to backend tim files.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory containing backend tim files.
+    cfg : FixDatasetConfig
+        Configuration with ``relabel_rules_path`` and write-policy flags.
+
+    Returns
+    -------
+    dict
+        Rule-by-rule report with file-level match and update counts.
+
+    Notes
+    -----
+    Rule matching supports conjunctions over:
+
+    - timfile glob(s),
+    - existing ``-sys``/``-group``/``-pta`` values,
+    - SAT token regex and/or full-line regex,
+    - MJD/frequency intervals.
+
+    Updates are deterministic token rewrites (no model fitting). This operation
+    is typically used to codify known backend naming corrections and maintain
+    reproducible flag harmonization across pulsars.
+    """
     psr = psr_dir.name
     if not cfg.relabel_rules_path:
         return {"psr": psr, "skipped": True, "reason": "no rules path"}
@@ -1548,7 +1664,40 @@ def _collect_qc_mjds(
 
 
 def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
-    """Comment out or delete TOAs based on pqc outputs for this pulsar."""
+    """Apply QC decisions from ``pqc`` CSV to backend tim files.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory containing backend tim files.
+    cfg : FixDatasetConfig
+        Configuration defining QC CSV location, merge tolerance, action
+        policy, and comment prefixes.
+
+    Returns
+    -------
+    dict
+        Summary of matched TOAs, changed files, and per-file action counts.
+
+    Notes
+    -----
+    Matching uses MJD proximity with tolerance ``qc_merge_tol_days``.
+    Conceptually this is a nearest-neighbor reconciliation between analysis
+    rows and raw tim rows. Tight tolerances reduce accidental matches but can
+    miss rows when formatting/rounding differs.
+
+    Event-aware behavior is controlled by config switches:
+
+    - standard outlier-like masks
+    - solar-event masks
+    - orbital/eclipsing masks
+
+    Each mask can have independent action (comment/delete).
+
+    References
+    ----------
+    - PQC docs: https://golamshaifullah.github.io/pqc/index.html
+    """
     psr = psr_dir.name
     qc_csv = _find_qc_csv(psr, cfg)
     if qc_csv is None:
@@ -2336,11 +2485,42 @@ def dedupe_timfile_toas(
     freq_tol_mhz: Optional[float] = None,
     freq_tol_auto: bool = False,
 ) -> Dict[str, object]:
-    """Remove duplicate TOA lines within a single .tim file (FORMAT 1).
+    """Remove duplicate TOA rows inside one backend tim file.
 
-    Default: exact duplicates on first 4 columns only. When tolerances are
-    provided, treat TOAs as duplicates if they share the same file token and
-    are within (mjd_tol_sec, freq_tol_mhz).
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Target ``.tim`` file (FORMAT 1 style rows).
+    apply : bool, optional
+        If ``True``, write modified file.
+    backup : bool, optional
+        If ``True``, create one-time backup before write.
+    dry_run : bool, optional
+        If ``True``, compute changes without writing.
+    mjd_tol_sec : float, optional
+        Time tolerance in seconds for fuzzy duplicate matching.
+    freq_tol_mhz : float, optional
+        Frequency tolerance in MHz for fuzzy matching.
+    freq_tol_auto : bool, optional
+        If ``True`` and ``freq_tol_mhz`` is unset, infer tolerance from
+        observed channel spacing/bandwidth.
+
+    Returns
+    -------
+    dict
+        Change report with number of removed rows.
+
+    Notes
+    -----
+    Two matching modes:
+
+    - exact mode (default): duplicate key is first four TOA columns.
+    - tolerance mode: same file token and ``|Delta MJD| <= tol`` and
+      ``|Delta nu| <= freq_tol``.
+
+    Tolerance mode is useful when duplicated rows differ by small numeric
+    formatting jitter. Overly large tolerances can merge legitimate adjacent
+    channels/epochs, so thresholds should remain conservative.
     """
     if not timfile.exists():
         return {"timfile": str(timfile), "changed": False, "removed": 0}
@@ -2727,22 +2907,33 @@ def remove_overlaps_exact(
     backup: bool = True,
     dry_run: bool = False,
 ) -> Dict[str, object]:
-    """Cheap overlap remover: for known overlapping backend pairs, comment out exact duplicate TOAs in 'drop' files.
+    """Comment exact duplicated TOAs using declarative keep/drop backend pairs.
 
-    This will NOT attempt fuzzy time/freq matching; it only comments exact duplicates
-    based on first 4 columns.
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory.
+    overlap_map : dict, optional
+        Explicit ``keep_backend -> [drop_backend, ...]`` mapping.
+    overlap_catalog_path : str, optional
+        TOML catalog path loaded when ``overlap_map`` is not provided.
+    apply : bool, optional
+        If ``True``, write edited files.
+    backup : bool, optional
+        If ``True``, create backup before write.
+    dry_run : bool, optional
+        If ``True``, return planned edits only.
 
-    Args:
-        psr_dir: Pulsar directory.
-        overlap_map: Mapping of keep -> drop backend tim basenames. If None, load
-            from ``overlap_catalog_path`` or default catalog path.
-        overlap_catalog_path: Optional TOML path for overlap map.
-        apply: If True, write changes to disk.
-        backup: If True, create a backup before writing.
-        dry_run: If True, do not write but return planned changes.
+    Returns
+    -------
+    dict
+        Report with changed files and total commented duplicates.
 
-    Returns:
-        Stats dictionary summarizing commented duplicates.
+    Notes
+    -----
+    Matching is strict exact-key only (first four TOA columns). This prevents
+    accidental suppression from fuzzy matching but will miss near-duplicate
+    records that differ by tiny numeric jitter.
     """
     loaded_from: Optional[str] = None
     if overlap_map is None:
@@ -2878,12 +3069,42 @@ def prefer_multichannel_pair_rule(
     backup: bool = True,
     dry_run: bool = False,
 ) -> Dict[str, object]:
-    """Generic overlap rule: prefer file with dual-channel epochs in file pairs.
+    """Prefer dual-channel epochs over single-channel duplicates in file pairs.
 
-    Pairing logic:
-    - files matching ``primary_glob`` create canonical keys by filename.
-    - files matching ``secondary_glob`` are paired to primary by removing one
-      trailing ``_2`` before ``.tim`` (e.g. ``WSRT.P2.1380_2.tim`` -> ``WSRT.P2.1380.tim``).
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory.
+    primary_glob : str
+        Glob for primary candidate files.
+    secondary_glob : str
+        Glob for secondary candidate files.
+    mjd_tol_sec : float, optional
+        Epoch clustering tolerance in seconds.
+    action : {'comment', 'delete'}, optional
+        How to mark matched single-channel rows.
+    comment_prefix : str, optional
+        Prefix used when ``action='comment'``.
+    apply : bool, optional
+        If ``True``, write updates.
+    backup : bool, optional
+        If ``True``, create backup before write.
+    dry_run : bool, optional
+        If ``True``, do not write.
+
+    Returns
+    -------
+    dict
+        Pair-level report including affected counts.
+
+    Notes
+    -----
+    Dual-channel detection groups rows by file token and near-equal MJD; an
+    epoch is "dual" when at least two distinct frequencies appear in the group.
+    The file with more dual epochs is preferred; matching single-channel rows
+    in the other file are commented/deleted.
+
+    Ties are marked ambiguous and left unchanged.
     """
     mode = str(action or "comment").strip().lower()
     if mode not in {"comment", "delete"}:

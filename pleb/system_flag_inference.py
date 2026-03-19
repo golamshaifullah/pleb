@@ -404,6 +404,39 @@ def infer_telescope(
     cfg: SystemInferenceConfig = SystemInferenceConfig(),
     override_telescope: Optional[str] = None,
 ) -> str:
+    """Infer telescope code for a backend tim file.
+
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Input ``.tim`` file.
+    cfg : SystemInferenceConfig, optional
+        Inference configuration controlling aliases, allowlists, and rejected
+        tokens.
+    override_telescope : str, optional
+        Explicit telescope token to force before filename/flag inference.
+
+    Returns
+    -------
+    str
+        Normalized telescope code.
+
+    Raises
+    ------
+    TelescopeMissingError
+        If telescope cannot be inferred or fails allowlist/reject checks.
+
+    Notes
+    -----
+    Resolution order is:
+
+    1. explicit override (if supplied),
+    2. filename telescope code heuristics,
+    3. TOA flag-based inference,
+    4. first filename token fallback.
+
+    Final value is normalized and alias-mapped before validation.
+    """
     if override_telescope:
         val = _apply_alias(_norm_token(override_telescope), cfg.telescope_aliases)
         if _is_rejected(val, cfg.reject_telescope_values):

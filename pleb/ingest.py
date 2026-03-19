@@ -47,7 +47,21 @@ logger = get_logger("pleb.ingest")
 
 @dataclass(frozen=True)
 class BackendSpec:
-    """Describe a backend source root and scan behavior."""
+    """Describe one ingest backend source and scan policy.
+
+    Parameters
+    ----------
+    name : str
+        Canonical backend key used for destination tim naming.
+    root : pathlib.Path
+        Source root scanned for tim files.
+    ignore : bool, optional
+        If ``True``, skip this backend entirely.
+    tim_glob : str, optional
+        Glob pattern used while scanning ``root``.
+    ignore_suffixes : tuple of str, optional
+        Filename suffixes excluded from ingest (for example ``_all.tim``).
+    """
 
     name: str
     root: Path
@@ -58,7 +72,14 @@ class BackendSpec:
 
 @dataclass(frozen=True)
 class IngestMapping:
-    """Parsed ingest mapping configuration."""
+    """Parsed mapping model used by :func:`ingest_dataset`.
+
+    Notes
+    -----
+    The mapping is fully declarative. Selection is deterministic and controlled
+    by explicit roots, aliases, optional source-priority ordering, and optional
+    lockfile validation.
+    """
 
     sources: Tuple[Path, ...]
     par_roots: Tuple[Path, ...]
@@ -74,7 +95,7 @@ class IngestMapping:
 
 
 class IngestError(RuntimeError):
-    """Raised when ingestion fails due to mapping/structure problems."""
+    """Raised when ingest configuration or source structure is invalid."""
 
 
 def _norm_backend_key(key: str) -> str:
@@ -343,12 +364,22 @@ def verify_ingest_tims(
     check_git: bool = True,
     check_all_tim: bool = True,
 ) -> None:
-    """Warn if expected tim files were not copied or tracked.
+    """Validate ingest completeness against mapping expectations.
 
-    Checks:
-    - Source tims listed in mapping are present in ingest manifest.
-    - Destination tims are tracked in git (if repo exists).
-    - Destination tims are included in <psr>_all.tim.
+    Parameters
+    ----------
+    output_root : pathlib.Path
+        Ingest output directory.
+    mapping : IngestMapping
+        Parsed ingest mapping configuration.
+    check_git : bool, optional
+        If ``True``, verify copied files are tracked in the local Git repo.
+    check_all_tim : bool, optional
+        If ``True``, verify copied tim files are referenced by ``<PSR>_all.tim``.
+
+    Notes
+    -----
+    This function is diagnostic-only and logs warnings; it does not mutate data.
     """
     manifest = output_root / "ingest_reports" / "ingest_manifest_tim.csv"
     manifest_srcs: Set[str] = set()
@@ -877,7 +908,37 @@ def ingest_dataset(
     verify: bool = False,
     pulsars: Optional[Iterable[str]] = None,
 ) -> Dict[str, object]:
-    """Ingest pulsar data into a canonical layout using a mapping file."""
+    """Ingest pulsar data into canonical per-pulsar layout.
+
+    Parameters
+    ----------
+    mapping_file : pathlib.Path
+        JSON mapping file defining sources, backends, and ingest rules.
+    output_root : pathlib.Path
+        Destination dataset root.
+    verify : bool, optional
+        If ``True``, run post-ingest validation via :func:`verify_ingest_tims`.
+    pulsars : iterable of str, optional
+        Optional allowlist of pulsars to ingest.
+
+    Returns
+    -------
+    dict
+        Ingest report containing copied pulsars and missing-source summaries.
+
+    Raises
+    ------
+    IngestError
+        If no pulsars are discoverable or mapping validation fails.
+
+    Notes
+    -----
+    File selection is deterministic:
+
+    - optional lockfile pinning can freeze source provenance,
+    - optional source-priority rules resolve backend collisions,
+    - destination manifests and lockfiles are written for reproducibility.
+    """
     mapping = _load_mapping(mapping_file)
     output_root = Path(output_root).expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
@@ -1041,7 +1102,30 @@ def commit_ingest_changes(
     base_branch: Optional[str] = None,
     commit_message: Optional[str] = None,
 ) -> str:
-    """Create a new branch at output_root and commit ingest changes."""
+    """Create/switch branch and commit ingest outputs in the enclosing repo.
+
+    Parameters
+    ----------
+    output_root : pathlib.Path
+        Ingest output directory inside a Git working tree.
+    branch_name : str, optional
+        Target branch for ingest commit.
+    base_branch : str, optional
+        Base branch used when creating a new target branch.
+    commit_message : str, optional
+        Commit message text.
+
+    Returns
+    -------
+    str
+        Name of the branch that received the commit.
+
+    Notes
+    -----
+    This helper commits only paths under ``output_root`` (relative to repo
+    root), adds a minimal ``.gitignore`` for runtime products, and creates a
+    read-only ``raw`` snapshot branch when absent.
+    """
     try:
         from git import Repo, InvalidGitRepositoryError  # type: ignore
     except Exception as e:  # pragma: no cover

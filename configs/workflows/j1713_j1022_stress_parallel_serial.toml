@@ -10,7 +10,7 @@
 #   - apply QC outlier comments only
 #   - commit into a second branch
 
-config = "configs/runs/fixdataset/fixdataset_jump_reference_variants_J1713_J1022.toml"
+config = "/work/git_projects/pleb/configs/runs/fixdataset/fixdataset_jump_reference_variants_J1713_J1022.toml"
 
 # Global mode for top-level groups.
 mode = "serial"

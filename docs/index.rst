@@ -10,6 +10,7 @@ pleb - The EPTA Data Combination Pipeline
    quickstart
    running_modes
    modes
+   flow_diagrams
    concepts
    cli
    gui

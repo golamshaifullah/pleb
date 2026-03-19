@@ -35,6 +35,19 @@ except Exception:  # pragma: no cover
 
 @dataclass
 class WorkflowContext:
+    """Mutable state shared across workflow steps.
+
+    Attributes
+    ----------
+    last_run_dir : pathlib.Path or None
+        Most recent pipeline run directory produced by a step.
+    last_pipeline_run_dir : pathlib.Path or None
+        Alias for the latest run directory from a full pipeline invocation.
+    last_qc_summary : pathlib.Path or None
+        Path to the latest QC summary artifact, when generated.
+    last_fix_summary : pathlib.Path or None
+        Path to the latest FixDataset summary artifact, when generated.
+    """
     last_run_dir: Optional[Path] = None
     last_pipeline_run_dir: Optional[Path] = None
     last_qc_summary: Optional[Path] = None
@@ -445,6 +458,38 @@ def _run_step_sequence(
 
 
 def run_workflow(path: Path) -> WorkflowContext:
+    """Execute a workflow file with optional serial/parallel stage control.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Workflow definition file (TOML or JSON).
+
+    Returns
+    -------
+    WorkflowContext
+        Final context populated with latest run and summary artifact paths.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the workflow or referenced config file does not exist.
+    ValueError
+        If workflow schema is invalid (missing config, unsupported mode, etc.).
+
+    Notes
+    -----
+    Execution model:
+
+    - top-level steps and groups are executed first,
+    - groups create barriers between internal serial/parallel blocks,
+    - loop sections then execute with per-loop overrides and the same
+      serial/parallel semantics.
+
+    Parallel execution here coordinates independent workflow steps; it does not
+    change per-step internal parallelism (e.g., pulsar-level workers inside a
+    pipeline step).
+    """
     wf = _load_workflow(Path(path))
     config_path = wf.get("config")
     if not config_path:
