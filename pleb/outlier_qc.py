@@ -19,6 +19,7 @@ import json
 import subprocess
 import sys
 import os
+import shutil
 from fnmatch import fnmatch
 from contextlib import contextmanager
 import re
@@ -738,7 +739,8 @@ def run_pqc_for_parfile_subprocess(
         "settings_out": (str(settings_out) if settings_out is not None else None),
     }
     payload_path = out_csv.parent / f".pqc_{parfile.stem}.json"
-    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    # Config may contain Path objects (e.g. observatory/profile paths).
+    payload_path.write_text(json.dumps(payload, default=str), encoding="utf-8")
 
     code = (
         "import json, sys\n"
@@ -751,11 +753,19 @@ def run_pqc_for_parfile_subprocess(
         "settings_out=(Path(settings_out) if settings_out else None))\n"
     )
     try:
+        env = os.environ.copy()
+        t2 = shutil.which("tempo2")
+        if t2:
+            t2_dir = str(Path(t2).resolve().parent)
+            cur_path = env.get("PATH", "")
+            if t2_dir not in cur_path.split(":"):
+                env["PATH"] = f"{t2_dir}:{cur_path}" if cur_path else t2_dir
         proc = subprocess.run(
             [sys.executable, "-c", code, str(payload_path)],
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
     finally:
         try:

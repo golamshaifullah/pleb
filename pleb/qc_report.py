@@ -36,20 +36,27 @@ def _bool_series(df: pd.DataFrame, col: str) -> pd.Series:
     )
 
 
-def _build_compact_decisions(df: pd.DataFrame) -> pd.DataFrame:
+def _build_compact_decisions(
+    df: pd.DataFrame, outlier_cols: Optional[list[str]] = None
+) -> pd.DataFrame:
     out = df.copy()
     outlier_any = pd.Series([False] * len(out), index=out.index)
-    for c in (
-        "outlier_any",
-        "bad_point",
-        "bad_hard",
-        "robust_outlier",
-        "robust_global_outlier",
-        "bad_mad",
-        "bad_ou",
-        "bad",
-        "bad_day",
-    ):
+    cols = (
+        outlier_cols
+        if outlier_cols
+        else [
+            "outlier_any",
+            "bad_point",
+            "bad_hard",
+            "robust_outlier",
+            "robust_global_outlier",
+            "bad_mad",
+            "bad_ou",
+            "bad",
+            "bad_day",
+        ]
+    )
+    for c in cols:
         outlier_any |= _bool_series(out, c)
     event_any = pd.Series([False] * len(out), index=out.index)
     for c in (
@@ -70,21 +77,7 @@ def _build_compact_decisions(df: pd.DataFrame) -> pd.DataFrame:
     decision[outlier_any & event_any] = "REVIEW_EVENT"
     decision[(~outlier_any) & event_any] = "EVENT"
 
-    outlier_cols = [
-        c
-        for c in (
-            "outlier_any",
-            "bad_point",
-            "bad_hard",
-            "robust_outlier",
-            "robust_global_outlier",
-            "bad_mad",
-            "bad_ou",
-            "bad",
-            "bad_day",
-        )
-        if c in out.columns
-    ]
+    outlier_cols = [c for c in cols if c in out.columns]
     event_cols = [
         c
         for c in (
@@ -139,6 +132,7 @@ def _write_compact_pdf(
     csvs: list[Path],
     pdf_path: Path,
     backend_col: str = "group",
+    outlier_cols: Optional[list[str]] = None,
 ) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -161,7 +155,7 @@ def _write_compact_pdf(
                 df = pd.read_csv(p)
             except Exception:
                 continue
-            d = _build_compact_decisions(df)
+            d = _build_compact_decisions(df, outlier_cols=outlier_cols)
             totals.append(
                 {
                     "pulsar": p.stem.replace("_qc", ""),
@@ -206,7 +200,7 @@ def _write_compact_pdf(
                 df = pd.read_csv(p)
             except Exception:
                 continue
-            d = _build_compact_decisions(df)
+            d = _build_compact_decisions(df, outlier_cols=outlier_cols)
             psr = p.stem.replace("_qc", "")
             mjd = pd.to_numeric(d.get("mjd", pd.Series([])), errors="coerce")
             resid = pd.to_numeric(d.get("resid_us", d.get("resid", pd.Series([]))), errors="coerce")
@@ -227,14 +221,27 @@ def _write_compact_pdf(
                 sel = dd["decision"] == label
                 if int(sel.sum()) == 0:
                     continue
-                ax.scatter(
-                    m[sel],
-                    r[sel],
-                    s=10 if label == "KEEP" else 14,
-                    alpha=0.55 if label == "KEEP" else 0.8,
-                    c=colors[label],
-                    label=f"{label} ({int(sel.sum())})",
-                )
+                if label == "REVIEW_EVENT":
+                    ax.scatter(
+                        m[sel],
+                        r[sel],
+                        s=18,
+                        alpha=0.9,
+                        facecolors="none",
+                        edgecolors=colors[label],
+                        linewidths=0.9,
+                        marker="o",
+                        label=f"{label} ({int(sel.sum())})",
+                    )
+                else:
+                    ax.scatter(
+                        m[sel],
+                        r[sel],
+                        s=10 if label == "KEEP" else 14,
+                        alpha=0.55 if label == "KEEP" else 0.8,
+                        c=colors[label],
+                        label=f"{label} ({int(sel.sum())})",
+                    )
             ax.set_title(f"{psr}: Residuals with compact decisions")
             ax.set_xlabel("MJD")
             ax.set_ylabel("Residual")
@@ -399,6 +406,7 @@ def generate_qc_report(
     no_feature_plots: bool = False,
     compact_pdf: bool = False,
     compact_pdf_name: str = "qc_compact_report.pdf",
+    compact_outlier_cols: Optional[list[str]] = None,
 ) -> Path:
     """Generate diagnostics and transient plots for pqc outputs.
 
@@ -412,6 +420,8 @@ def generate_qc_report(
         no_feature_plots: If True, skip feature plots.
         compact_pdf: If True, generate a compact composite PDF report.
         compact_pdf_name: Output PDF filename under report_dir.
+        compact_outlier_cols: Optional list of QC columns to define outliers in
+            compact decisions/reporting.
 
     Returns:
         Path to the report directory.
@@ -601,7 +611,12 @@ def generate_qc_report(
 
     if compact_pdf:
         pdf_path = report_dir / str(compact_pdf_name)
-        _write_compact_pdf(csvs, pdf_path, backend_col=backend_col)
+        _write_compact_pdf(
+            csvs,
+            pdf_path,
+            backend_col=backend_col,
+            outlier_cols=compact_outlier_cols,
+        )
         logger.info("Wrote compact QC PDF report: %s", pdf_path)
 
     return report_dir

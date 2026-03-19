@@ -25,6 +25,10 @@ fix_commit_message = "FixDataset: pqc balanced + alltim variants"
 fix_generate_alltim_variants = true
 fix_backend_classifications_path = "/work/git_projects/pleb/configs/catalogs/variants/backend_classifications_legacy_new.toml"
 fix_alltim_variants_path = "/work/git_projects/pleb/configs/catalogs/variants/alltim_variants_legacy_new.toml"
+fix_jump_reference_variants = true
+fix_jump_reference_jump_flag = "-sys"
+fix_jump_reference_keep_tmp = false
+fix_jump_reference_csv_dir = "results/jump_reference"
 
 run_pqc = true
 qc_report = true

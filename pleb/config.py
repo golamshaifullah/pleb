@@ -675,6 +675,7 @@ class PipelineConfig:
     qc_report_no_feature_plots: bool = False
     qc_report_compact_pdf: bool = False
     qc_report_compact_pdf_name: str = "qc_compact_report.pdf"
+    qc_report_compact_outlier_cols: Optional[List[str]] = None
 
     # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
     run_fix_dataset: bool = False
@@ -752,6 +753,7 @@ class PipelineConfig:
 
     # ---- PQC outlier application (optional) ----
     fix_qc_remove_outliers: bool = False
+    fix_qc_outlier_cols: Optional[List[str]] = None
     fix_qc_action: str = "comment"
     fix_qc_comment_prefix: str = "C QC_OUTLIER"
     fix_qc_backend_col: str = "sys"
@@ -972,7 +974,9 @@ class PipelineConfig:
             v = d.get(key)
             if v in (None, ""):
                 return None
-            return list(v)
+            if isinstance(v, str):
+                return [s.strip() for s in v.split(",") if s.strip()]
+            return [str(x) for x in list(v)]
 
         def list_default(key: str, default: List[str]) -> List[str]:
             v = d.get(key)
@@ -1174,6 +1178,7 @@ class PipelineConfig:
             qc_report_compact_pdf_name=str(
                 d.get("qc_report_compact_pdf_name", "qc_compact_report.pdf")
             ),
+            qc_report_compact_outlier_cols=opt_list_str("qc_report_compact_outlier_cols"),
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),
             param_scan_typical=bool(d.get("param_scan_typical", False)),
@@ -1274,6 +1279,7 @@ class PipelineConfig:
                 d.get("fix_prune_small_system_flag", "-sys")
             ),
             fix_qc_remove_outliers=bool(d.get("fix_qc_remove_outliers", False)),
+            fix_qc_outlier_cols=opt_list_str("fix_qc_outlier_cols"),
             fix_qc_action=str(d.get("fix_qc_action", "comment")),
             fix_qc_comment_prefix=str(d.get("fix_qc_comment_prefix", "C QC_OUTLIER")),
             fix_qc_backend_col=str(d.get("fix_qc_backend_col", "sys")),

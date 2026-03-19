@@ -288,8 +288,9 @@ def _build_fixdataset_config(
             prune_small_system_flag=str(
                 _cfg_get(cfg, "fix_prune_small_system_flag", "-sys") or "-sys"
             ),
-            qc_remove_outliers=bool(_cfg_get(cfg, "fix_qc_remove_outliers", False)),
-            qc_action=str(_cfg_get(cfg, "fix_qc_action", "comment") or "comment"),
+        qc_remove_outliers=bool(_cfg_get(cfg, "fix_qc_remove_outliers", False)),
+        qc_outlier_cols=_cfg_get(cfg, "fix_qc_outlier_cols", None),
+        qc_action=str(_cfg_get(cfg, "fix_qc_action", "comment") or "comment"),
             qc_backend_col=str(_cfg_get(cfg, "fix_qc_backend_col", "sys") or "sys"),
             qc_comment_prefix=str(
                 _cfg_get(cfg, "fix_qc_comment_prefix", "C QC_OUTLIER") or "C QC_OUTLIER"
@@ -1161,6 +1162,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     compact_pdf=bool(getattr(cfg, "qc_report_compact_pdf", False)),
                     compact_pdf_name=str(
                         getattr(cfg, "qc_report_compact_pdf_name", "qc_compact_report.pdf")
+                    ),
+                    compact_outlier_cols=getattr(
+                        cfg, "qc_report_compact_outlier_cols", None
                     ),
                 )
                 logger.info("QC report written to: %s", report_dir)

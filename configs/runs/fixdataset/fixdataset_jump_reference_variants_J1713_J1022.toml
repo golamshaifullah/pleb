@@ -1,15 +1,18 @@
-# Stress profile: one-pulsar (J1713+0747) end-to-end run that exercises
+# Stress profile: two-pulsar (J1713+0747 + J1022+1001) run that exercises
 # FixDataset variant generation + jump-reference builder + broad PQC feature scans.
+#
+# Note: keep dataset_name aligned with home_dir. If you override home_dir on CLI,
+# also override dataset_name to the same absolute path.
 
-home_dir = "/tmp/epta_1713_new"
-dataset_name = ""
+home_dir = "/tmp/epta_2psr_new"
+dataset_name = "/tmp/epta_2psr_new"
 results_dir = "results"
 singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 
 branches = ["main"]
 reference_branch = "main"
-pulsars = ["J1713+0747"]
-jobs = 1
+pulsars = ["J1713+0747", "J1022+1001"]
+jobs = 2
 
 run_tempo2 = true
 make_plots = true
@@ -18,15 +21,15 @@ make_covmat = true
 run_pqc = true
 qc_report = true
 qc_report_backend_col = "sys"
-qc_report_dir = "/tmp/epta_1713_new/results/qc_report"
+qc_report_dir = "/tmp/epta_2psr_new/results/qc_report"
 qc_report_compact_pdf = true
-qc_report_compact_pdf_name = "J1713_qc_compact_report.pdf"
+qc_report_compact_pdf_name = "J1713_J1022_qc_compact_report.pdf"
 
 run_fix_dataset = true
 fix_apply = true
 fix_base_branch = "main"
-fix_branch_name = "AB_test_new"
-fix_commit_message = "FixDataset: J1713 stress profile (variants+jump-reference+pqc feature hunt)"
+fix_branch_name = "stress_j1713_j1022_features"
+fix_commit_message = "FixDataset: J1713+J1022 stress profile (variants+jump-reference+pqc feature hunt)"
 
 fix_generate_alltim_variants = true
 fix_backend_classifications_path = "/work/git_projects/pleb/configs/catalogs/variants/backend_classifications_legacy_new.toml"
@@ -34,7 +37,7 @@ fix_alltim_variants_path = "/work/git_projects/pleb/configs/catalogs/variants/al
 
 fix_jump_reference_variants = true
 fix_jump_reference_jump_flag = "-sys"
-fix_jump_reference_keep_tmp = true
+fix_jump_reference_keep_tmp = false
 fix_jump_reference_csv_dir = "results/jump_reference"
 
 # Keep PQC outputs diagnostic-only in this stress profile (no auto TOA commenting/deletion).

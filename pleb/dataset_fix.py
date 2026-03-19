@@ -208,6 +208,7 @@ class FixDatasetConfig:
 
     # ---- Optional PQC-driven TOA removal/commenting ----
     qc_remove_outliers: bool = False
+    qc_outlier_cols: Optional[List[str]] = None
     qc_action: str = "comment"  # "comment" | "delete"
     qc_comment_prefix: str = "C QC_OUTLIER"
     qc_backend_col: str = "sys"
@@ -546,9 +547,9 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
     if not all_variants:
         return {"psr": psr, "variants": [], "message": "No _all.variant.tim files found"}
 
-    tmp_root = psr_dir / ".pleb_jump_reference_tmp"
-    tmp_root.mkdir(parents=True, exist_ok=True)
     dataset_root = psr_dir.parent
+    tmp_root = dataset_root / "results" / "jump_reference_tmp" / psr
+    tmp_root.mkdir(parents=True, exist_ok=True)
     if cfg.jump_reference_csv_dir:
         csv_base = Path(str(cfg.jump_reference_csv_dir))
         if not csv_base.is_absolute():
@@ -621,8 +622,11 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
                 lines.append(f"INCLUDE {f.name}")
             sys_all.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-            par_container = f"/data/{psr}/.pleb_jump_reference_tmp/{no_jump_par.name}"
-            tim_container = f"/data/{psr}/.pleb_jump_reference_tmp/{sys_all.name}"
+            # Temp jump-reference files now live under:
+            #   <dataset_root>/results/jump_reference_tmp/<PSR>/
+            # and the dataset root is bound to /data inside the container.
+            par_container = f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
+            tim_container = f"/data/results/jump_reference_tmp/{psr}/{sys_all.name}"
             log_path = tmp_root / f"{psr}.{vname}.{sysv}.tempo2.log"
             rc = run_subprocess(prefix + ["tempo2", "-f", par_container, tim_container], log_path)
             red = _parse_tempo2_redchisq(log_path) if rc == 0 else None
@@ -1489,15 +1493,20 @@ def _collect_qc_mjds(
             if col in df.columns:
                 standard |= df[col].fillna(False).astype(bool).to_numpy()
     if cfg.qc_remove_outliers:
-        for col in (
-            "outlier_any",
-            "bad_point",
-            "bad_hard",
-            "robust_outlier",
-            "robust_global_outlier",
-            "bad_mad",
-            "bad_ou",
-        ):
+        outlier_cols = (
+            list(cfg.qc_outlier_cols)
+            if cfg.qc_outlier_cols
+            else [
+                "outlier_any",
+                "bad_point",
+                "bad_hard",
+                "robust_outlier",
+                "robust_global_outlier",
+                "bad_mad",
+                "bad_ou",
+            ]
+        )
+        for col in outlier_cols:
             if col in df.columns:
                 standard |= df[col].fillna(False).astype(bool).to_numpy()
     if cfg.qc_remove_transients and "transient_id" in df.columns:

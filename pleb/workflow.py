@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
@@ -88,10 +89,26 @@ def _normalize_loop(loop: Any) -> Dict[str, Any]:
     return {
         "name": str(name) if name else None,
         "max_iters": int(loop.get("max_iters", 1) or 1),
+        "mode": str(loop.get("mode", "serial") or "serial").lower(),
+        "parallel_workers": int(loop.get("parallel_workers", 0) or 0),
         "steps": [_normalize_step(s) for s in loop.get("steps", [])],
+        "groups": [_normalize_group(g) for g in loop.get("groups", [])],
         "stop_if": list(loop.get("stop_if", []) or []),
         "set": list(loop.get("set", []) or []),
         "overrides": dict(loop.get("overrides", {}) or {}),
+    }
+
+
+def _normalize_group(group: Any) -> Dict[str, Any]:
+    if not isinstance(group, dict):
+        raise ValueError(f"Invalid group format: {group!r}")
+    name = group.get("name") or group.get("group") or ""
+    mode = str(group.get("mode", "serial") or "serial").lower()
+    return {
+        "name": str(name) if name else None,
+        "mode": mode,
+        "parallel_workers": int(group.get("parallel_workers", 0) or 0),
+        "steps": [_normalize_step(s) for s in group.get("steps", [])],
     }
 
 
@@ -327,6 +344,106 @@ def _run_step(
     raise ValueError(f"Unknown workflow step: {name}")
 
 
+def _merge_context(dst: WorkflowContext, src: WorkflowContext) -> None:
+    if src.last_run_dir is not None:
+        dst.last_run_dir = src.last_run_dir
+    if src.last_pipeline_run_dir is not None:
+        dst.last_pipeline_run_dir = src.last_pipeline_run_dir
+    if src.last_qc_summary is not None:
+        dst.last_qc_summary = src.last_qc_summary
+    if src.last_fix_summary is not None:
+        dst.last_fix_summary = src.last_fix_summary
+
+
+def _run_steps_serial(
+    steps: List[Dict[str, Any]],
+    base_dict: Dict[str, Any],
+    ctx: WorkflowContext,
+    *,
+    label_prefix: str = "",
+) -> None:
+    for idx, s in enumerate(steps, start=1):
+        logger.info("%sStep %s/%s: %s", label_prefix, idx, len(steps), s["name"])
+        _run_step(s, base_dict, ctx)
+
+
+def _run_steps_parallel(
+    steps: List[Dict[str, Any]],
+    base_dict: Dict[str, Any],
+    ctx: WorkflowContext,
+    *,
+    workers: int = 0,
+    label_prefix: str = "",
+) -> None:
+    if not steps:
+        return
+    max_workers = int(workers or 0)
+    if max_workers <= 0:
+        max_workers = len(steps)
+    max_workers = max(1, min(max_workers, len(steps)))
+    logger.info(
+        "%sRunning %d steps in parallel (workers=%d)",
+        label_prefix,
+        len(steps),
+        max_workers,
+    )
+    results: Dict[int, WorkflowContext] = {}
+    errors: List[str] = []
+
+    def _worker(i: int, st: Dict[str, Any]) -> tuple[int, WorkflowContext]:
+        local_ctx = WorkflowContext(
+            last_run_dir=ctx.last_run_dir,
+            last_pipeline_run_dir=ctx.last_pipeline_run_dir,
+            last_qc_summary=ctx.last_qc_summary,
+            last_fix_summary=ctx.last_fix_summary,
+        )
+        logger.info("%s[parallel %d/%d] %s", label_prefix, i + 1, len(steps), st["name"])
+        _run_step(st, base_dict, local_ctx)
+        return i, local_ctx
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futs = {ex.submit(_worker, i, s): i for i, s in enumerate(steps)}
+        for fut in as_completed(futs):
+            i = futs[fut]
+            try:
+                idx, local_ctx = fut.result()
+                results[idx] = local_ctx
+            except Exception as e:  # pragma: no cover
+                errors.append(f"step[{i}] {steps[i].get('name')}: {e}")
+
+    if errors:
+        raise RuntimeError("Parallel workflow step failure(s): " + " | ".join(errors))
+
+    # Deterministic merge in declared order.
+    for i in range(len(steps)):
+        if i in results:
+            _merge_context(ctx, results[i])
+
+
+def _run_step_sequence(
+    steps: List[Dict[str, Any]],
+    base_dict: Dict[str, Any],
+    ctx: WorkflowContext,
+    *,
+    mode: str = "serial",
+    parallel_workers: int = 0,
+    label_prefix: str = "",
+) -> None:
+    m = str(mode or "serial").strip().lower()
+    if m not in {"serial", "parallel"}:
+        raise ValueError(f"Unsupported workflow mode: {mode!r}; use 'serial' or 'parallel'.")
+    if m == "serial":
+        _run_steps_serial(steps, base_dict, ctx, label_prefix=label_prefix)
+        return
+    _run_steps_parallel(
+        steps,
+        base_dict,
+        ctx,
+        workers=int(parallel_workers or 0),
+        label_prefix=label_prefix,
+    )
+
+
 def run_workflow(path: Path) -> WorkflowContext:
     wf = _load_workflow(Path(path))
     config_path = wf.get("config")
@@ -338,15 +455,37 @@ def run_workflow(path: Path) -> WorkflowContext:
     )
 
     ctx = WorkflowContext()
+    global_mode = str(wf.get("mode", "serial") or "serial").lower()
+    global_parallel_workers = int(wf.get("parallel_workers", 0) or 0)
 
     # Top-level steps
     steps = wf.get("steps", [])
     if steps:
         logger.info("Workflow: running %s top-level steps", len(steps))
-        for idx, step in enumerate(steps, start=1):
-            s = _normalize_step(step)
-            logger.info("Step %s/%s: %s", idx, len(steps), s["name"])
-            _run_step(s, base_dict, ctx)
+        norm_steps = [_normalize_step(step) for step in steps]
+        _run_step_sequence(
+            norm_steps,
+            base_dict,
+            ctx,
+            mode=global_mode,
+            parallel_workers=global_parallel_workers,
+        )
+
+    # Top-level grouped stages (barrier between groups).
+    groups = [_normalize_group(g) for g in list(wf.get("groups", []) or [])]
+    if groups:
+        logger.info("Workflow: running %s top-level groups", len(groups))
+        for gi, gp in enumerate(groups, start=1):
+            gname = gp.get("name") or f"group_{gi}"
+            logger.info("Group %s/%s: %s", gi, len(groups), gname)
+            _run_step_sequence(
+                gp["steps"],
+                base_dict,
+                ctx,
+                mode=str(gp.get("mode") or global_mode),
+                parallel_workers=int(gp.get("parallel_workers") or global_parallel_workers),
+                label_prefix=f"[{gname}] ",
+            )
 
     loops = wf.get("loops", [])
     for li, loop in enumerate(loops, start=1):
@@ -357,9 +496,31 @@ def run_workflow(path: Path) -> WorkflowContext:
             loop_base = _apply_overrides(
                 base_dict, lp.get("set", []), lp.get("overrides", {})
             )
-            for si, step in enumerate(lp["steps"], start=1):
-                logger.info("  Step %s/%s: %s", si, len(lp["steps"]), step["name"])
-                _run_step(step, loop_base, ctx)
+            if lp.get("groups"):
+                loop_groups = list(lp.get("groups") or [])
+                logger.info("  Loop %s: running %d groups", lname, len(loop_groups))
+                for gi, gp in enumerate(loop_groups, start=1):
+                    gname = gp.get("name") or f"{lname}_group_{gi}"
+                    logger.info("  Group %s/%s: %s", gi, len(loop_groups), gname)
+                    _run_step_sequence(
+                        gp["steps"],
+                        loop_base,
+                        ctx,
+                        mode=str(gp.get("mode") or lp.get("mode") or "serial"),
+                        parallel_workers=int(
+                            gp.get("parallel_workers") or lp.get("parallel_workers") or 0
+                        ),
+                        label_prefix=f"[{gname}] ",
+                    )
+            else:
+                _run_step_sequence(
+                    lp["steps"],
+                    loop_base,
+                    ctx,
+                    mode=str(lp.get("mode") or "serial"),
+                    parallel_workers=int(lp.get("parallel_workers") or 0),
+                    label_prefix="  ",
+                )
             if _should_stop(lp.get("stop_if", []), ctx):
                 logger.info("Loop %s stopping early (stop_if condition met).", lname)
                 break
