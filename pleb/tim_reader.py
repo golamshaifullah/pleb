@@ -16,10 +16,14 @@ import pandas as pd
 def _to_numeric_maybe(s: pd.Series) -> pd.Series:
     """Convert a series to numeric when feasible.
 
-    Args:
-        s: Input pandas series.
+    Parameters
+    ----------
+    s : pandas.Series
+        Input series.
 
-    Returns:
+    Returns
+    -------
+    pandas.Series
         Numeric series where possible. If conversion yields all-NaN but the
         original series had values, the original series is returned.
     """
@@ -100,10 +104,14 @@ def _normalize_tim_line(line: str) -> str:
 def _fix_padd_continuations(lines: List[str]) -> List[str]:
     """Merge '-padd ...' lines that have been broken onto their own line.
 
-    Args:
-        lines: Raw lines from a tim file.
+    Parameters
+    ----------
+    lines : list of str
+        Raw lines from a tim file.
 
-    Returns:
+    Returns
+    -------
+    list of str
         Lines with detached ``-padd`` continuations joined to the prior
         non-skipped line when possible.
     """
@@ -142,19 +150,26 @@ def read_tim_file_robust(
 ) -> pd.DataFrame:
     """Read a tempo2 .tim file with best-effort heuristics.
 
-    Args:
-        timfile: Path to the ``.tim`` file.
-        prune_by_mjd: If True, drop rows that do not look like TOAs.
-        mjd_min: Minimum MJD threshold used for pruning.
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Path to the ``.tim`` file.
+    prune_by_mjd : bool, optional
+        If ``True``, drop rows that do not look like TOAs.
+    mjd_min : float, optional
+        Minimum MJD threshold used for pruning.
 
-    Returns:
-        DataFrame with columns 0..N-1 holding tokens. Numeric columns are
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns ``0..N-1`` holding tokens. Numeric columns are
         converted where possible without destroying string columns.
 
-    Examples:
-        Parse a `.tim` file into a dataframe::
+    Examples
+    --------
+    Parse a ``.tim`` file into a dataframe::
 
-            df = read_tim_file_robust(Path("J1234+5678_all.tim"))
+        df = read_tim_file_robust(Path("J1234+5678_all.tim"))
     """
     timfile = Path(timfile)
     if not timfile.exists():
@@ -208,10 +223,14 @@ def read_tim_file_robust(
 def _guess_mjd_column(df: pd.DataFrame) -> Optional[int]:
     """Heuristically identify the MJD column in a tokenized .tim table.
 
-    Args:
-        df: Tokenized tim dataframe.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Tokenized tim dataframe.
 
-    Returns:
+    Returns
+    -------
+    int or None
         Column index containing MJD values, or ``None`` if not found.
     """
     best: Optional[int] = None

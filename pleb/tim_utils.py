@@ -30,7 +30,18 @@ TIM_DIRECTIVES = {
 
 
 def is_toa_line(line: str) -> bool:
-    """Return True if a line appears to be a TOA data line."""
+    """Return whether a line appears to be a TOA data line.
+
+    Parameters
+    ----------
+    line : str
+        Raw timfile line.
+
+    Returns
+    -------
+    bool
+        ``True`` when the line is treated as TOA-like.
+    """
     s = line.strip()
     if not s:
         return False
@@ -41,7 +52,18 @@ def is_toa_line(line: str) -> bool:
 
 
 def count_toa_lines(timfile: Path) -> int:
-    """Count TOA-like lines in a .tim file."""
+    """Count TOA-like lines in a ``.tim`` file.
+
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Target timfile.
+
+    Returns
+    -------
+    int
+        Number of TOA-like rows.
+    """
     if not timfile.exists():
         return 0
     n = 0
@@ -52,7 +74,18 @@ def count_toa_lines(timfile: Path) -> int:
 
 
 def parse_include_lines(alltim: Path) -> Set[str]:
-    """Parse INCLUDE lines from an all-tim file."""
+    """Parse INCLUDE lines from an all-tim file.
+
+    Parameters
+    ----------
+    alltim : pathlib.Path
+        Include file path.
+
+    Returns
+    -------
+    set of str
+        Relative include targets.
+    """
     inc: Set[str] = set()
     if not alltim.exists():
         return inc
@@ -68,12 +101,34 @@ def parse_include_lines(alltim: Path) -> Set[str]:
 
 
 def cleanline(line: str) -> str:
-    """Normalize line endings and trailing spaces."""
+    """Normalize line endings and trailing spaces.
+
+    Parameters
+    ----------
+    line : str
+        Raw line.
+
+    Returns
+    -------
+    str
+        Cleaned line.
+    """
     return line.rstrip("\n").rstrip(" ")
 
 
 def list_backend_timfiles(psr_dir: Path) -> List[Path]:
-    """List per-backend tim files for a pulsar."""
+    """List per-backend tim files for a pulsar.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory.
+
+    Returns
+    -------
+    list of pathlib.Path
+        Sorted backend tim files under ``tims/``.
+    """
     tims_dir = psr_dir / "tims"
     if not tims_dir.exists():
         return []
@@ -88,7 +143,20 @@ def list_backend_timfiles(psr_dir: Path) -> List[Path]:
 
 
 def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
-    """Collect unique values for a flag from TOA lines."""
+    """Collect unique values for a tim flag.
+
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Target timfile.
+    flag : str
+        Flag token such as ``-sys``.
+
+    Returns
+    -------
+    set of str
+        Distinct flag values found on TOA rows.
+    """
     vals: Set[str] = set()
     if not timfile.exists():
         return vals
@@ -103,7 +171,20 @@ def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
 
 
 def mjd_from_toa_line(line: str, time_offset_sec: float = 0.0) -> Optional[float]:
-    """Parse an MJD from a TOA line, applying TIME offset (seconds)."""
+    """Parse MJD from a TOA line, applying optional TIME offset.
+
+    Parameters
+    ----------
+    line : str
+        TOA line.
+    time_offset_sec : float, optional
+        Extra offset in seconds.
+
+    Returns
+    -------
+    float or None
+        Parsed MJD value, or ``None`` when parsing fails.
+    """
     if not is_toa_line(line):
         return None
     parts = line.strip().split()
@@ -117,7 +198,18 @@ def mjd_from_toa_line(line: str, time_offset_sec: float = 0.0) -> Optional[float
 
 
 def toa_key_from_line(line: str) -> Optional[Tuple[str, str, str, str]]:
-    """Cheap TOA identity key for FORMAT 1: first 4 columns as strings."""
+    """Build a cheap TOA identity key for FORMAT 1 rows.
+
+    Parameters
+    ----------
+    line : str
+        TOA line.
+
+    Returns
+    -------
+    tuple of str or None
+        ``(sat, freq, mjd, err)`` tuple when available.
+    """
     if not is_toa_line(line):
         return None
     parts = line.strip().split()

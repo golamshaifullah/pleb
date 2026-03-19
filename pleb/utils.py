@@ -16,15 +16,22 @@ from datetime import datetime
 def which_or_raise(cmd: str, hint: str = "") -> str:
     """Resolve an executable on PATH or raise.
 
-    Args:
-        cmd: Executable name to find.
-        hint: Optional hint included in the error message.
+    Parameters
+    ----------
+    cmd : str
+        Executable name to resolve on ``PATH``.
+    hint : str, optional
+        Optional hint appended to the error message.
 
-    Returns:
+    Returns
+    -------
+    str
         Absolute path to the executable.
 
-    Raises:
-        RuntimeError: If the executable is not found on PATH.
+    Raises
+    ------
+    RuntimeError
+        If the executable is not found on ``PATH``.
     """
     path = shutil.which(cmd)
     if not path:
@@ -37,8 +44,10 @@ def which_or_raise(cmd: str, hint: str = "") -> str:
 def safe_mkdir(p: Path) -> None:
     """Create a directory tree if it does not exist.
 
-    Args:
-        p: Directory path to create.
+    Parameters
+    ----------
+    p : pathlib.Path
+        Directory path to create.
     """
     p.mkdir(parents=True, exist_ok=True)
 
@@ -46,16 +55,21 @@ def safe_mkdir(p: Path) -> None:
 def discover_pulsars(home_dir: Path) -> List[str]:
     """Discover pulsar directories under a dataset root.
 
-    Args:
-        home_dir: Dataset root directory containing pulsar subdirectories.
+    Parameters
+    ----------
+    home_dir : pathlib.Path
+        Dataset root containing pulsar subdirectories.
 
-    Returns:
-        Sorted list of pulsar names (directory names starting with "J").
+    Returns
+    -------
+    list of str
+        Sorted pulsar names (directory names starting with ``J``).
 
-    Examples:
-        List pulsars under a dataset root::
+    Examples
+    --------
+    List pulsars under a dataset root::
 
-            pulsars = discover_pulsars(Path("/data/epta/EPTA"))
+        pulsars = discover_pulsars(Path("/data/epta/EPTA"))
     """
     pulsars: List[str] = []
     for entry in home_dir.iterdir():
@@ -77,18 +91,27 @@ def make_output_tree(
 ) -> Dict[str, Path]:
     """Create the output directory tree for a pipeline run.
 
-    Args:
-        results_dir: Base results directory.
-        branches: Branch names used for the tag subdirectory.
-        outdir_name: Optional output directory name (timestamped if None).
+    Parameters
+    ----------
+    results_dir : pathlib.Path
+        Base results directory.
+    branches : list of str
+        Branch names used for the tag subdirectory.
+    outdir_name : str, optional
+        Output directory name (timestamped if ``None``).
+    lazy : bool, optional
+        If ``True``, only minimal directories are created eagerly.
 
-    Returns:
+    Returns
+    -------
+    dict
         Mapping from output labels to created paths.
 
-    Examples:
-        Create a results tree for two branches::
+    Examples
+    --------
+    Create a results tree for two branches::
 
-            paths = make_output_tree(Path("results"), ["main", "EPTA"], None)
+        paths = make_output_tree(Path("results"), ["main", "EPTA"], None)
     """
     if outdir_name is None:
         outdir_name = "EPTA_combination_report_" + datetime.now().strftime(

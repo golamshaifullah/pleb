@@ -229,17 +229,23 @@ def parse_tim_toa_table(
       - bw_mhz: bandwidth value if present
       - nband: number of bands if present
 
-    Args:
-        timfile: Path to a `.tim` file.
-        cfg: System inference configuration.
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Path to a ``.tim`` file.
+    cfg : SystemInferenceConfig, optional
+        System inference configuration.
 
-    Returns:
-        DataFrame with TOA metadata extracted from the `.tim` file.
+    Returns
+    -------
+    pandas.DataFrame
+        TOA metadata extracted from the input timfile.
 
-    Examples:
-        Parse TOA metadata::
+    Examples
+    --------
+    Parse TOA metadata::
 
-            df = parse_tim_toa_table(Path("EFF.P200.1380.tim"))
+        df = parse_tim_toa_table(Path("EFF.P200.1380.tim"))
     """
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     rows = []
@@ -342,17 +348,26 @@ def infer_backend(
 ) -> str:
     """Infer backend name for a tim file.
 
-    Args:
-        timfile: Path to the tim file.
-        df: Parsed TOA table from :func:`parse_tim_toa_table`.
-        cfg: System inference configuration.
-        override_backend: Optional explicit backend name.
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Timfile path.
+    df : pandas.DataFrame
+        Parsed TOA table from :func:`parse_tim_toa_table`.
+    cfg : SystemInferenceConfig, optional
+        System inference configuration.
+    override_backend : str, optional
+        Explicit backend name.
 
-    Returns:
+    Returns
+    -------
+    str
         Backend name.
 
-    Raises:
-        BackendMissingError: If the backend cannot be inferred.
+    Raises
+    ------
+    BackendMissingError
+        If backend cannot be inferred.
     """
     if override_backend:
         val = _apply_alias(_norm_token(override_backend), cfg.backend_aliases)
@@ -488,17 +503,26 @@ def infer_subband_centres(
         idx = floor((freq - f_lo)/sub_bw), clipped to [0, nband-1]
         centre = f_lo + (idx+0.5)*sub_bw
 
-    Args:
-        freqs_mhz: Frequency array in MHz.
-        bw_mhz: Total bandwidth in MHz.
-        nband: Number of subbands.
-        round_mhz: Decimal rounding for centers.
+    Parameters
+    ----------
+    freqs_mhz : numpy.ndarray
+        Frequency array in MHz.
+    bw_mhz : float
+        Total bandwidth in MHz.
+    nband : int
+        Number of subbands.
+    round_mhz : int, optional
+        Decimal rounding for centers.
 
-    Returns:
-        Tuple of (subband_index, centre_mhz_rounded).
+    Returns
+    -------
+    tuple of numpy.ndarray
+        ``(subband_index, centre_mhz_rounded)``.
 
-    Raises:
-        ValueError: If ``bw_mhz`` or ``nband`` are non-positive.
+    Raises
+    ------
+    ValueError
+        If ``bw_mhz`` or ``nband`` are non-positive.
     """
     if nband <= 0 or bw_mhz <= 0:
         raise ValueError("bw_mhz and nband must be positive")
@@ -525,21 +549,30 @@ def infer_sys_group_pta(
 ) -> pd.DataFrame:
     """Infer -sys/-group/-pta values for each TOA row.
 
-    Args:
-        timfile: Path to the tim file.
-        cfg: System inference configuration.
-        override_backend: Optional backend override.
-        override_telescope: Optional telescope override.
-        override_pta: Optional PTA override.
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Timfile path.
+    cfg : SystemInferenceConfig, optional
+        System inference configuration.
+    override_backend : str, optional
+        Backend override.
+    override_telescope : str, optional
+        Telescope override.
+    override_pta : str, optional
+        PTA override.
 
-    Returns:
-        DataFrame with columns: ``line_idx``, ``sys``, ``group``, ``pta``,
+    Returns
+    -------
+    pandas.DataFrame
+        Assignment table with columns ``line_idx``, ``sys``, ``group``, ``pta``,
         ``backend``, ``tel``, ``centre_mhz``, ``bw_mhz``, ``nband``.
 
-    Examples:
-        Infer flags for a tim file::
+    Examples
+    --------
+    Infer flags for a tim file::
 
-            df = infer_sys_group_pta(Path("EFF.P200.1380.tim"))
+        df = infer_sys_group_pta(Path("EFF.P200.1380.tim"))
     """
     df = parse_tim_toa_table(timfile, cfg=cfg)
     if df.empty:
@@ -639,22 +672,32 @@ def apply_flags_to_timfile(
 ) -> Dict[str, object]:
     """Rewrite timfile so each TOA line has -sys/-group/-pta.
 
-    Args:
-        timfile: Path to tim file to update.
-        inferred: Inferred flags from :func:`infer_sys_group_pta`.
-        apply: If True, write changes to disk.
-        backup: If True, create a backup before writing.
-        dry_run: If True, do not write but return stats.
-        overwrite_existing: If True, replace existing flag values.
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Timfile to update.
+    inferred : pandas.DataFrame
+        Inferred flags from :func:`infer_sys_group_pta`.
+    apply : bool, optional
+        If ``True``, write changes to disk.
+    backup : bool, optional
+        If ``True``, create a backup before writing.
+    dry_run : bool, optional
+        If ``True``, do not write but return stats.
+    overwrite_existing : bool, optional
+        If ``True``, replace existing flag values.
 
-    Returns:
-        Stats dictionary containing counts and file path.
+    Returns
+    -------
+    dict
+        Statistics including counts and file path.
 
-    Examples:
-        Apply inferred flags to a tim file::
+    Examples
+    --------
+    Apply inferred flags to a tim file::
 
-            inferred = infer_sys_group_pta(Path("EFF.P200.1380.tim"))
-            stats = apply_flags_to_timfile(Path("EFF.P200.1380.tim"), inferred, apply=True)
+        inferred = infer_sys_group_pta(Path("EFF.P200.1380.tim"))
+        stats = apply_flags_to_timfile(Path("EFF.P200.1380.tim"), inferred, apply=True)
     """
     if inferred.empty:
         return {"timfile": str(timfile), "changed": False, "added": 0, "overwritten": 0}
@@ -729,18 +772,24 @@ def canonicalise_centres(
 ) -> pd.DataFrame:
     """Snap center frequencies across pulsars within a tolerance.
 
-    Args:
-        assignments: Assignment table with columns ``tel``, ``backend``,
-            ``bw_mhz``, ``nband``, ``centre_mhz``, ``sys``, ``group``.
-        tol_mhz: Frequency tolerance for clustering.
+    Parameters
+    ----------
+    assignments : pandas.DataFrame
+        Assignment table with columns ``tel``, ``backend``, ``bw_mhz``,
+        ``nband``, ``centre_mhz``, ``sys``, ``group``.
+    tol_mhz : float, optional
+        Frequency tolerance for clustering.
 
-    Returns:
-        Updated assignments with canonicalized center frequencies.
+    Returns
+    -------
+    pandas.DataFrame
+        Assignments with canonicalized center frequencies.
 
-    Examples:
-        Snap centers across pulsars::
+    Examples
+    --------
+    Snap centers across pulsars::
 
-            snapped = canonicalise_centres(assignments, tol_mhz=1.0)
+        snapped = canonicalise_centres(assignments, tol_mhz=1.0)
     """
     required = {"tel", "backend", "bw_mhz", "nband", "centre_mhz", "sys", "group"}
     missing = required - set(assignments.columns)
@@ -794,17 +843,23 @@ def update_mapping_table(
 ) -> Dict[str, List[str]]:
     """Persist a mapping table for timfile-name -> list of sys values.
 
-    Args:
-        mapping_path: JSON file path to write/update.
-        inferred: Inferred assignments with ``timfile`` and ``sys`` columns.
+    Parameters
+    ----------
+    mapping_path : pathlib.Path
+        JSON file path to write/update.
+    inferred : pandas.DataFrame
+        Inferred assignments with ``timfile`` and ``sys`` columns.
 
-    Returns:
+    Returns
+    -------
+    dict
         Mapping dictionary written to disk.
 
-    Examples:
-        Update a mapping JSON table::
+    Examples
+    --------
+    Update a mapping JSON table::
 
-            table = update_mapping_table(Path("system_flag_table.json"), inferred)
+        table = update_mapping_table(Path("system_flag_table.json"), inferred)
     """
     with _MAPPING_TABLE_LOCK:
         mapping_path.parent.mkdir(parents=True, exist_ok=True)

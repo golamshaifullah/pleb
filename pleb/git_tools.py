@@ -17,14 +17,18 @@ logger = get_logger("pleb.git")
 def checkout(repo: Repo, branch: str) -> None:
     """Check out a git branch.
 
-    Args:
-        repo: GitPython repository object.
-        branch: Branch name to check out.
+    Parameters
+    ----------
+    repo : git.Repo
+        GitPython repository object.
+    branch : str
+        Branch name to check out.
 
-    Examples:
-        Check out a branch::
+    Examples
+    --------
+    Check out a branch::
 
-            checkout(repo, "main")
+        checkout(repo, "main")
     """
     repo.git.checkout(branch)
 
@@ -32,10 +36,13 @@ def checkout(repo: Repo, branch: str) -> None:
 def require_clean_repo(repo: Repo) -> None:
     """Warn if the git repository has uncommitted changes.
 
-    Args:
-        repo: GitPython repository object.
+    Parameters
+    ----------
+    repo : git.Repo
+        GitPython repository object.
 
-    Notes:
+    Notes
+    -----
         This function only logs a warning; it does not raise.
     """
     if repo.is_dirty(untracked_files=True):

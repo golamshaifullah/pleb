@@ -16,8 +16,10 @@ _LOG_FILE: Optional[Path] = None
 def _default_log_file() -> Path:
     """Return the default log file path under the logs directory.
 
-    Returns:
-        Path to the log file used by :func:`get_logger`.
+    Returns
+    -------
+    pathlib.Path
+        Log file path used by :func:`get_logger`.
     """
     global _LOG_FILE
     if _LOG_FILE is not None:
@@ -30,7 +32,13 @@ def _default_log_file() -> Path:
 
 
 def set_log_dir(log_dir: Path) -> None:
-    """Force log file location under the supplied directory."""
+    """Force log-file location under the supplied directory.
+
+    Parameters
+    ----------
+    log_dir : pathlib.Path
+        Directory where ``pleb_*.log`` will be written.
+    """
     global _LOG_FILE
     log_dir = Path(log_dir).expanduser().resolve()
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -55,21 +63,28 @@ def get_logger(name: str = "pleb", level: int = logging.INFO) -> logging.Logger:
     The logger uses a simple stream handler with a timestamped format and avoids
     adding duplicate handlers on repeated calls.
 
-    Args:
-        name: Logger name to retrieve or create.
-        level: Logging level to set on the logger.
+    Parameters
+    ----------
+    name : str, optional
+        Logger name to retrieve or create.
+    level : int, optional
+        Logging level to set on the logger.
 
-    Returns:
-        A configured :class:`logging.Logger` instance.
+    Returns
+    -------
+    logging.Logger
+        Configured logger instance.
 
-    Notes:
+    Notes
+    -----
         This helper mutates global logger state. Call it early in module import
         to ensure consistent formatting across modules.
 
-    Examples:
-        Get a module logger::
+    Examples
+    --------
+    Get a module logger::
 
-            logger = get_logger("pleb.pipeline")
+        logger = get_logger("pleb.pipeline")
     """
     logger = logging.getLogger(name)
     if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):

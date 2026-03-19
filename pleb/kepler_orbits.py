@@ -21,17 +21,23 @@ def true_from_eccentric(
 ) -> Tuple[float, float, float]:
     """Compute the true anomaly from the eccentric anomaly.
 
-    Args:
-        e: Orbital eccentricity.
-        eccentric_anomaly: Eccentric anomaly ``E``.
+    Parameters
+    ----------
+    e : float
+        Orbital eccentricity.
+    eccentric_anomaly : float
+        Eccentric anomaly ``E``.
 
-    Returns:
-        Tuple ``(true_anomaly, d(true)/d(e), d(true)/d(E))``.
+    Returns
+    -------
+    tuple of float
+        ``(true_anomaly, d(true)/d(e), d(true)/d(E))``.
 
-    Examples:
-        Compute the true anomaly::
+    Examples
+    --------
+    Compute the true anomaly::
 
-            f, dfde, dfdE = true_from_eccentric(0.1, 0.5)
+        f, dfde, dfdE = true_from_eccentric(0.1, 0.5)
     """
     E = eccentric_anomaly
     beta = math.sqrt(1 - e * e)
@@ -58,14 +64,20 @@ def true_from_eccentric(
 def eccentric_from_mean(e: float, mean_anomaly: float) -> Tuple[float, float, float]:
     """Solve Kepler's equation for eccentric anomaly.
 
-    Args:
-        e: Orbital eccentricity.
-        mean_anomaly: Mean anomaly ``M``.
+    Parameters
+    ----------
+    e : float
+        Orbital eccentricity.
+    mean_anomaly : float
+        Mean anomaly ``M``.
 
-    Returns:
-        Tuple ``(E, dE/de, dE/dM)``.
+    Returns
+    -------
+    tuple of float
+        ``(E, dE/de, dE/dM)``.
 
-    Notes:
+    Notes
+    -----
         Falls back to a simple Newton loop when SciPy is unavailable.
     """
     # Lazy import SciPy if available; otherwise use a simple Newton loop.
@@ -103,20 +115,29 @@ def btx_parameters(
 ) -> Tuple[float, float, float, float, float]:
     """Convert ELL1 parameters to BTX-like values (a1, pb, e, om, t0).
 
-    Args:
-        asini: Projected semi-major axis (A1) in light-seconds.
-        pb: Binary period.
-        eps1: ELL1 eccentricity parameter ``e*sin(om)``.
-        eps2: ELL1 eccentricity parameter ``e*cos(om)``.
-        tasc: Time of ascending node.
+    Parameters
+    ----------
+    asini : float
+        Projected semi-major axis (A1) in light-seconds.
+    pb : float
+        Binary period.
+    eps1 : float
+        ELL1 eccentricity parameter ``e*sin(om)``.
+    eps2 : float
+        ELL1 eccentricity parameter ``e*cos(om)``.
+    tasc : float
+        Time of ascending node.
 
-    Returns:
-        Tuple ``(a1, pb, e, om, t0)``.
+    Returns
+    -------
+    tuple of float
+        ``(a1, pb, e, om, t0)``.
 
-    Examples:
-        Convert ELL1 parameters::
+    Examples
+    --------
+    Convert ELL1 parameters::
 
-            a1, pb, e, om, t0 = btx_parameters(2.0, 0.5, 1e-6, 2e-6, 55000.0)
+        a1, pb, e, om, t0 = btx_parameters(2.0, 0.5, 1e-6, 2e-6, 55000.0)
     """
     e = float(np.hypot(eps1, eps2))
     om = float(np.arctan2(eps1, eps2))
@@ -132,12 +153,18 @@ def btx_parameters(
 class Kepler2DParameters(NamedTuple):
     """Parameter bundle for :func:`kepler_2d`.
 
-    Attributes:
-        a: Semi-major axis in orbital-plane units.
-        pb: Orbital period.
-        eps1: ELL1 parameter ``e*sin(om)``.
-        eps2: ELL1 parameter ``e*cos(om)``.
-        t0: Reference epoch.
+    Attributes
+    ----------
+    a : float
+        Semi-major axis in orbital-plane units.
+    pb : float
+        Orbital period.
+    eps1 : float
+        ELL1 parameter ``e*sin(om)``.
+    eps2 : float
+        ELL1 parameter ``e*cos(om)``.
+    t0 : float
+        Reference epoch.
     """
 
     a: float
@@ -154,17 +181,23 @@ def kepler_2d(params: Kepler2DParameters, t: float) -> np.ndarray:
 
     This is a simplified version of the notebook implementation.
 
-    Args:
-        params: Keplerian parameters.
-        t: Time value for evaluation.
+    Parameters
+    ----------
+    params : Kepler2DParameters
+        Keplerian parameters.
+    t : float
+        Evaluation time.
 
-    Returns:
+    Returns
+    -------
+    numpy.ndarray
         Array ``[x, y, vx, vy]`` in orbital-plane coordinates.
 
-    Examples:
-        Evaluate a 2D orbit state::
+    Examples
+    --------
+    Evaluate a 2D orbit state::
 
-            state = kepler_2d(Kepler2DParameters(1.0, 1.0, 0.0, 0.0, 0.0), t=0.25)
+        state = kepler_2d(Kepler2DParameters(1.0, 1.0, 0.0, 0.0, 0.0), t=0.25)
     """
     a, pb, eps1, eps2, t0 = params
     e = float(np.hypot(eps1, eps2))

@@ -55,14 +55,19 @@ def run_pipeline(cfg: PipelineConfig):
 
     This is a lightweight wrapper that lazily imports the heavy pipeline module.
 
-    Args:
-        cfg: Pipeline configuration.
+    Parameters
+    ----------
+    cfg : PipelineConfig
+        Pipeline configuration.
 
-    Returns:
-        A dictionary of output paths as returned by
+    Returns
+    -------
+    dict
+        Output-path mapping as returned by
         :func:`pleb.pipeline.run_pipeline`.
 
-    See Also:
+    See Also
+    --------
         pleb.pipeline.run_pipeline: Full pipeline implementation.
     """
     from .pipeline import run_pipeline as _run
@@ -75,15 +80,20 @@ def run_param_scan(cfg: PipelineConfig, **kwargs):
 
     This wrapper lazily imports the parameter scan module.
 
-    Args:
-        cfg: Pipeline configuration.
-        **kwargs: Forwarded to
-            :func:`pleb.param_scan.run_param_scan`.
+    Parameters
+    ----------
+    cfg : PipelineConfig
+        Pipeline configuration.
+    **kwargs
+        Forwarded to :func:`pleb.param_scan.run_param_scan`.
 
-    Returns:
-        A dictionary of output paths produced by the scan.
+    Returns
+    -------
+    dict
+        Output-path mapping produced by the scan.
 
-    See Also:
+    See Also
+    --------
         pleb.param_scan.run_param_scan: Full scan implementation.
     """
     from .param_scan import run_param_scan as _run

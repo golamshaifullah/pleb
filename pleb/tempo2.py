@@ -33,14 +33,21 @@ def build_singularity_prefix(
     By default, binds ``home_dir/dataset_name`` to ``/data`` inside the
     container. Optionally bind additional host paths to container paths.
 
-    Args:
-        home_dir: Root data repository.
-        dataset_name: Dataset name/path under ``home_dir``.
-        singularity_image: Container image path.
-        extra_binds: Extra ``(host_path, container_path)`` binds.
+    Parameters
+    ----------
+    home_dir : pathlib.Path
+        Root data repository.
+    dataset_name : pathlib.Path
+        Dataset name/path under ``home_dir``.
+    singularity_image : pathlib.Path
+        Container image path.
+    extra_binds : list of tuple[pathlib.Path, str], optional
+        Extra ``(host_path, container_path)`` bind mounts.
 
-    Returns:
-        A command prefix suitable for ``subprocess`` execution.
+    Returns
+    -------
+    list of str
+        Command prefix suitable for ``subprocess`` execution.
     """
     cmd: List[str] = ["singularity", "exec"]
     binds: List[tuple[Path, str]] = [(home_dir / dataset_name, "/data")]
@@ -55,11 +62,15 @@ def build_singularity_prefix(
 def tempo2_paths_in_container(pulsar: str) -> Tuple[str, str]:
     """Return container paths for a pulsar's `.par` and `.tim` files.
 
-    Args:
-        pulsar: Pulsar name.
+    Parameters
+    ----------
+    pulsar : str
+        Pulsar name.
 
-    Returns:
-        Tuple of ``(par_path, tim_path)`` inside the container.
+    Returns
+    -------
+    tuple of str
+        ``(par_path, tim_path)`` inside the container.
     """
     par = f"/data/{pulsar}/{pulsar}.par"
     tim = f"/data/{pulsar}/{pulsar}_all.tim"
@@ -69,15 +80,22 @@ def tempo2_paths_in_container(pulsar: str) -> Tuple[str, str]:
 def run_subprocess(cmd: List[str], stdout_path: Path, cwd: Path | None = None) -> int:
     """Run a subprocess and capture stdout/stderr to a file.
 
-    Args:
-        cmd: Command list to execute.
-        stdout_path: File to write stdout/stderr logs to.
-        cwd: Optional working directory.
+    Parameters
+    ----------
+    cmd : list of str
+        Command list to execute.
+    stdout_path : pathlib.Path
+        File to write stdout/stderr logs to.
+    cwd : pathlib.Path, optional
+        Optional working directory.
 
-    Returns:
+    Returns
+    -------
+    int
         Subprocess return code.
 
-    Notes:
+    Notes
+    -----
         Both stdout and stderr are captured into ``stdout_path`` for later
         inspection.
     """
@@ -108,17 +126,27 @@ def run_tempo2_for_pulsar(
 ) -> None:
     """Run tempo2 to generate PLK, covariance, and general2 outputs for a pulsar.
 
-    Args:
-        home_dir: Root data repository.
-        dataset_name: Dataset name or path.
-        singularity_image: Singularity/Apptainer image containing tempo2.
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsar: Pulsar name.
-        branch: Branch name (used for output filenames).
-        epoch: Tempo2 epoch value.
-        force_rerun: If True, run even when outputs already exist.
+    Parameters
+    ----------
+    home_dir : pathlib.Path
+        Root data repository.
+    dataset_name : pathlib.Path
+        Dataset name or path.
+    singularity_image : pathlib.Path
+        Singularity/Apptainer image containing tempo2.
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsar : str
+        Pulsar name.
+    branch : str
+        Branch name used for output filenames.
+    epoch : str
+        Tempo2 epoch value.
+    force_rerun : bool, optional
+        If ``True``, run even when outputs already exist.
 
-    Notes:
+    Notes
+    -----
         Outputs are written to ``plk``, ``covmat``, and ``general2`` subtrees in
         ``out_paths``.
     """

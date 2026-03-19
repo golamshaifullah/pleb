@@ -42,21 +42,29 @@ def _find_header_line(lines: List[str], startswith: str) -> Optional[int]:
 def read_plklog(file: Path) -> pd.DataFrame:
     """Parse a tempo2 ``plk`` log into a parameter table.
 
-    Args:
-        file: Path to a ``*_plk.log`` file.
+    Parameters
+    ----------
+    file : pathlib.Path
+        Path to a ``*_plk.log`` file.
 
-    Returns:
-        DataFrame with columns: ``Param``, ``Prefit``, ``Postfit``,
+    Returns
+    -------
+    pandas.DataFrame
+        Table with columns: ``Param``, ``Prefit``, ``Postfit``,
         ``Uncertainty``, ``Difference``, ``Fit``.
 
-    Raises:
-        FileNotFoundError: If the log file does not exist.
-        PlkParseError: If the log is empty or the table cannot be parsed.
+    Raises
+    ------
+    FileNotFoundError
+        If the log file does not exist.
+    PlkParseError
+        If the log is empty or the table cannot be parsed.
 
-    Examples:
-        Parse a tempo2 plk log::
+    Examples
+    --------
+    Parse a tempo2 plk log::
 
-            df = read_plklog(Path("J1234+5678_plk.log"))
+        df = read_plklog(Path("J1234+5678_plk.log"))
     """
     if not file.exists():
         raise FileNotFoundError(str(file))
@@ -115,15 +123,22 @@ def read_plklog(file: Path) -> pd.DataFrame:
 def read_covmat(file: Path) -> pd.DataFrame:
     """Parse a tempo2 covariance matrix text file.
 
-    Args:
-        file: Path to a covariance matrix file.
+    Parameters
+    ----------
+    file : pathlib.Path
+        Path to a covariance matrix file.
 
-    Returns:
-        DataFrame indexed by parameter name with numeric values.
+    Returns
+    -------
+    pandas.DataFrame
+        Parameter-indexed covariance table with numeric values.
 
-    Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If the header or table cannot be parsed.
+    Raises
+    ------
+    FileNotFoundError
+        If the file does not exist.
+    ValueError
+        If the header or table cannot be parsed.
     """
     if not file.exists():
         raise FileNotFoundError(str(file))
@@ -171,19 +186,26 @@ def _is_number(tok: str) -> bool:
 def read_general2(file: Path) -> pd.DataFrame:
     """Parse tempo2 general2 plugin output embedded in a log file.
 
-    Args:
-        file: Path to a log containing general2 plugin output.
+    Parameters
+    ----------
+    file : pathlib.Path
+        Path to a log containing general2 plugin output.
 
-    Returns:
-        DataFrame of parsed general2 rows. Empty if no data rows exist.
+    Returns
+    -------
+    pandas.DataFrame
+        Parsed general2 rows. Empty when no data rows exist.
 
-    Raises:
-        ValueError: If general2 start/end markers are missing.
+    Raises
+    ------
+    ValueError
+        If general2 start/end markers are missing.
 
-    Examples:
-        Parse a general2 log file::
+    Examples
+    --------
+    Parse a general2 log file::
 
-            df = read_general2(Path("J1234+5678_general2.log"))
+        df = read_general2(Path("J1234+5678_general2.log"))
     """
     start_marker = "Starting general2 plugin"
     end_marker = "Finished general2 plugin"
@@ -240,10 +262,14 @@ def read_general2(file: Path) -> pd.DataFrame:
 def read_tim_file(timfile: Path) -> pd.DataFrame:
     """Read a tempo2 `.tim` file using the robust reader.
 
-    Args:
-        timfile: Path to a `.tim` file.
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Path to a ``.tim`` file.
 
-    Returns:
-        DataFrame of parsed TOA rows.
+    Returns
+    -------
+    pandas.DataFrame
+        Parsed TOA rows.
     """
     return read_tim_file_robust(timfile)

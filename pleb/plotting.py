@@ -36,17 +36,37 @@ except Exception:
 def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
     """Compute histogram bin count using the Freedman–Diaconis rule.
 
-    Args:
-        x: Input data array.
-        max_bins: Maximum number of bins to return.
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Input data array.
+    max_bins : int, optional
+        Maximum number of bins to return.
 
-    Returns:
+    Returns
+    -------
+    int
         Suggested number of bins.
 
-    Examples:
-        Estimate bins for a histogram::
+    Notes
+    -----
+    Rule definition:
+    ``h = 2 * IQR(x) * n^{-1/3}``, ``bins = ceil((max(x)-min(x))/h)``.
 
-            bins = freedman_diaconis_bins(np.random.randn(1000))
+    Why used: it is robust to outliers (via IQR) and adapts to sample size.
+    Assumes a continuous distribution with enough finite points to estimate IQR.
+    If ``IQR=0`` (strong discreteness or ties), this function falls back to a
+    bounded default.
+
+    References
+    ----------
+    - Freedman, D. and Diaconis, P. (1981), *Zeitschrift für Wahrscheinlichkeitstheorie* 57, 453-476.
+
+    Examples
+    --------
+    Estimate bins for a histogram::
+
+        bins = freedman_diaconis_bins(np.random.randn(1000))
     """
     x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x)]
@@ -66,8 +86,10 @@ def freedman_diaconis_bins(x: np.ndarray, max_bins: int = 200) -> int:
 class MathTextSciFormatter(ScalarFormatter):
     """Matplotlib scalar formatter using MathText scientific notation.
 
-    Args:
-        fmt: Format string passed to Matplotlib.
+    Parameters
+    ----------
+    fmt : str, optional
+        Format string passed to Matplotlib.
     """
 
     def __init__(self, fmt: str = "%1.1e"):
@@ -82,15 +104,20 @@ class MathTextSciFormatter(ScalarFormatter):
 def savefig(fig: plt.Figure, path: Path, dpi: int) -> None:
     """Save a Matplotlib figure to disk and close it.
 
-    Args:
-        fig: Matplotlib figure.
-        path: Output file path.
-        dpi: Resolution in dots-per-inch.
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        Matplotlib figure.
+    path : pathlib.Path
+        Output file path.
+    dpi : int
+        Resolution in dots-per-inch.
 
-    Examples:
-        Save a figure::
+    Examples
+    --------
+    Save a figure::
 
-            savefig(fig, Path("plot.png"), dpi=150)
+        savefig(fig, Path("plot.png"), dpi=150)
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -107,18 +134,32 @@ def plot_systems_per_pulsar(
 ) -> None:
     """Plot per-pulsar system timelines and write summary tables.
 
-    Args:
-        home_dir: Root data repository.
-        dataset_name: Dataset name or path.
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branch: Branch name for labeling.
-        dpi: Output resolution.
+    Parameters
+    ----------
+    home_dir : pathlib.Path
+        Root data repository.
+    dataset_name : pathlib.Path
+        Dataset name or path.
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branch : str
+        Branch name for labeling.
+    dpi : int
+        Output resolution.
 
-    Examples:
-        Plot systems per pulsar::
+    Notes
+    -----
+    Cadence summaries are descriptive:
+    ``mean(diff(sorted(MJD)))`` and ``median(diff(sorted(MJD)))``.
+    They are sensitive to long gaps and campaign boundaries.
 
-            plot_systems_per_pulsar(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
+    Examples
+    --------
+    Plot systems per pulsar::
+
+        plot_systems_per_pulsar(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
     """
     fig, axes = plt.subplots(
         nrows=len(pulsars), ncols=1, sharex=True, figsize=(12, max(2, 3 * len(pulsars)))
@@ -204,18 +245,26 @@ def plot_pulsars_per_system(
 ) -> None:
     """Plot per-system timelines across pulsars.
 
-    Args:
-        home_dir: Root data repository.
-        dataset_name: Dataset name or path.
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branch: Branch name for labeling.
-        dpi: Output resolution.
+    Parameters
+    ----------
+    home_dir : pathlib.Path
+        Root data repository.
+    dataset_name : pathlib.Path
+        Dataset name or path.
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branch : str
+        Branch name for labeling.
+    dpi : int
+        Output resolution.
 
-    Examples:
-        Plot pulsars per system::
+    Examples
+    --------
+    Plot pulsars per system::
 
-            plot_pulsars_per_system(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
+        plot_pulsars_per_system(home, dataset, out_paths, ["J1234+5678"], "main", dpi=120)
     """
     system_to_data = {}  # system -> list of (pulsar_index, mjd_array)
     for p_idx, pulsar in enumerate(pulsars):
@@ -272,17 +321,24 @@ def plot_covmat_heatmaps(
 ) -> None:
     """Plot covariance matrix heatmaps per pulsar/branch.
 
-    Args:
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branches: Branches to include.
-        dpi: Output resolution.
-        max_params: Optional maximum number of parameters to display.
+    Parameters
+    ----------
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branches : list of str
+        Branches to include.
+    dpi : int
+        Output resolution.
+    max_params : int, optional
+        Maximum number of parameters to display.
 
-    Examples:
-        Plot covariance heatmaps::
+    Examples
+    --------
+    Plot covariance heatmaps::
 
-            plot_covmat_heatmaps(out_paths, ["J1234+5678"], ["main"], dpi=120, max_params=50)
+        plot_covmat_heatmaps(out_paths, ["J1234+5678"], ["main"], dpi=120, max_params=50)
     """
     for pulsar in pulsars:
         for branch in branches:
@@ -323,16 +379,22 @@ def plot_residuals(
 ) -> None:
     """Plot timing residuals per pulsar/branch.
 
-    Args:
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branches: Branches to include.
-        dpi: Output resolution.
+    Parameters
+    ----------
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branches : list of str
+        Branches to include.
+    dpi : int
+        Output resolution.
 
-    Examples:
-        Plot residuals for two branches::
+    Examples
+    --------
+    Plot residuals for two branches::
 
-            plot_residuals(out_paths, ["J1234+5678"], ["main", "EPTA"], dpi=120)
+        plot_residuals(out_paths, ["J1234+5678"], ["main", "EPTA"], dpi=120)
     """
     summary_path = out_paths["tag"] / "residual_summary.tsv"
     with open(summary_path, "w", encoding="utf-8") as f:

@@ -27,15 +27,32 @@ logger = get_logger("pleb.reports")
 def _chi2_sf(x: float, df: float) -> float:
     """Compute the chi-square survival function.
 
-    Args:
-        x: Test statistic value.
-        df: Degrees of freedom.
+    Parameters
+    ----------
+    x : float
+        Test statistic value.
+    df : float
+        Degrees of freedom.
 
-    Returns:
-        Survival function value (1 - CDF). Returns NaN if unavailable.
+    Returns
+    -------
+    float
+        Survival-function value ``P(Chi2_df >= x)``. Returns ``NaN`` if no
+        backend implementation is available.
 
-    Notes:
-        Uses SciPy if available, otherwise falls back to mpmath.
+    Notes
+    -----
+    This function is used to annotate nested-model comparisons based on
+    ``Delta chi^2``. Under regular assumptions (Gaussian errors, correctly
+    specified nested models, asymptotic regime), ``Delta chi^2`` is compared to
+    a chi-square reference with ``df = Delta n_params``.
+
+    Formula:
+    ``sf = 1 - F_{Chi2(df)}(x)``.
+
+    References
+    ----------
+    - Wilks, S. S. (1938), *Ann. Math. Stat.* 9(1), 60-62.
     """
     if x is None or df is None:
         return float("nan")
@@ -160,14 +177,32 @@ def compare_plk(
       * vectorized merge instead of Python loops
       * add uncertainty-normalized "sigma" deltas when possible
 
-    Args:
-        branch: Branch name to compare.
-        reference_branch: Reference branch name.
-        pulsar: Pulsar name.
-        out_paths: Output directory mapping from :func:`make_output_tree`.
+    Parameters
+    ----------
+    branch : str
+        Branch name to compare.
+    reference_branch : str
+        Reference branch name.
+    pulsar : str
+        Pulsar name.
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
 
-    Returns:
-        A merged dataframe with parameter differences and status flags.
+    Returns
+    -------
+    pandas.DataFrame
+        Merged parameter table with branch/reference values, differences,
+        significance-like metrics, and status flags.
+
+    Notes
+    -----
+    The uncertainty-normalized score reported here is:
+
+    ``sigma = |Delta| / sqrt(sigma_ref^2 + sigma_branch^2)``.
+
+    Interpretation caveat: this is a convenience effect-size score assuming
+    independent Gaussian errors across branch fits, which may not strictly hold
+    when branch models share data and correlated noise structure.
     """
     ref_path = out_paths["plk"] / f"{pulsar}_{reference_branch}_plk.log"
     br_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
@@ -274,16 +309,22 @@ def write_change_reports(
 ) -> None:
     """Write per-pulsar change reports and a combined summary.
 
-    Args:
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branches: Branches to compare (includes the reference branch).
-        reference_branch: Reference branch name.
+    Parameters
+    ----------
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branches : list of str
+        Branches to compare (including the reference branch).
+    reference_branch : str
+        Reference branch name.
 
-    Examples:
-        Write change reports for two branches::
+    Examples
+    --------
+    Write change reports for two branches::
 
-            write_change_reports(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
+        write_change_reports(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
     safe_mkdir(out_paths["change_report"])
     combined = []
@@ -354,15 +395,22 @@ def summarize_run(
 ) -> Dict[str, Optional[float]]:
     """Summarize a tempo2 run to support model comparison.
 
-    Args:
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsar: Pulsar name.
-        branch: Branch name.
+    Parameters
+    ----------
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsar : str
+        Pulsar name.
+    branch : str
+        Branch name.
 
-    Returns:
-        Summary dictionary containing fit statistics and derived model metrics.
+    Returns
+    -------
+    dict
+        Fit statistics and derived model metrics.
 
-    Notes:
+    Notes
+    -----
         WRMS is computed from general2 ``post``/``err`` columns when available.
     """
     plk_path = out_paths["plk"] / f"{pulsar}_{branch}_plk.log"
@@ -429,16 +477,22 @@ def write_model_comparison_summary(
 ) -> None:
     """Write a per-pulsar model comparison summary table vs a reference branch.
 
-    Args:
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branches: Branches to compare (includes the reference branch).
-        reference_branch: Reference branch name.
+    Parameters
+    ----------
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branches : list of str
+        Branches to compare (including the reference branch).
+    reference_branch : str
+        Reference branch name.
 
-    Examples:
-        Write a model-comparison table::
+    Examples
+    --------
+    Write a model-comparison table::
 
-            write_model_comparison_summary(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
+        write_model_comparison_summary(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
     rows = []
     for pulsar in pulsars:
@@ -511,17 +565,24 @@ def write_new_param_significance(
     This is a rapid way to screen whether newly-added fitted parameters look
     significant without running extra tempo2 fits.
 
-    Args:
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branches: Branches to compare (includes the reference branch).
-        reference_branch: Reference branch name.
-        z_threshold: Significance threshold for reporting counts.
+    Parameters
+    ----------
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branches : list of str
+        Branches to compare (including the reference branch).
+    reference_branch : str
+        Reference branch name.
+    z_threshold : float, optional
+        Significance threshold for reporting counts.
 
-    Examples:
-        Summarize significance for newly added parameters::
+    Examples
+    --------
+    Summarize significance for newly added parameters::
 
-            write_new_param_significance(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
+        write_new_param_significance(out_paths, ["J1234+5678"], ["main", "EPTA"], "main")
     """
     safe_mkdir(out_paths["change_report"])
     rows = []
@@ -605,17 +666,24 @@ def write_outlier_tables(
 ) -> None:
     """Write per-pulsar outlier tables from general2 outputs.
 
-    Args:
-        home_dir: Root data repository.
-        dataset_name: Dataset name or path.
-        out_paths: Output directory mapping from :func:`make_output_tree`.
-        pulsars: Pulsar names to include.
-        branches: Branches to include.
+    Parameters
+    ----------
+    home_dir : pathlib.Path
+        Root data repository.
+    dataset_name : pathlib.Path
+        Dataset name or path.
+    out_paths : dict
+        Output directory mapping from :func:`make_output_tree`.
+    pulsars : list of str
+        Pulsar names to include.
+    branches : list of str
+        Branches to include.
 
-    Examples:
-        Write outlier tables for a set of pulsars::
+    Examples
+    --------
+    Write outlier tables for a set of pulsars::
 
-            write_outlier_tables(Path("/data/epta/EPTA"), Path("EPTA"), out_paths, ["J1234+5678"], ["main"])
+        write_outlier_tables(Path("/data/epta/EPTA"), Path("EPTA"), out_paths, ["J1234+5678"], ["main"])
     """
     safe_mkdir(out_paths["outliers"])
     for pulsar in pulsars:
