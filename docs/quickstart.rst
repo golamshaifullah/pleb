@@ -98,6 +98,22 @@ as fallback:
      --set pqc_backend_col="sys" \
      --set pqc_backend_profiles_path="configs/rules/pqc/backend_profiles.example.toml"
 
+TOML-configurable outlier strategies
+------------------------------------
+
+You can now choose the outlier decision strategy directly in TOML by listing
+which QC columns should be treated as outlier evidence.
+
+.. code-block:: bash
+
+   pleb --config pipeline.toml \
+     --set run_fix_dataset=true \
+     --set fix_qc_remove_outliers=true \
+     --set fix_qc_outlier_cols='["bad_point","robust_outlier","robust_global_outlier","bad_mad"]' \
+     --set qc_report=true \
+     --set qc_report_compact_pdf=true \
+     --set qc_report_compact_outlier_cols='["bad_point","robust_outlier","robust_global_outlier","bad_mad"]'
+
 Compact PDF report
 ------------------
 
@@ -129,5 +145,7 @@ Next steps
 ----------
 
 - For details on the CLI, see :doc:`cli`.
+- For practical tuning of TOML settings and detection strategies, see
+  :doc:`configuration_reference`.
 - For statistical context (chi-square, red noise, DM variations), see
   :doc:`concepts`.

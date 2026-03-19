@@ -1,22 +1,34 @@
 pleb - The EPTA Data Combination Pipeline
-==============================
+=========================================
 
 .. toctree::
    :maxdepth: 2
-   :caption: Documentation
+   :caption: Get Started
 
    overview
    installation
    quickstart
+
+.. toctree::
+   :maxdepth: 2
+   :caption: User Guides
+
+   configuration
    running_modes
    modes
-   flow_diagrams
-   concepts
-   cli
-   gui
    ingest
+   cli
+   concepts
    examples
+   flow_diagrams
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Project Notes
+
+   release_notes
    faq
+   gui
 
 .. toctree::
    :maxdepth: 2

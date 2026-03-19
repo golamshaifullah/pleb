@@ -6,6 +6,7 @@
 reporting PTA pulsar timing datasets.
 
 Docs: https://golamshaifullah.github.io/pleb/
+Config guide (TOML strategies): https://golamshaifullah.github.io/pleb/configuration_reference.html
 
 ## Core capabilities
 
@@ -17,6 +18,18 @@ Docs: https://golamshaifullah.github.io/pleb/
   - overlap handling and deduplication (configurable)
 - Optional QC integration (via `pqc`) for outlier/event tagging.
 - Workflow mode to chain ingest/pipeline/qc-report steps in one run.
+
+## Since `release/v0.1.0`
+
+- TOML-based detection strategy selection:
+  - `fix_qc_outlier_cols` for FixDataset action policy
+  - `qc_report_compact_outlier_cols` for compact report policy
+  - `pqc_backend_profiles_path` for per-backend PQC overrides
+- Workflow serial/parallel grouping with explicit barriers.
+- Ingest lockfile validation and source-priority controls for deterministic ingest.
+- Declarative relabel/overlap rule catalogs in TOML.
+
+See `docs/release_notes.rst` for details.
 
 ## Modes
 
