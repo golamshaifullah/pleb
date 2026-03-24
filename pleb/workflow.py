@@ -48,6 +48,7 @@ class WorkflowContext:
     last_fix_summary : pathlib.Path or None
         Path to the latest FixDataset summary artifact, when generated.
     """
+
     last_run_dir: Optional[Path] = None
     last_pipeline_run_dir: Optional[Path] = None
     last_qc_summary: Optional[Path] = None
@@ -410,7 +411,9 @@ def _run_steps_parallel(
             last_qc_summary=ctx.last_qc_summary,
             last_fix_summary=ctx.last_fix_summary,
         )
-        logger.info("%s[parallel %d/%d] %s", label_prefix, i + 1, len(steps), st["name"])
+        logger.info(
+            "%s[parallel %d/%d] %s", label_prefix, i + 1, len(steps), st["name"]
+        )
         _run_step(st, base_dict, local_ctx)
         return i, local_ctx
 
@@ -444,7 +447,9 @@ def _run_step_sequence(
 ) -> None:
     m = str(mode or "serial").strip().lower()
     if m not in {"serial", "parallel"}:
-        raise ValueError(f"Unsupported workflow mode: {mode!r}; use 'serial' or 'parallel'.")
+        raise ValueError(
+            f"Unsupported workflow mode: {mode!r}; use 'serial' or 'parallel'."
+        )
     if m == "serial":
         _run_steps_serial(steps, base_dict, ctx, label_prefix=label_prefix)
         return
@@ -528,7 +533,9 @@ def run_workflow(path: Path) -> WorkflowContext:
                 base_dict,
                 ctx,
                 mode=str(gp.get("mode") or global_mode),
-                parallel_workers=int(gp.get("parallel_workers") or global_parallel_workers),
+                parallel_workers=int(
+                    gp.get("parallel_workers") or global_parallel_workers
+                ),
                 label_prefix=f"[{gname}] ",
             )
 
@@ -553,7 +560,9 @@ def run_workflow(path: Path) -> WorkflowContext:
                         ctx,
                         mode=str(gp.get("mode") or lp.get("mode") or "serial"),
                         parallel_workers=int(
-                            gp.get("parallel_workers") or lp.get("parallel_workers") or 0
+                            gp.get("parallel_workers")
+                            or lp.get("parallel_workers")
+                            or 0
                         ),
                         label_prefix=f"[{gname}] ",
                     )

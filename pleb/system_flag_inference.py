@@ -106,6 +106,21 @@ def _jbo_roach_centre_for_freq(freq_mhz: float) -> int:
     return 1420 if float(freq_mhz) < 1520.0 else 1620
 
 
+def _infer_band_centre_from_filename(timfile: Path) -> Optional[int]:
+    """Infer a file-level band centre from the tim filename, if present."""
+    stem = timfile.name
+    if stem.lower().endswith(".tim"):
+        stem = stem[:-4]
+    for token in stem.split("."):
+        tok = token.strip()
+        if tok.isdigit():
+            try:
+                return int(tok)
+            except Exception:
+                return None
+    return None
+
+
 class BackendMissingError(RuntimeError):
     """Raised when a backend cannot be inferred automatically.
 
@@ -549,6 +564,9 @@ def infer_sys_group_pta(
 ) -> pd.DataFrame:
     """Infer -sys/-group/-pta values for each TOA row.
 
+    ``-sys`` uses per-TOA (subband) centres when available. ``-group`` uses a
+    file-level band centre so grouped analyses are not split by subband.
+
     Parameters
     ----------
     timfile : pathlib.Path
@@ -641,9 +659,18 @@ def infer_sys_group_pta(
     # Vectorised string build
     centre_s = pd.Series(centre, index=df.index, dtype="int64").astype(str)
     sys_val = tel + "." + backend + "." + centre_s
-    group_val = (
-        sys_val  # cheap: keep group identical unless you have a receiver naming rule
-    )
+    band_centre = _infer_band_centre_from_filename(timfile)
+    if band_centre is None:
+        if use_binning and np.isfinite(bw):
+            sub_bw = float(bw) / float(nb)
+            band_centre = int(
+                np.rint(
+                    float(np.nanmin(df["freq_mhz"])) - 0.5 * sub_bw + 0.5 * float(bw)
+                )
+            )
+        else:
+            band_centre = int(np.rint(float(np.nanmedian(df["freq_mhz"]))))
+    group_val = pd.Series([f"{tel}.{backend}.{band_centre}"] * len(df), index=df.index)
     pta_val = pd.Series([pta] * len(df), index=df.index)
 
     out = pd.DataFrame(

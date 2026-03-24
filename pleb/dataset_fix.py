@@ -99,6 +99,7 @@ _LEGACY_SYS_ALLOWLIST = {
     "NRT.BON.2000",
 }
 
+
 @dataclass(slots=True)
 class FixDatasetConfig:
     """Controls for dataset fixing utilities.
@@ -501,7 +502,10 @@ def _parse_tempo2_redchisq(stdout_path: Path) -> Optional[float]:
     )
     if not text:
         return None
-    for pat in (r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)", r"red\s*chisq\s*=\s*([0-9.+\-eE]+)"):
+    for pat in (
+        r"reduced\s*chisq\s*=\s*([0-9.+\-eE]+)",
+        r"red\s*chisq\s*=\s*([0-9.+\-eE]+)",
+    ):
         m = re.search(pat, text, flags=re.IGNORECASE)
         if m:
             try:
@@ -521,7 +525,9 @@ def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
     return alltim.stem
 
 
-def _parse_tim_system_rows(timfile: Path) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]]]:
+def _parse_tim_system_rows(
+    timfile: Path,
+) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]]]:
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     systems: Set[str] = set()
     errs: Dict[str, List[float]] = {}
@@ -561,7 +567,9 @@ def _parse_tim_system_rows(timfile: Path) -> Tuple[Dict[str, List[str]], List[st
     return by_sys, sorted(systems), errs
 
 
-def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
+def build_variant_reference_jump_pars(
+    psr_dir: Path, cfg: FixDatasetConfig
+) -> Dict[str, object]:
     """Create per-variant JUMP templates and reference-system diagnostics.
 
     Parameters
@@ -600,7 +608,9 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
     par = psr_dir / f"{psr}.par"
     if not par.exists():
         return {"psr": psr, "error": f"Missing par file: {par}"}
-    if not (cfg.tempo2_home_dir and cfg.tempo2_dataset_name and cfg.tempo2_singularity_image):
+    if not (
+        cfg.tempo2_home_dir and cfg.tempo2_dataset_name and cfg.tempo2_singularity_image
+    ):
         return {
             "psr": psr,
             "error": "tempo2 context missing; set tempo2_home_dir/tempo2_dataset_name/tempo2_singularity_image",
@@ -608,7 +618,11 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
 
     all_variants = sorted(psr_dir.glob(f"{psr}_all.*.tim"))
     if not all_variants:
-        return {"psr": psr, "variants": [], "message": "No _all.variant.tim files found"}
+        return {
+            "psr": psr,
+            "variants": [],
+            "message": "No _all.variant.tim files found",
+        }
 
     dataset_root = psr_dir.parent
     tmp_root = dataset_root / "results" / "jump_reference_tmp" / psr
@@ -691,7 +705,9 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
             par_container = f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
             tim_container = f"/data/results/jump_reference_tmp/{psr}/{sys_all.name}"
             log_path = tmp_root / f"{psr}.{vname}.{sysv}.tempo2.log"
-            rc = run_subprocess(prefix + ["tempo2", "-f", par_container, tim_container], log_path)
+            rc = run_subprocess(
+                prefix + ["tempo2", "-f", par_container, tim_container], log_path
+            )
             red = _parse_tempo2_redchisq(log_path) if rc == 0 else None
             system_rows[sysv]["reduced_chisq"] = red
 
@@ -705,14 +721,21 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
             rows.append(r)
 
         if not rows:
-            out_variants[vname] = {"variant_alltim": str(alltim), "error": "No systems found"}
+            out_variants[vname] = {
+                "variant_alltim": str(alltim),
+                "error": "No systems found",
+            }
             continue
 
         # smallest median err first, then largest n_toa, then lexical system.
         rows_sorted = sorted(
             rows,
             key=lambda x: (
-                np.inf if np.isnan(float(x.get("median_toa_err_us", np.nan))) else float(x.get("median_toa_err_us", np.nan)),
+                (
+                    np.inf
+                    if np.isnan(float(x.get("median_toa_err_us", np.nan)))
+                    else float(x.get("median_toa_err_us", np.nan))
+                ),
                 -int(x.get("n_toa", 0)),
                 str(x.get("system", "")),
             ),
@@ -721,7 +744,9 @@ def build_variant_reference_jump_pars(psr_dir: Path, cfg: FixDatasetConfig) -> D
 
         csv_path = csv_base / f"{psr}_jump_reference.{vname}.csv"
         with open(csv_path, "w", encoding="utf-8") as f:
-            f.write("variant,system,n_toa,median_toa_err_us,reduced_chisq,source_timfiles,reference_system\n")
+            f.write(
+                "variant,system,n_toa,median_toa_err_us,reduced_chisq,source_timfiles,reference_system\n"
+            )
             for r in rows_sorted:
                 f.write(
                     f"{vname},{r['system']},{r['n_toa']},{r['median_toa_err_us']},{r.get('reduced_chisq')},{r.get('source_timfiles')},{ref_system}\n"
@@ -1254,7 +1279,9 @@ def _load_overlap_rules(path: Path) -> List[Dict[str, object]]:
         kind = str(r.get("kind", "prefer_multichannel")).strip().lower()
         if kind != "prefer_multichannel":
             continue
-        name = str(r.get("name", f"overlap_rule_{i+1}")).strip() or f"overlap_rule_{i+1}"
+        name = (
+            str(r.get("name", f"overlap_rule_{i+1}")).strip() or f"overlap_rule_{i+1}"
+        )
         primary_glob = str(r.get("primary_glob", "")).strip()
         secondary_glob = str(r.get("secondary_glob", "")).strip()
         if not primary_glob or not secondary_glob:
@@ -2937,7 +2964,11 @@ def remove_overlaps_exact(
     """
     loaded_from: Optional[str] = None
     if overlap_map is None:
-        cat = Path(overlap_catalog_path) if overlap_catalog_path else _default_overlap_exact_catalog_path()
+        cat = (
+            Path(overlap_catalog_path)
+            if overlap_catalog_path
+            else _default_overlap_exact_catalog_path()
+        )
         if not cat.is_absolute():
             cat = psr_dir.parent / cat
         if cat.exists():
@@ -3002,6 +3033,7 @@ def remove_overlaps_exact(
     if loaded_from is not None:
         rep["overlap_catalog"] = loaded_from
     return rep
+
 
 def _parse_toa_records(
     timfile: Path,
@@ -3151,7 +3183,10 @@ def prefer_multichannel_pair_rule(
             single_file, single_lines, single_recs = primary, p_lines, p_recs
         else:
             details.append(
-                {"pair": [primary.name, secondary.name], "skipped": "ambiguous_dual_epochs"}
+                {
+                    "pair": [primary.name, secondary.name],
+                    "skipped": "ambiguous_dual_epochs",
+                }
             )
             continue
 

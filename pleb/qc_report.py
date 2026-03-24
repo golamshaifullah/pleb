@@ -51,9 +51,7 @@ def _bool_series(df: pd.DataFrame, col: str) -> pd.Series:
         return s.fillna(False)
     if pd.api.types.is_numeric_dtype(s):
         return s.fillna(0).astype(float) != 0.0
-    return s.fillna(False).astype(str).str.lower().isin(
-        {"1", "true", "t", "yes", "y"}
-    )
+    return s.fillna(False).astype(str).str.lower().isin({"1", "true", "t", "yes", "y"})
 
 
 def _build_compact_decisions(
@@ -159,7 +157,9 @@ def _build_compact_decisions(
         )
     reason[decision == "BAD_TOA"] = reason_out[decision == "BAD_TOA"]
     reason[decision == "REVIEW_EVENT"] = (
-        reason_out[decision == "REVIEW_EVENT"] + " |event| " + reason_evt[decision == "REVIEW_EVENT"]
+        reason_out[decision == "REVIEW_EVENT"]
+        + " |event| "
+        + reason_evt[decision == "REVIEW_EVENT"]
     )
     reason[decision == "EVENT"] = reason_evt[decision == "EVENT"]
     reason = reason.str.strip().str.strip("|").replace("", "n/a")
@@ -246,7 +246,9 @@ def _write_compact_pdf(
             d = _build_compact_decisions(df, outlier_cols=outlier_cols)
             psr = p.stem.replace("_qc", "")
             mjd = pd.to_numeric(d.get("mjd", pd.Series([])), errors="coerce")
-            resid = pd.to_numeric(d.get("resid_us", d.get("resid", pd.Series([]))), errors="coerce")
+            resid = pd.to_numeric(
+                d.get("resid_us", d.get("resid", pd.Series([]))), errors="coerce"
+            )
 
             fig, axes = plt.subplots(2, 1, figsize=(11, 8.5), height_ratios=[2.6, 1.4])
             ax = axes[0]
@@ -292,7 +294,11 @@ def _write_compact_pdf(
 
             # Top suspicious backends
             ax2 = axes[1]
-            bcol = backend_col if backend_col in d.columns else ("sys" if "sys" in d.columns else None)
+            bcol = (
+                backend_col
+                if backend_col in d.columns
+                else ("sys" if "sys" in d.columns else None)
+            )
             if bcol is not None and len(d):
                 bad = d[d["decision"].isin(["BAD_TOA", "REVIEW_EVENT"])].copy()
                 if len(bad):
@@ -323,7 +329,12 @@ def _write_compact_pdf(
                 continue
             flagged = d[d["decision"].isin(["BAD_TOA", "REVIEW_EVENT"])].copy()
             if flagged.empty:
-                ax.text(0.02, 0.90, "No BAD_TOA/REVIEW_EVENT rows for this pulsar.", fontsize=10)
+                ax.text(
+                    0.02,
+                    0.90,
+                    "No BAD_TOA/REVIEW_EVENT rows for this pulsar.",
+                    fontsize=10,
+                )
                 pdf.savefig(fig, bbox_inches="tight")
                 plt.close(fig)
                 continue
@@ -331,7 +342,9 @@ def _write_compact_pdf(
             rows = []
             stem = p.stem
             diag_path = (pdf_path.parent / "diagnostics" / f"{stem}.txt").as_posix()
-            summary_png = (pdf_path.parent / "summary" / f"{stem}_summary.png").as_posix()
+            summary_png = (
+                pdf_path.parent / "summary" / f"{stem}_summary.png"
+            ).as_posix()
             for be, g in flagged.groupby(bcol2):
                 be_str = str(be)
                 bad_toa = int((g["decision"] == "BAD_TOA").sum())

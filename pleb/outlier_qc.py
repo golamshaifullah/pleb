@@ -72,6 +72,7 @@ from contextlib import contextmanager
 import re
 
 import pandas as pd
+
 try:  # Python 3.11+
     import tomllib
 except Exception:  # pragma: no cover
@@ -368,7 +369,9 @@ def _prepare_backend_filtered_par(
 
     tmp_par = work_dir / parfile.name
     tmp_all = work_dir / alltim.name
-    tmp_par.write_text(parfile.read_text(encoding="utf-8", errors="ignore"), encoding="utf-8")
+    tmp_par.write_text(
+        parfile.read_text(encoding="utf-8", errors="ignore"), encoding="utf-8"
+    )
 
     include_lines: list[str] = []
     direct_toas: list[str] = []
@@ -419,8 +422,12 @@ def _prepare_backend_filtered_par(
 
 def _row_key_series(df: pd.DataFrame, backend_col: str) -> pd.Series:
     b = df.get(backend_col, pd.Series([""] * len(df), index=df.index)).astype(str)
-    mjd = pd.to_numeric(df.get("mjd", pd.Series([pd.NA] * len(df), index=df.index)), errors="coerce").round(12)
-    freq = pd.to_numeric(df.get("freq", pd.Series([pd.NA] * len(df), index=df.index)), errors="coerce").round(6)
+    mjd = pd.to_numeric(
+        df.get("mjd", pd.Series([pd.NA] * len(df), index=df.index)), errors="coerce"
+    ).round(12)
+    freq = pd.to_numeric(
+        df.get("freq", pd.Series([pd.NA] * len(df), index=df.index)), errors="coerce"
+    ).round(6)
     if "_timfile" in df.columns:
         t = df["_timfile"].astype(str)
     elif "filename" in df.columns:
@@ -545,7 +552,9 @@ def run_pqc_for_parfile(
             "If you're installing from a local zip/folder: pip install <path-to-pqc>."
         ) from e
 
-    def _run_once(par_in: Path, cfg_in: PTAQCConfig, settings_path: Optional[Path]) -> pd.DataFrame:
+    def _run_once(
+        par_in: Path, cfg_in: PTAQCConfig, settings_path: Optional[Path]
+    ) -> pd.DataFrame:
         merge_cfg = MergeConfig(tol_days=float(cfg_in.merge_tol_seconds) / 86400.0)
         bad_cfg = BadMeasConfig(
             tau_corr_days=float(cfg_in.tau_corr_minutes) / (60.0 * 24.0),
@@ -560,7 +569,9 @@ def run_pqc_for_parfile(
             suppress_overlap=bool(cfg_in.suppress_overlap),
             instrument=bool(cfg_in.event_instrument),
         )
-        dip_cfg = ExpDipConfig(min_duration_days=float(cfg_in.exp_dip_min_duration_days))
+        dip_cfg = ExpDipConfig(
+            min_duration_days=float(cfg_in.exp_dip_min_duration_days)
+        )
         feature_cfg = FeatureConfig(
             add_orbital_phase=bool(cfg_in.add_orbital_phase),
             add_solar_elongation=bool(cfg_in.add_solar_elongation),
@@ -569,7 +580,9 @@ def run_pqc_for_parfile(
             add_parallactic_angle=bool(cfg_in.add_parallactic_angle),
             add_freq_bin=bool(cfg_in.add_freq_bin),
             freq_bins=int(cfg_in.freq_bins),
-            observatory_path=(str(cfg_in.observatory_path) if cfg_in.observatory_path else None),
+            observatory_path=(
+                str(cfg_in.observatory_path) if cfg_in.observatory_path else None
+            ),
         )
         struct_cfg = StructureConfig(
             mode=str(cfg_in.structure_mode),
@@ -592,7 +605,9 @@ def run_pqc_for_parfile(
                 else StructureConfig().circular_features
             ),
             structure_group_cols=(
-                tuple(cfg_in.structure_group_cols) if cfg_in.structure_group_cols else None
+                tuple(cfg_in.structure_group_cols)
+                if cfg_in.structure_group_cols
+                else None
             ),
         )
 
@@ -619,10 +634,14 @@ def run_pqc_for_parfile(
             enabled=bool(cfg_in.outlier_gate_enabled),
             sigma_thresh=float(cfg_in.outlier_gate_sigma),
             resid_col=(
-                str(cfg_in.outlier_gate_resid_col) if cfg_in.outlier_gate_resid_col else None
+                str(cfg_in.outlier_gate_resid_col)
+                if cfg_in.outlier_gate_resid_col
+                else None
             ),
             sigma_col=(
-                str(cfg_in.outlier_gate_sigma_col) if cfg_in.outlier_gate_sigma_col else None
+                str(cfg_in.outlier_gate_sigma_col)
+                if cfg_in.outlier_gate_sigma_col
+                else None
             ),
         )
         solar_cfg = SolarCutConfig(
@@ -644,7 +663,9 @@ def run_pqc_for_parfile(
             enabled=bool(cfg_in.orbital_phase_cut_enabled),
             center_phase=float(cfg_in.orbital_phase_cut_center),
             limit_phase=(
-                float(cfg_in.orbital_phase_cut) if cfg_in.orbital_phase_cut is not None else None
+                float(cfg_in.orbital_phase_cut)
+                if cfg_in.orbital_phase_cut is not None
+                else None
             ),
             sigma_thresh=float(cfg_in.orbital_phase_cut_sigma),
             nbins=int(cfg_in.orbital_phase_cut_nbins),
@@ -690,7 +711,9 @@ def run_pqc_for_parfile(
             min_duration_days=float(cfg_in.glitch_min_duration_days),
         )
         if settings_path is None:
-            settings_path = out_csv.parent / "run_settings" / f"{par_in.stem}.pqc_settings.toml"
+            settings_path = (
+                out_csv.parent / "run_settings" / f"{par_in.stem}.pqc_settings.toml"
+            )
         settings_path = Path(settings_path)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         with _pushd(out_csv.parent):
@@ -730,7 +753,9 @@ def run_pqc_for_parfile(
             else:
                 key_base = _row_key_series(df, str(cfg.backend_col))
                 idx_by_key = {k: i for i, k in enumerate(key_base.astype(str))}
-                backends = sorted({str(x) for x in df[str(cfg.backend_col)].dropna().unique()})
+                backends = sorted(
+                    {str(x) for x in df[str(cfg.backend_col)].dropna().unique()}
+                )
                 for be in backends:
                     overrides = _match_backend_overrides(be, profiles)
                     if not overrides:
@@ -739,15 +764,28 @@ def run_pqc_for_parfile(
                     payload.update(overrides)
                     payload["backend_profiles_path"] = None
                     cfg_be = PTAQCConfig(**payload)
-                    tmp = out_csv.parent / ".pqc_backend_profiles" / parfile.stem / re.sub(r"[^A-Za-z0-9._-]+", "_", be)
-                    tmp_par = _prepare_backend_filtered_par(parfile, str(cfg.backend_col), be, tmp)
+                    tmp = (
+                        out_csv.parent
+                        / ".pqc_backend_profiles"
+                        / parfile.stem
+                        / re.sub(r"[^A-Za-z0-9._-]+", "_", be)
+                    )
+                    tmp_par = _prepare_backend_filtered_par(
+                        parfile, str(cfg.backend_col), be, tmp
+                    )
                     if tmp_par is None:
                         continue
-                    be_settings = out_csv.parent / "run_settings" / f"{parfile.stem}.{be}.pqc_settings.toml"
+                    be_settings = (
+                        out_csv.parent
+                        / "run_settings"
+                        / f"{parfile.stem}.{be}.pqc_settings.toml"
+                    )
                     try:
                         df_be = _run_once(tmp_par, cfg_be, be_settings)
                     except Exception as e:
-                        logger.warning("pqc backend profile run failed for %s: %s", be, e)
+                        logger.warning(
+                            "pqc backend profile run failed for %s: %s", be, e
+                        )
                         continue
                     key_be = _row_key_series(df_be, str(cfg.backend_col)).astype(str)
                     shared_cols = [c for c in df_be.columns if c in df.columns]
@@ -758,7 +796,9 @@ def run_pqc_for_parfile(
                             continue
                         matched += 1
                         for c in shared_cols:
-                            df.iat[i, df.columns.get_loc(c)] = df_be.iat[j, df_be.columns.get_loc(c)]
+                            df.iat[i, df.columns.get_loc(c)] = df_be.iat[
+                                j, df_be.columns.get_loc(c)
+                            ]
                     logger.info(
                         "Applied pqc backend profile for %s: overrides=%s matched_rows=%d",
                         be,

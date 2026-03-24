@@ -1198,7 +1198,9 @@ class PipelineConfig:
             qc_report_compact_pdf_name=str(
                 d.get("qc_report_compact_pdf_name", "qc_compact_report.pdf")
             ),
-            qc_report_compact_outlier_cols=opt_list_str("qc_report_compact_outlier_cols"),
+            qc_report_compact_outlier_cols=opt_list_str(
+                "qc_report_compact_outlier_cols"
+            ),
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),
             param_scan_typical=bool(d.get("param_scan_typical", False)),

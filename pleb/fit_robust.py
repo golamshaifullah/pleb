@@ -9,4 +9,3 @@ from __future__ import annotations
 from .tim_reader import read_tim_file_robust
 
 __all__ = ["read_tim_file_robust"]
-
