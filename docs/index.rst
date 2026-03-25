@@ -14,6 +14,7 @@ pleb - The EPTA Data Combination Pipeline
    :caption: User Guides
 
    configuration
+   pleb_deep_dive
    running_modes
    modes
    ingest
