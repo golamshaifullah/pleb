@@ -18,6 +18,7 @@ Most users work with three layers:
 - **Pipeline behavior**: what stages run (`run_tempo2`, `run_pqc`, `run_fix_dataset`, `qc_report`).
 - **Detection behavior**: PQC detector thresholds and feature toggles (`pqc_*`).
 - **Action behavior**: what to do with flagged TOAs (`fix_qc_*`, compact report settings).
+- **Cross-pulsar reporting**: optional coincidence clustering of QC flags across pulsars (`qc_cross_pulsar_*`).
 
 Detection strategy checklist
 ----------------------------
@@ -50,6 +51,9 @@ Minimal practical template
    fix_qc_outlier_cols = ["bad_point", "robust_outlier", "robust_global_outlier", "bad_mad"]
 
    qc_report_compact_outlier_cols = ["bad_point", "robust_outlier", "robust_global_outlier", "bad_mad"]
+   qc_cross_pulsar_enabled = true
+   qc_cross_pulsar_window_days = 1.0
+   qc_cross_pulsar_min_pulsars = 2
 
 Finding any key quickly
 -----------------------

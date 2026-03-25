@@ -1,0 +1,63 @@
+Bootstrap: docker
+From: ubuntu:latest
+
+%labels
+    Author Golam Shaifullah
+    Version v0.0.1
+    Platform SingularityCE
+    Software Tempo2 pleb pqc
+    PythonVersion 3.11
+
+%files
+    # Copy environment.yml (the conda environment definition file) into the container
+    environment.yml /tmp/environment.yml
+
+%post
+    # system updates
+    apt-get update && apt-get install -y --no-install-recommends \
+        wget \
+        bzip2 \
+        ca-certificates \
+        git \
+        build-essential \
+        && rm -rf /opt/lib/apt/lists/*
+
+    # ----------------------------------------------------------------
+    # Here we install Miniconda
+    # ----------------------------------------------------------------
+    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $SINGULARITY_CONTAINER/tmp/miniconda.sh
+    bash $SINGULARITY_CONTAINER/tmp/miniconda.sh -b -p /opt/conda
+    rm -f $SINGULARITY_CONTAINER/tmp/miniconda.sh
+
+    # Set up conda-forge
+    /opt/conda/bin/conda config --system --add channels conda-forge
+    /opt/conda/bin/conda config --system --add channels defaults
+
+    # accepting the Terms Of Service of anaconda for defautls channels
+    /opt/conda/bin/conda tos accept
+
+    # ----------------------------------------------------------------
+    # Create the environment conda environment from the yml file
+    # ----------------------------------------------------------------
+    /opt/conda/bin/conda env create -f $SINGULARITY_CONTAINER/tmp/environment.yml
+
+    # Clean up conda caches
+    /opt/conda/bin/conda clean --all --yes
+
+%environment
+    # This section is executed for *every* shell/exec/run within the
+    # container so we automatically activate the environment each time.
+    source /opt/conda/etc/profile.d/conda.sh
+    conda activate pleb
+
+    # Here we associate conda's python to PATH so that
+    # "python" uses the discovery-gpu environment
+    export PATH="/opt/conda/envs/pleb/bin:${PATH}"
+
+    # Here we set the runtime environment variables of this container
+    export SINGULARITY_SHELL=/bin/bash
+    export XDG_CACHE_HOME=/opt/pulsar/
+    export XDG_CONFIG_HOME=/opt/pulsar/
+       
+%runscript
+    exec "$@"

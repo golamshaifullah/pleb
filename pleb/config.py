@@ -696,6 +696,15 @@ class PipelineConfig:
     qc_report_compact_pdf: bool = False
     qc_report_compact_pdf_name: str = "qc_compact_report.pdf"
     qc_report_compact_outlier_cols: Optional[List[str]] = None
+    qc_cross_pulsar_enabled: bool = False
+    qc_cross_pulsar_time_col: Optional[str] = None
+    qc_cross_pulsar_window_days: float = 1.0
+    qc_cross_pulsar_min_pulsars: int = 2
+    qc_cross_pulsar_include_outliers: bool = True
+    qc_cross_pulsar_include_events: bool = True
+    qc_cross_pulsar_outlier_cols: Optional[List[str]] = None
+    qc_cross_pulsar_event_cols: Optional[List[str]] = None
+    qc_cross_pulsar_dir: Optional[Path] = None
 
     # Add-on toggles (extras from FixDataset.ipynb + AnalysePulsars.ipynb)
     run_fix_dataset: bool = False
@@ -864,6 +873,8 @@ class PipelineConfig:
             c.results_dir = c.results_dir.expanduser().resolve()
         if c.qc_report_dir is not None:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
+        if c.qc_cross_pulsar_dir is not None:
+            c.qc_cross_pulsar_dir = Path(c.qc_cross_pulsar_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
             c.fix_qc_results_dir = Path(c.fix_qc_results_dir).expanduser().resolve()
         if c.pqc_backend_profiles_path is not None:
@@ -927,6 +938,8 @@ class PipelineConfig:
             d[k] = str(d[k])
         if d.get("qc_report_dir") is not None:
             d["qc_report_dir"] = str(d["qc_report_dir"])
+        if d.get("qc_cross_pulsar_dir") is not None:
+            d["qc_cross_pulsar_dir"] = str(d["qc_cross_pulsar_dir"])
         if d.get("fix_qc_results_dir") is not None:
             d["fix_qc_results_dir"] = str(d["fix_qc_results_dir"])
         if d.get("fix_system_flag_mapping_path") is not None:
@@ -1200,6 +1213,23 @@ class PipelineConfig:
             ),
             qc_report_compact_outlier_cols=opt_list_str(
                 "qc_report_compact_outlier_cols"
+            ),
+            qc_cross_pulsar_enabled=bool(d.get("qc_cross_pulsar_enabled", False)),
+            qc_cross_pulsar_time_col=opt_str("qc_cross_pulsar_time_col"),
+            qc_cross_pulsar_window_days=float(
+                d.get("qc_cross_pulsar_window_days", 1.0)
+            ),
+            qc_cross_pulsar_min_pulsars=int(d.get("qc_cross_pulsar_min_pulsars", 2)),
+            qc_cross_pulsar_include_outliers=bool(
+                d.get("qc_cross_pulsar_include_outliers", True)
+            ),
+            qc_cross_pulsar_include_events=bool(
+                d.get("qc_cross_pulsar_include_events", True)
+            ),
+            qc_cross_pulsar_outlier_cols=opt_list_str("qc_cross_pulsar_outlier_cols"),
+            qc_cross_pulsar_event_cols=opt_list_str("qc_cross_pulsar_event_cols"),
+            qc_cross_pulsar_dir=(
+                Path(d["qc_cross_pulsar_dir"]) if d.get("qc_cross_pulsar_dir") else None
             ),
             run_fix_dataset=bool(d.get("run_fix_dataset", False)),
             make_binary_analysis=bool(d.get("make_binary_analysis", False)),

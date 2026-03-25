@@ -707,3 +707,186 @@ def generate_qc_report(
         logger.info("Wrote compact QC PDF report: %s", pdf_path)
 
     return report_dir
+
+
+def _choose_time_col(
+    df: pd.DataFrame, preferred: Optional[str] = None
+) -> Optional[str]:
+    """Choose the best-available MJD-like time column."""
+    if preferred and preferred in df.columns:
+        return preferred
+    for cand in ("mjd", "mjd_sat", "sat_mjd", "mjd_bat", "bat_mjd", "bat"):
+        if cand in df.columns:
+            return cand
+    return None
+
+
+def generate_cross_pulsar_coincidence_report(
+    run_dir: Path,
+    report_dir: Optional[Path] = None,
+    *,
+    time_col: Optional[str] = None,
+    window_days: float = 1.0,
+    min_pulsars: int = 2,
+    include_outliers: bool = True,
+    include_events: bool = True,
+    outlier_cols: Optional[list[str]] = None,
+    event_cols: Optional[list[str]] = None,
+) -> Optional[Path]:
+    """Generate cross-pulsar coincidence tables from PQC CSV outputs.
+
+    This stage is purely post-processing and does not rerun PQC.
+    """
+    run_dir = Path(run_dir).expanduser().resolve()
+    csvs = _find_qc_csvs(run_dir)
+    if not csvs:
+        return None
+
+    report_dir = (
+        Path(report_dir).expanduser().resolve()
+        if report_dir
+        else run_dir / "qc_cross_pulsar"
+    )
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    rows: list[pd.DataFrame] = []
+    selected_counts: list[dict[str, object]] = []
+    fallback_event_cols = (
+        event_cols
+        if event_cols
+        else [
+            "transient_member",
+            "solar_event_member",
+            "orbital_phase_bad",
+            "eclipse_member",
+            "gaussian_bump_member",
+            "glitch_member",
+        ]
+    )
+
+    for csv in csvs:
+        pulsar = csv.stem.replace("_qc", "")
+        try:
+            df = pd.read_csv(csv)
+        except Exception:
+            continue
+        tcol = _choose_time_col(df, preferred=time_col)
+        if tcol is None:
+            continue
+        mjd = pd.to_numeric(df[tcol], errors="coerce")
+        valid = mjd.notna()
+        if not bool(valid.any()):
+            continue
+        out = _build_compact_decisions(df, outlier_cols=outlier_cols)
+        is_out = _bool_series(out, "outlier_any_compact")
+        is_evt = pd.Series([False] * len(out), index=out.index)
+        for c in fallback_event_cols:
+            is_evt |= _bool_series(out, c)
+        if "transient_id" in out.columns:
+            tid = (
+                pd.to_numeric(out["transient_id"], errors="coerce")
+                .fillna(-1)
+                .astype(int)
+            )
+            is_evt |= tid >= 0
+        if "event_any_compact" in out.columns:
+            is_evt |= _bool_series(out, "event_any_compact")
+
+        keep = pd.Series([False] * len(out), index=out.index)
+        if include_outliers:
+            keep |= is_out
+        if include_events:
+            keep |= is_evt
+        keep &= valid
+        n_keep = int(keep.sum())
+        selected_counts.append(
+            {"pulsar": pulsar, "selected_rows": n_keep, "qc_csv": str(csv)}
+        )
+        if n_keep == 0:
+            continue
+
+        part = pd.DataFrame(
+            {
+                "pulsar": pulsar,
+                "mjd": mjd[keep].astype(float),
+                "kind": [
+                    (
+                        "outlier+event"
+                        if (bool(is_out.loc[i]) and bool(is_evt.loc[i]))
+                        else ("outlier" if bool(is_out.loc[i]) else "event")
+                    )
+                    for i in out.index[keep]
+                ],
+                "qc_csv": str(csv),
+                "row_index": out.index[keep].astype(int),
+                "decision": out.loc[keep, "decision"].astype(str),
+                "decision_reason": out.loc[keep, "decision_reason"].astype(str),
+            }
+        )
+        rows.append(part)
+
+    pd.DataFrame(selected_counts).to_csv(
+        report_dir / "selected_row_counts.tsv", sep="\t", index=False
+    )
+    if not rows:
+        return report_dir
+
+    points = (
+        pd.concat(rows, ignore_index=True).sort_values("mjd").reset_index(drop=True)
+    )
+    points.to_csv(report_dir / "coincident_points.tsv", sep="\t", index=False)
+
+    # Build coincidence clusters as contiguous MJD runs where consecutive points
+    # are closer than window_days.
+    window = max(0.0, float(window_days))
+    labels = []
+    cluster = 0
+    prev = None
+    for m in points["mjd"].to_numpy():
+        if prev is None or (float(m) - float(prev)) > window:
+            cluster += 1
+        labels.append(cluster)
+        prev = float(m)
+    points["cluster_id"] = labels
+
+    clusters = []
+    for cid, sub in points.groupby("cluster_id", sort=True):
+        pulsar_set = sorted(set(sub["pulsar"].astype(str)))
+        npulsars = len(pulsar_set)
+        if npulsars < int(min_pulsars):
+            continue
+        kind_counts = sub["kind"].value_counts().to_dict()
+        clusters.append(
+            {
+                "cluster_id": int(cid),
+                "mjd_start": float(sub["mjd"].min()),
+                "mjd_end": float(sub["mjd"].max()),
+                "span_days": float(sub["mjd"].max() - sub["mjd"].min()),
+                "n_points": int(len(sub)),
+                "n_pulsars": int(npulsars),
+                "pulsars": ",".join(pulsar_set),
+                "outlier_points": int(kind_counts.get("outlier", 0)),
+                "event_points": int(kind_counts.get("event", 0)),
+                "outlier_event_points": int(kind_counts.get("outlier+event", 0)),
+            }
+        )
+
+    cluster_df = pd.DataFrame(clusters)
+    if not cluster_df.empty:
+        cluster_df = cluster_df.sort_values(
+            ["n_pulsars", "n_points", "mjd_start"], ascending=[False, False, True]
+        )
+        cluster_df.to_csv(
+            report_dir / "coincidence_clusters.tsv", sep="\t", index=False
+        )
+        keep_ids = set(cluster_df["cluster_id"].astype(int).tolist())
+        points[points["cluster_id"].isin(keep_ids)].to_csv(
+            report_dir / "coincidence_cluster_points.tsv", sep="\t", index=False
+        )
+    else:
+        (report_dir / "coincidence_clusters.tsv").write_text(
+            "cluster_id\tmjd_start\tmjd_end\tspan_days\tn_points\tn_pulsars\tpulsars\toutlier_points\tevent_points\toutlier_event_points\n",
+            encoding="utf-8",
+        )
+
+    return report_dir

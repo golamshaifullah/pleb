@@ -91,6 +91,11 @@ Compact report strategy
 - ``qc_report``: generate report stage.
 - ``qc_report_compact_pdf``: write compact PDF.
 - ``qc_report_compact_outlier_cols``: explicit compact outlier strategy.
+- ``qc_cross_pulsar_enabled``: optional post-QC coincidence scan across pulsars.
+- ``qc_cross_pulsar_window_days``: MJD coincidence window (days).
+- ``qc_cross_pulsar_min_pulsars``: minimum distinct pulsars required.
+- ``qc_cross_pulsar_include_outliers`` / ``qc_cross_pulsar_include_events``:
+  include outlier/event classes in coincidence clustering.
 
 Per-backend PQC profile TOML
 ----------------------------
@@ -171,6 +176,7 @@ Common pitfalls
   like it ignored QC (it may be reading from the wrong run location).
 - Extremely low thresholds + aggressive action can over-comment structured
   groups. Tune with report-only first.
+- Cross-pulsar coincidence is reporting-only and never edits tim/par files.
 
 Recommended workflow for users
 ------------------------------

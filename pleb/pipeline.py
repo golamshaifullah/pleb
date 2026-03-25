@@ -58,7 +58,7 @@ from .utils import (
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
 from .outlier_qc import PTAQCConfig, run_pqc_for_parfile_subprocess, summarize_pqc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
-from .qc_report import generate_qc_report
+from .qc_report import generate_cross_pulsar_coincidence_report, generate_qc_report
 
 logger = get_logger("pleb")
 
@@ -1128,6 +1128,36 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         if getattr(cfg, "run_pqc", False) and qc_rows:
             dfq = pd.DataFrame(qc_rows)
             dfq.to_csv(out_paths["qc"] / "qc_summary.tsv", sep="\t", index=False)
+            if bool(getattr(cfg, "qc_cross_pulsar_enabled", False)):
+                try:
+                    cross_dir = None
+                    if getattr(cfg, "qc_cross_pulsar_dir", None):
+                        cross_dir = Path(cfg.qc_cross_pulsar_dir)
+                        if not cross_dir.is_absolute():
+                            cross_dir = out_paths["tag"] / cross_dir
+                    cross_dir = generate_cross_pulsar_coincidence_report(
+                        run_dir=out_paths["tag"],
+                        report_dir=cross_dir,
+                        time_col=getattr(cfg, "qc_cross_pulsar_time_col", None),
+                        window_days=float(
+                            getattr(cfg, "qc_cross_pulsar_window_days", 1.0)
+                        ),
+                        min_pulsars=int(getattr(cfg, "qc_cross_pulsar_min_pulsars", 2)),
+                        include_outliers=bool(
+                            getattr(cfg, "qc_cross_pulsar_include_outliers", True)
+                        ),
+                        include_events=bool(
+                            getattr(cfg, "qc_cross_pulsar_include_events", True)
+                        ),
+                        outlier_cols=getattr(cfg, "qc_cross_pulsar_outlier_cols", None),
+                        event_cols=getattr(cfg, "qc_cross_pulsar_event_cols", None),
+                    )
+                    if cross_dir is not None:
+                        logger.info(
+                            "Cross-pulsar coincidence report written to: %s", cross_dir
+                        )
+                except Exception as e:
+                    logger.warning("Cross-pulsar coincidence stage failed: %s", e)
 
         if getattr(cfg, "qc_report", False):
             try:

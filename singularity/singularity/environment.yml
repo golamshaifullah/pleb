@@ -1,0 +1,25 @@
+name: pleb
+channels:
+  - conda-forge
+dependencies:
+  - black
+  - gitpython
+  - jupyter
+  - libstempo
+  - matplotlib
+  - numpy
+  - pandas
+  - pip
+  - python=3.11
+  - ruff
+  - scipy
+  - streamlit
+  - tomlkit
+  - tqdm
+  - pip:
+    - Sphinx==9.0.4
+    - blurb==2.0.0
+    - python-docs-theme==2025.2
+    - sphinx-autobuild==2025.8.25
+    - sphinx-autodoc-typehints==3.6.1
+

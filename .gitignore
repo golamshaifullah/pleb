@@ -1,4 +1,35 @@
-__pycache__
-logs
-.ipynb_checkpoints
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Docs build output
+docs/_build/
+
+# Notebook checkpoints / temp notebook state
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Local runtime output
+logs/
+trash/
+
+# Local container images
 *.sif
+
+# Local ingest lock artifacts (runtime-generated)
+*.lock.*json
