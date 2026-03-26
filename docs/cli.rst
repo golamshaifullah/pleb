@@ -136,5 +136,29 @@ Run a workflow file (TOML or JSON) with steps and loops:
 
    pleb workflow --file configs/workflows/example_iterative.toml
 
+Public-release compare subcommand
+---------------------------------
+
+Download latest public releases (NANOGrav, EPTA, IPTA) and compare parfile
+parameter values/errors:
+
+.. code-block:: bash
+
+   pleb compare-public --out-dir results/public_release_compare
+
+Optional provider catalog override:
+
+.. code-block:: bash
+
+   pleb compare-public --out-dir results/public_release_compare \
+     --providers configs/catalogs/public_releases/providers.toml
+
+Outputs include:
+
+- resolved assets table
+- raw parsed parameter table
+- astrometry-normalized parameter table (ICRS/common units)
+- provider spread comparison summary
+
 See :doc:`running_modes` for detailed compatibility notes and workflow
 examples, and :doc:`examples` for end-to-end runs.

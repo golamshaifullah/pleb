@@ -55,3 +55,26 @@ pulsars = ["J1234+5678"]
     assert str(cfg.results_dir) == "/tmp/results"
     assert cfg.branches == ["master", "b1"]
     assert cfg.pulsars == ["J1234+5678"]
+
+
+def test_config_parses_new_cross_pulsar_and_flag_rule_keys(tmp_path: Path) -> None:
+    toml_text = """
+home_dir = "/tmp/repo"
+singularity_image = "/tmp/tempo2.sif"
+dataset_name = "."
+results_dir = "/tmp/results"
+qc_cross_pulsar_enabled = true
+qc_cross_pulsar_window_days = 0.5
+qc_cross_pulsar_min_pulsars = 3
+fix_flag_sys_freq_rules_enabled = true
+fix_flag_sys_freq_rules_path = "/tmp/flag_sys_freq_rules.yaml"
+"""
+    cfg_path = tmp_path / "cfg_new.toml"
+    cfg_path.write_text(toml_text, encoding="utf-8")
+
+    cfg = PipelineConfig.load(cfg_path)
+    assert cfg.qc_cross_pulsar_enabled is True
+    assert cfg.qc_cross_pulsar_window_days == 0.5
+    assert cfg.qc_cross_pulsar_min_pulsars == 3
+    assert cfg.fix_flag_sys_freq_rules_enabled is True
+    assert str(cfg.fix_flag_sys_freq_rules_path) == "/tmp/flag_sys_freq_rules.yaml"

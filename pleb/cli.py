@@ -47,6 +47,7 @@ from .logging_utils import set_log_dir
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
+from .public_release_compare import compare_public_releases
 from .config_io import (
     _dump_toml_no_nulls,
     _load_config_dict,
@@ -336,6 +337,33 @@ def build_workflow_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_compare_public_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for public release comparison mode."""
+    p = argparse.ArgumentParser(
+        description=(
+            "Download latest public NANOGrav/EPTA/IPTA releases and compare "
+            "parfile parameter values."
+        )
+    )
+    p.add_argument("compare_public", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument(
+        "--out-dir",
+        type=Path,
+        required=True,
+        help="Output directory for downloaded assets and comparison tables.",
+    )
+    p.add_argument(
+        "--providers",
+        type=Path,
+        default=None,
+        help=(
+            "Provider TOML catalog (default: "
+            "configs/catalogs/public_releases/providers.toml)."
+        ),
+    )
+    return p
+
+
 def run_qc_report(argv: list[str] | None) -> int:
     """Run the ``qc-report`` subcommand.
 
@@ -424,6 +452,18 @@ def run_workflow(argv: list[str] | None) -> int:
     if ctx.last_run_dir:
         _write_run_settings(Path(ctx.last_run_dir), argv, None)
         print(str(ctx.last_run_dir))
+    return 0
+
+
+def run_compare_public(argv: list[str] | None) -> int:
+    """Run public-release download and parameter comparison."""
+    args = build_compare_public_parser().parse_args(argv)
+    out = compare_public_releases(
+        out_dir=Path(args.out_dir),
+        providers_path=Path(args.providers) if args.providers else None,
+    )
+    _write_run_settings(Path(out["out_dir"]), argv, None)
+    print(str(out["out_dir"]))
     return 0
 
 
@@ -594,6 +634,8 @@ def main(argv=None) -> int:
         return run_workflow(argv)
     if argv and argv[0] == "ingest":
         return run_ingest(argv)
+    if argv and argv[0] == "compare-public":
+        return run_compare_public(argv)
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
     cfg_keys = {f.name for f in fields(PipelineConfig)}

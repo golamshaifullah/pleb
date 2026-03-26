@@ -15,6 +15,7 @@ dependencies = [
   "numpy>=1.22",
   "pandas>=1.5",
   "scipy>=1.9",
+  "astropy>=6.0",
   "matplotlib>=3.6",
   "PyYAML>=6.0",
   "tomlkit>=0.12",
@@ -38,6 +39,9 @@ include = ["pleb*"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "integration: integration-level tests for CLI modes and runtime wiring",
+]
 
 [tool.ruff]
 extend-exclude = ["notebooks", "donezip"]

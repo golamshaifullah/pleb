@@ -1,0 +1,21 @@
+[providers.NANOGrav]
+type = "zenodo_search"
+query = "NANOGrav pulsar timing public data release par files"
+max_records = 20
+max_assets = 1
+asset_regex = ".*\\.(tar\\.gz|tgz|tar|zip|par)$"
+
+[providers.EPTA]
+type = "zenodo_search"
+query = "EPTA pulsar timing public data release par files"
+max_records = 20
+max_assets = 1
+asset_regex = ".*\\.(tar\\.gz|tgz|tar|zip|par)$"
+
+[providers.IPTA]
+type = "zenodo_search"
+query = "IPTA pulsar timing public data release par files"
+max_records = 20
+max_assets = 1
+asset_regex = ".*\\.(tar\\.gz|tgz|tar|zip|par)$"
+
