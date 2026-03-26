@@ -731,6 +731,8 @@ class PipelineConfig:
     fix_required_tim_flags: Dict[str, str] = field(default_factory=dict)
     fix_system_flag_mapping_path: Optional[str] = None
     fix_system_flag_table_path: Optional[str] = None
+    fix_flag_sys_freq_rules_enabled: bool = False
+    fix_flag_sys_freq_rules_path: Optional[str] = None
     fix_generate_alltim_variants: bool = False
     fix_backend_classifications_path: Optional[str] = None
     fix_alltim_variants_path: Optional[str] = None
@@ -885,6 +887,10 @@ class PipelineConfig:
             c.fix_system_flag_mapping_path = (
                 Path(c.fix_system_flag_mapping_path).expanduser().resolve()
             )
+        if c.fix_flag_sys_freq_rules_path is not None:
+            c.fix_flag_sys_freq_rules_path = (
+                Path(c.fix_flag_sys_freq_rules_path).expanduser().resolve()
+            )
         if c.fix_system_flag_table_path is not None:
             c.fix_system_flag_table_path = (
                 Path(c.fix_system_flag_table_path).expanduser().resolve()
@@ -944,6 +950,8 @@ class PipelineConfig:
             d["fix_qc_results_dir"] = str(d["fix_qc_results_dir"])
         if d.get("fix_system_flag_mapping_path") is not None:
             d["fix_system_flag_mapping_path"] = str(d["fix_system_flag_mapping_path"])
+        if d.get("fix_flag_sys_freq_rules_path") is not None:
+            d["fix_flag_sys_freq_rules_path"] = str(d["fix_flag_sys_freq_rules_path"])
         if d.get("fix_system_flag_table_path") is not None:
             d["fix_system_flag_table_path"] = str(d["fix_system_flag_table_path"])
         if d.get("fix_backend_classifications_path") is not None:
@@ -1249,6 +1257,10 @@ class PipelineConfig:
             fix_min_toas_per_backend_tim=int(d.get("fix_min_toas_per_backend_tim", 10)),
             fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
             fix_system_flag_mapping_path=opt_str("fix_system_flag_mapping_path"),
+            fix_flag_sys_freq_rules_enabled=bool(
+                d.get("fix_flag_sys_freq_rules_enabled", False)
+            ),
+            fix_flag_sys_freq_rules_path=opt_str("fix_flag_sys_freq_rules_path"),
             fix_system_flag_table_path=opt_str("fix_system_flag_table_path"),
             fix_generate_alltim_variants=bool(
                 d.get("fix_generate_alltim_variants", False)

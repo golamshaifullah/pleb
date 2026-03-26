@@ -76,6 +76,7 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "set": list(step.get("set", []) or []),
                 "overrides": dict(step.get("overrides", {}) or {}),
                 "run_dir": step.get("run_dir"),
+                "config": step.get("config"),
             }
         if "step" in step:
             return {
@@ -83,6 +84,7 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "set": list(step.get("set", []) or []),
                 "overrides": dict(step.get("overrides", {}) or {}),
                 "run_dir": step.get("run_dir"),
+                "config": step.get("config"),
             }
         if len(step) == 1:
             name, payload = next(iter(step.items()))
@@ -92,6 +94,7 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "set": list(payload.get("set", []) or []),
                 "overrides": dict(payload.get("overrides", {}) or {}),
                 "run_dir": payload.get("run_dir"),
+                "config": payload.get("config"),
             }
     raise ValueError(f"Invalid step format: {step!r}")
 
@@ -221,7 +224,11 @@ def _run_step(
     step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowContext
 ) -> None:
     name = step["name"]
-    cfg = _build_cfg(base_dict, step.get("set", []), step.get("overrides", {}))
+    step_cfg_path = step.get("config")
+    step_base_dict = base_dict
+    if step_cfg_path:
+        step_base_dict = _load_config_dict(str(step_cfg_path))
+    cfg = _build_cfg(step_base_dict, step.get("set", []), step.get("overrides", {}))
     if name in ("pipeline", "fix_dataset", "fix_apply", "param_scan"):
         try:
             home_dir = Path(cfg.home_dir)

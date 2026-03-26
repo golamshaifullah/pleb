@@ -1,0 +1,245 @@
+EFF.EBPP.1360:
+  file: EFF.EBPP.1360.tim
+  central_frequency: 1360
+  pulsars:
+    default: EFF.EBPP.1360
+
+EFF.EBPP.1410:
+  file: EFF.EBPP.1410.tim
+  central_frequency: 1410
+  pulsars:
+    default: EFF.EBPP.1410
+
+EFF.EBPP.2639:
+  file: EFF.EBPP.2639.tim
+  central_frequency: 2639
+  pulsars:
+    default: EFF.EBPP.2639
+
+EFF.EDD.4850:
+  file: EFF.EDD.1400.S60.tim
+  central_frequency: 4850
+  pulsars:
+    default: EFF.EDD.4850
+
+EFF.EDD.1400:
+  file: EFF.EDD.1400.tim
+  central_frequency: 1400
+  pulsars:
+    default: EFF.EDD.1400
+
+EFF.EDD.2734:
+  file: EFF.EDD.2734.tim
+  central_frequency: 2734
+  pulsars:
+    default: EFF.EDD.2734
+
+EFF.P200.1380:
+  file: EFF.P200.1380.tim
+  central_frequency: 1380
+  pulsars:
+    default: EFF.P200.1380
+    J0030+0451: EFF.P200.1365 1370 EFF.P200.1425
+    J0613-0200: EFF.P200.1365 1370 EFF.P200.1425
+    J1022+1001: EFF.P200.1365 1370 EFF.P200.1425
+    J1024-0719: EFF.P200.1365 1370 EFF.P200.1425
+    J1600-3053: EFF.P200.1365 1370 EFF.P200.1425
+    J1713+0747: EFF.P200.1365 1370 EFF.P200.1425
+    J1744-1134: EFF.P200.1365 1370 EFF.P200.1425
+    J1857+0943: EFF.P200.1365 1370 EFF.P200.1425
+    J1918-0642: EFF.P200.1365 1370 EFF.P200.1425
+
+EFF.P217.1380:
+  file: EFF.P217.1380.tim
+  central_frequency: 1380
+  pulsars:
+    default: EFF.P217.1380
+    J0030+0451: EFF.P217.1365 1370 EFF.P217.1425
+    J0613-0200: EFF.P217.1365 1370 EFF.P217.1425
+    J1022+1001: EFF.P217.1365 1370 EFF.P217.1425
+    J1024-0719: EFF.P217.1365 1370 EFF.P217.1425
+    J1600-3053: EFF.P217.1365 1370 EFF.P217.1425
+    J1713+0747: EFF.P217.1365 1370 EFF.P217.1425
+    J1744-1134: EFF.P217.1365 1370 EFF.P217.1425
+    J1857+0943: EFF.P217.1365 1370 EFF.P217.1425
+    J1918-0642: EFF.P217.1365 1370 EFF.P217.1425
+
+EFF.S110.2487:
+  file: EFF.S110.2487.tim
+  central_frequency: 2487
+  pulsars:
+    default: EFF.S110.2487
+
+EFF.PS110.2487:
+  file: EFF.S110.2487.tim
+  central_frequency: 2487
+  pulsars:
+    default: EFF.S110.2487
+
+EFF.S60.4857:
+  file: EFF.S60.4857.tim
+  central_frequency: 4857
+  pulsars:
+    default: EFF.S60.4857
+
+JBO.DFB.1400:
+  file: JBO.DFB.1400.tim
+  central_frequency: 1400
+  pulsars:
+    default: JBO.DFB.1400
+
+JBO.DFB.1520:
+  file: JBO.DFB.1520.tim
+  central_frequency: 1520
+  pulsars:
+    default: JBO.DFB.1520
+
+JBO.DFB.5000:
+  file: JBO.DFB.5000.tim
+  central_frequency: 5000
+  pulsars:
+    default: JBO.DFB.5000
+
+JBO.MK2.1520.2:
+  file: JBO.MK2.1520.2.tim
+  central_frequency: 1520
+  pulsars:
+    default: JBO.MK2.1520.2
+
+JBO.MK2.1520:
+  file: JBO.MK2.1520.tim
+  central_frequency: 1520
+  pulsars:
+    default: JBO.MK2.1520
+
+JBO.ROACH.1520:
+  file: JBO.ROACH.1520.tim
+  central_frequency: 1520
+  pulsars:
+    default: JBO.ROACH.1420 1520 JBO.ROACH.1620
+
+LEAP.1396:
+  file: LEAP.1396.tim
+  central_frequency: 1396
+  pulsars:
+    default: LEAP.1396
+
+LOFAR.150:
+  file: LOFAR.LuMP.150.tim
+  central_frequency: 150
+  pulsars:
+    default: LOFAR.150
+
+DE602.150:
+  file: LOFAR.LuMP.150.tim
+  central_frequency: 150
+  pulsars:
+    default: DE602.150
+
+DE609.150:
+  file: LOFAR.LuMP.150.tim
+  central_frequency: 150
+  pulsars:
+    default: DE609.150
+
+NRT.BON.1400:
+  file: NRT.BON.1400.tim
+  central_frequency: 1400
+  pulsars:
+    default: NRT.BON.1400
+
+NRT.BON.1600:
+  file: NRT.BON.1600.tim
+  central_frequency: 1600
+  pulsars:
+    default: NRT.BON.1600
+
+NRT.BON.2000:
+  file: NRT.BON.2000.tim
+  central_frequency: 2000
+  pulsars:
+    default: NRT.BON.2000
+
+NRT.NUPPI.1484:
+  file: NRT.NUPPI.1484.tim
+  central_frequency: 1484
+  pulsars:
+    default: NRT.NUPPI.1292 1356 NRT.NUPPI.1420 1484 NRT.NUPPI.1548 1612 NRT.NUPPI.1676
+
+NRT.NUPPI.1854:
+  file: NRT.NUPPI.1854.tim
+  central_frequency: 1854
+  pulsars:
+    default: NRT.NUPPI.1662 1726 NRT.NUPPI.1790 1854 NRT.NUPPI.1918 1982 NRT.NUPPI.2046
+
+NRT.NUPPI.2154:
+  file: NRT.NUPPI.2154.tim
+  central_frequency: 2154
+  pulsars:
+    default: NRT.NUPPI.1962 2026 NRT.NUPPI.2090 2154 NRT.NUPPI.2218 2282 NRT.NUPPI.2346
+
+NRT.NUPPI.2354:
+  file: NRT.NUPPI.2354.tim
+  central_frequency: 2354
+  pulsars:
+    default: NRT.NUPPI.2162 2226 NRT.NUPPI.2290 2354 NRT.NUPPI.2418 2482 NRT.NUPPI.2546
+
+NRT.NUPPI.2539:
+  file: NRT.NUPPI.2539.tim
+  central_frequency: 2539
+  pulsars:
+    default: NRT.NUPPI.2347 2411 NRT.NUPPI.2475 2539 NRT.NUPPI.2603 2667 NRT.NUPPI.2731
+
+WSRT.P2.1380:
+  file: WSRT.P2.1380.tim
+  central_frequency: 1380
+  pulsars:
+    default: WSRT.P2.1380
+
+WSRT.P1.1380.1:
+  file: WSRT.P1.1380.1.tim
+  central_frequency: 1380
+  pulsars:
+    default: WSRT.P1.1380.1
+
+WSRT.P1.1380.2:
+  file: WSRT.P1.1380.2.tim
+  central_frequency: 1380
+  pulsars:
+    default: WSRT.P1.1380.2
+
+WSRT.P1.2273.C:
+  file: WSRT.P1.2273.tim
+  central_frequency: 2273
+  pulsars:
+    default: WSRT.P1.2273.C
+
+WSRT.P1.840:
+  file: WSRT.P1.840.tim
+  central_frequency: 840
+  pulsars:
+    default: WSRT.P1.840
+
+WSRT.P2.1346:
+  file: WSRT.P2.1380.tim
+  central_frequency: 1346
+  pulsars:
+    default: WSRT.P2.1346
+
+WSRT.P2.2178:
+  file: WSRT.P2.2273.tim
+  central_frequency: 2178
+  pulsars:
+    default: WSRT.P2.2178
+
+WSRT.P2.2273:
+  file: WSRT.P2.2273.tim
+  central_frequency: 2273
+  pulsars:
+    default: WSRT.P2.2273
+
+WSRT.P2.350:
+  file: WSRT.P2.350.tim
+  central_frequency: 350
+  pulsars:
+    default: WSRT.P2.350

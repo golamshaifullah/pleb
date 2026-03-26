@@ -1,0 +1,49 @@
+# Step 1: harmonize system/group flags, insert/prune jumps, and generate
+# variant TIM/PAR products. This step mutates data and commits to a new branch.
+
+home_dir = "/work/git_projects/epta-dr3-in2p3"
+dataset_name = "EPTA-DR3/epta-dr3-data"
+results_dir = "results"
+singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
+
+# Keep branch list aligned to the branch created by this step.
+branches = ["step1_fix_flags_variants"]
+reference_branch = "step1_fix_flags_variants"
+pulsars = "ALL"
+jobs = 10
+
+run_tempo2 = false
+make_plots = false
+make_reports = false
+make_covmat = false
+run_pqc = false
+qc_report = false
+
+run_fix_dataset = true
+fix_apply = true
+fix_base_branch = "raw_ingest"  # override in workflow or CLI
+fix_branch_name = "step1_fix_flags_variants"
+fix_commit_message = "FixDataset: harmonize flags+jumps and generate variants"
+
+fix_infer_system_flags = true
+fix_system_flag_overwrite_existing = true
+fix_insert_missing_jumps = true
+fix_prune_stale_jumps = true
+fix_jump_flag = "-sys"
+
+fix_generate_alltim_variants = true
+fix_backend_classifications_path = "/work/git_projects/pleb/configs/catalogs/variants/backend_classifications_legacy_new.toml"
+fix_alltim_variants_path = "/work/git_projects/pleb/configs/catalogs/variants/alltim_variants_legacy_new.toml"
+
+fix_jump_reference_variants = true
+fix_jump_reference_jump_flag = "-sys"
+fix_jump_reference_keep_tmp = false
+fix_jump_reference_csv_dir = "results/jump_reference"
+
+fix_dedupe_toas_within_tim = true
+fix_remove_overlaps_exact = true
+
+fix_ensure_ephem = "DE440"
+fix_ensure_clk = "TT(BIPM2024)"
+fix_ensure_ne_sw = "7.9"
+fix_force_ne_sw_overwrite = false

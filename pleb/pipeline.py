@@ -198,6 +198,10 @@ def _build_fixdataset_config(
         infer_system_flags=bool(_cfg_get(cfg, "fix_infer_system_flags", False)),
         system_flag_table_path=_cfg_get(cfg, "fix_system_flag_table_path", None),
         system_flag_mapping_path=_cfg_get(cfg, "fix_system_flag_mapping_path", None),
+        flag_sys_freq_rules_enabled=bool(
+            _cfg_get(cfg, "fix_flag_sys_freq_rules_enabled", False)
+        ),
+        flag_sys_freq_rules_path=_cfg_get(cfg, "fix_flag_sys_freq_rules_path", None),
         generate_alltim_variants=bool(
             _cfg_get(cfg, "fix_generate_alltim_variants", False)
         ),

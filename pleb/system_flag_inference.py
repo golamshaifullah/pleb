@@ -38,6 +38,11 @@ import re
 import numpy as np
 import pandas as pd
 
+try:  # optional dependency for rules file support
+    import yaml  # type: ignore
+except Exception:  # pragma: no cover
+    yaml = None  # type: ignore
+
 from .tim_utils import is_toa_line
 
 TELESCOPE_CODES = {"EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR", "NFR"}
@@ -355,6 +360,96 @@ def load_system_flag_mapping(path: Path) -> Dict[str, object]:
     return out
 
 
+def load_flag_sys_freq_rules(path: Path) -> Dict[str, object]:
+    """Load declarative system/frequency rules from a YAML file.
+
+    The expected schema is keyed by a human-readable rule ID, where each value
+    includes:
+
+    - ``file``: tim filename this rule applies to
+    - ``central_frequency``: optional band-center for ``-group`` synthesis
+    - ``pulsars``: map of ``default`` and optional pulsar-specific mappings
+    """
+    if yaml is None:
+        raise RuntimeError(
+            "YAML rules requested but PyYAML is unavailable. Install with `pip install pyyaml`."
+        )
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        return {}
+
+    def _to_labels(value) -> List[str]:
+        if isinstance(value, str):
+            toks = [t.strip() for t in value.split() if str(t).strip()]
+            labels: List[str] = []
+            for tok in toks:
+                if tok.replace(".", "", 1).isdigit():
+                    continue
+                labels.append(tok)
+            return labels
+        if isinstance(value, list):
+            labels = []
+            for v in value:
+                s = str(v).strip()
+                if s:
+                    labels.append(s)
+            return labels
+        return []
+
+    out: Dict[str, object] = {}
+    for _, spec in raw.items():
+        if not isinstance(spec, dict):
+            continue
+        f = spec.get("file")
+        if not f:
+            continue
+        timname = Path(str(f)).name
+        centre = spec.get("central_frequency")
+        try:
+            centre_val = int(float(centre)) if centre is not None else None
+        except Exception:
+            centre_val = None
+        pulsars_raw = spec.get("pulsars", {})
+        pulsars_map: Dict[str, List[str]] = {}
+        if isinstance(pulsars_raw, dict):
+            for pkey, pval in pulsars_raw.items():
+                labs = _to_labels(pval)
+                if labs:
+                    pulsars_map[str(pkey)] = labs
+        if "default" not in pulsars_map:
+            continue
+        out[timname] = {
+            "central_frequency": centre_val,
+            "pulsars": pulsars_map,
+        }
+    return out
+
+
+def _parse_system_centre(system_label: str) -> Optional[int]:
+    """Extract trailing integer centre from a system label."""
+    tok = str(system_label).strip().split(".")[-1]
+    try:
+        return int(float(tok))
+    except Exception:
+        return None
+
+
+def _group_label_from_system(system_label: str, centre_mhz: Optional[int]) -> str:
+    """Replace a system label's trailing centre with a band-centre when possible."""
+    parts = str(system_label).strip().split(".")
+    if centre_mhz is None:
+        return str(system_label).strip()
+    if len(parts) >= 2:
+        tail = parts[-1]
+        try:
+            float(tail)
+            parts[-1] = str(int(centre_mhz))
+            return ".".join(parts)
+        except Exception:
+            pass
+    return str(system_label).strip()
+
+
 def infer_backend(
     timfile: Path,
     df: pd.DataFrame,
@@ -561,6 +656,8 @@ def infer_sys_group_pta(
     override_backend: Optional[str] = None,
     override_telescope: Optional[str] = None,
     override_pta: Optional[str] = None,
+    pulsar: Optional[str] = None,
+    flag_sys_freq_rules: Optional[Dict[str, object]] = None,
 ) -> pd.DataFrame:
     """Infer -sys/-group/-pta values for each TOA row.
 
@@ -579,6 +676,11 @@ def infer_sys_group_pta(
         Telescope override.
     override_pta : str, optional
         PTA override.
+    pulsar : str, optional
+        Pulsar identifier used for pulsar-specific system/frequency rules.
+    flag_sys_freq_rules : dict, optional
+        Optional YAML-derived rule table keyed by tim filename. When provided,
+        it can override inferred ``sys`` and ``group`` labels.
 
     Returns
     -------
@@ -671,6 +773,55 @@ def infer_sys_group_pta(
         else:
             band_centre = int(np.rint(float(np.nanmedian(df["freq_mhz"]))))
     group_val = pd.Series([f"{tel}.{backend}.{band_centre}"] * len(df), index=df.index)
+
+    # Optional declarative override: per-timfile/per-pulsar system labels and
+    # group band-centre from rule file.
+    if flag_sys_freq_rules:
+        rule = None
+        key_name = timfile.name
+        if key_name in flag_sys_freq_rules:
+            rule = flag_sys_freq_rules.get(key_name)
+        elif str(timfile) in flag_sys_freq_rules:
+            rule = flag_sys_freq_rules.get(str(timfile))
+        if isinstance(rule, dict):
+            pmap = rule.get("pulsars", {})
+            labels = []
+            if isinstance(pmap, dict):
+                if pulsar and str(pulsar) in pmap:
+                    labels = list(pmap.get(str(pulsar)) or [])
+                if not labels:
+                    labels = list(pmap.get("default") or [])
+            labels = [str(x).strip() for x in labels if str(x).strip()]
+            if labels:
+                freqs = df["freq_mhz"].to_numpy()
+                if len(labels) == 1:
+                    sys_val = pd.Series([labels[0]] * len(df), index=df.index)
+                    c = _parse_system_centre(labels[0])
+                    if c is not None:
+                        centre = np.array([c] * len(df), dtype=int)
+                else:
+                    parsed = [(lab, _parse_system_centre(lab)) for lab in labels]
+                    parsed = [(lab, c) for lab, c in parsed if c is not None]
+                    if parsed:
+                        lab_arr = np.array([lab for lab, _ in parsed], dtype=object)
+                        cen_arr = np.array([c for _, c in parsed], dtype=float)
+                        idx = np.argmin(
+                            np.abs(freqs.reshape(-1, 1) - cen_arr.reshape(1, -1)),
+                            axis=1,
+                        )
+                        sys_val = pd.Series(lab_arr[idx], index=df.index)
+                        centre = cen_arr[idx].astype(int)
+                centre_s = pd.Series(centre, index=df.index, dtype="int64").astype(str)
+                centre_rule = rule.get("central_frequency")
+                try:
+                    centre_rule_int = (
+                        int(float(centre_rule)) if centre_rule is not None else None
+                    )
+                except Exception:
+                    centre_rule_int = None
+                group_base = str(labels[0])
+                group_label = _group_label_from_system(group_base, centre_rule_int)
+                group_val = pd.Series([group_label] * len(df), index=df.index)
     pta_val = pd.Series([pta] * len(df), index=df.index)
 
     out = pd.DataFrame(

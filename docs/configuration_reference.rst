@@ -84,6 +84,8 @@ FixDataset outlier action strategy
 - ``fix_qc_remove_bad`` / ``fix_qc_remove_transients`` /
   ``fix_qc_remove_solar`` / ``fix_qc_remove_orbital_phase``:
   selective action toggles by detector family.
+- ``fix_flag_sys_freq_rules_enabled``: enable YAML-based system/group frequency overrides.
+- ``fix_flag_sys_freq_rules_path``: path to ``flag_sys_freq_rules.yaml``.
 
 Compact report strategy
 ~~~~~~~~~~~~~~~~~~~~~~~

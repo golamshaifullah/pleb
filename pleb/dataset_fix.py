@@ -126,6 +126,8 @@ class FixDatasetConfig:
         jump_reference_variants: Build per-variant reference-system JUMP parfiles.
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
+        flag_sys_freq_rules_enabled: Enable YAML-based system/frequency rules.
+        flag_sys_freq_rules_path: Path to ``flag_sys_freq_rules.yaml``.
         system_flag_table_path: Path to the system-flag table (JSON/TOML).
         system_flag_mapping_path: Path to editable mapping/allowlist JSON.
         system_flag_overwrite_existing: Overwrite existing system flags.
@@ -193,6 +195,8 @@ class FixDatasetConfig:
 
     # System flag inference (smart -sys/-group/-pta creation)
     infer_system_flags: bool = False
+    flag_sys_freq_rules_enabled: bool = False
+    flag_sys_freq_rules_path: Optional[str] = None
     system_flag_table_path: Optional[str] = (
         None  # JSON mapping stored at dataset root if None
     )
@@ -2667,6 +2671,7 @@ def infer_and_apply_system_flags(
             apply_flags_to_timfile,
             update_mapping_table,
             load_system_flag_mapping,
+            load_flag_sys_freq_rules,
             SystemInferenceConfig,
         )
     except Exception as e:
@@ -2698,6 +2703,7 @@ def infer_and_apply_system_flags(
     )
     override_telescope = None
     mapping = None
+    flag_sys_freq_rules = None
 
     def _has_legacy_sys_flag(tpath: Path) -> bool:
         try:
@@ -2743,6 +2749,20 @@ def infer_and_apply_system_flags(
     except Exception:
         mapping = None
 
+    if cfg.flag_sys_freq_rules_enabled:
+        try:
+            rules_path = (
+                Path(cfg.flag_sys_freq_rules_path)
+                if cfg.flag_sys_freq_rules_path
+                else (dataset_root / "flag_sys_freq_rules.yaml")
+            )
+            if not rules_path.is_absolute():
+                rules_path = dataset_root / rules_path
+            if rules_path.exists():
+                flag_sys_freq_rules = load_flag_sys_freq_rules(rules_path)
+        except Exception:
+            flag_sys_freq_rules = None
+
     cfg_override = None
     if mapping:
         base_cfg = SystemInferenceConfig()
@@ -2763,6 +2783,8 @@ def infer_and_apply_system_flags(
             cfg=cfg_override if cfg_override is not None else SystemInferenceConfig(),
             override_backend=override_backend,
             override_telescope=override_telescope,
+            pulsar=psr_dir.name,
+            flag_sys_freq_rules=flag_sys_freq_rules,
         )
     except (BackendMissingError, TelescopeMissingError) as e:
         msg = str(e)

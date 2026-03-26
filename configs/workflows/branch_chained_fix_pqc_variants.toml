@@ -1,0 +1,62 @@
+# Chained workflow:
+#   Step 1: set/check system+group flags, harmonize jumps, generate variants.
+#   Step 2: run tempo2 + balanced PQC detection on Step-1 branch.
+#   Step 3: apply QC outlier comments (no deletion) on Step-2 branch.
+#
+# Each step creates and commits to a new branch.
+# Next step starts from the branch produced by previous step.
+
+# Required by workflow loader; individual steps use their own config files.
+config = "configs/runs/workflow_steps/step1_fix_flags_variants.toml"
+mode = "serial"
+
+[[groups]]
+name = "step1_fix_flags_and_variants"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "configs/runs/workflow_steps/step1_fix_flags_variants.toml"
+
+[groups.steps.overrides]
+# Set this to your starting branch before running.
+fix_base_branch = "raw_ingest"
+fix_branch_name = "step1_fix_flags_variants"
+fix_commit_message = "Step1: fix flags+jumps and generate variants"
+branches = ["step1_fix_flags_variants"]
+reference_branch = "step1_fix_flags_variants"
+outdir_name = "wf_step1_fix_flags_variants"
+
+[[groups]]
+name = "step2_tempo2_pqc_balanced"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "configs/runs/workflow_steps/step2_pqc_balanced_detect.toml"
+
+[groups.steps.overrides]
+fix_base_branch = "step1_fix_flags_variants"
+fix_branch_name = "step2_pqc_balanced_detect"
+fix_commit_message = "Step2: balanced PQC detection run"
+branches = ["step2_pqc_balanced_detect"]
+reference_branch = "step2_pqc_balanced_detect"
+outdir_name = "wf_step2_pqc_balanced_detect"
+
+[[groups]]
+name = "step3_apply_qc_comments"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "configs/runs/workflow_steps/step3_apply_qc_comments_variants.toml"
+
+[groups.steps.overrides]
+fix_base_branch = "step2_pqc_balanced_detect"
+fix_branch_name = "step3_apply_qc_comments_variants"
+fix_commit_message = "Step3: apply balanced QC comments"
+fix_qc_results_dir = "results/wf_step2_pqc_balanced_detect/qc"
+fix_qc_branch = "step2_pqc_balanced_detect"
+branches = ["step3_apply_qc_comments_variants"]
+reference_branch = "step3_apply_qc_comments_variants"
+outdir_name = "wf_step3_apply_qc_comments_variants"
