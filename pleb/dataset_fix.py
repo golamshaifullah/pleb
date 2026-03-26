@@ -365,7 +365,13 @@ def _load_toml(path: Path) -> Dict[str, object]:
 
 def _default_overlap_exact_catalog_path() -> Path:
     repo_root = Path(__file__).resolve().parent.parent
-    return repo_root / "configs" / "system_tables" / "overlapped_timfiles.toml"
+    return (
+        repo_root
+        / "configs"
+        / "catalogs"
+        / "system_tables"
+        / "overlapped_timfiles.toml"
+    )
 
 
 def _load_overlap_exact_catalog(path: Path) -> Dict[str, List[str]]:

@@ -1805,11 +1805,11 @@ FixDataset settings
   Meaning: TOML keep->drop map for exact overlap removal.
   Example TOML::
 
-     fix_overlap_exact_catalog_path = "configs/system_tables/overlapped_timfiles.toml"
+     fix_overlap_exact_catalog_path = "configs/catalogs/system_tables/overlapped_timfiles.toml"
 
   Example CLI::
 
-     pleb --config pipeline.toml --set fix_overlap_exact_catalog_path="configs/system_tables/overlapped_timfiles.toml"
+     pleb --config pipeline.toml --set fix_overlap_exact_catalog_path="configs/catalogs/system_tables/overlapped_timfiles.toml"
 
 ``fix_jump_reference_variants``
   Type: ``bool``

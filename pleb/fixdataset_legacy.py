@@ -274,7 +274,7 @@ _DEFAULT_PTA_SYSTEMS = {
     "MK.LBAND.1420.tim": "MeerTime",
 }
 
-# Load editable tables if present under configs/system_tables/.
+# Load editable tables if present under configs/catalogs/system_tables/.
 jumps_per_system = load_table("jumps_per_system", _DEFAULT_JUMPS_PER_SYSTEM)
 backend_bw = load_table("backend_bw", _DEFAULT_BACKEND_BW)
 overlapped_timfiles = load_table("overlapped_timfiles", _DEFAULT_OVERLAPPED_TIMFILES)

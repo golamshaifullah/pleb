@@ -7,7 +7,7 @@
 # Next step starts from the branch produced by previous step.
 
 # Required by workflow loader; individual steps use their own config files.
-config = "configs/runs/workflow_steps/step1_fix_flags_variants.toml"
+config = "configs/workflows/steps/step1_fix_flags_variants.toml"
 mode = "serial"
 
 [[groups]]
@@ -16,7 +16,7 @@ mode = "serial"
 
 [[groups.steps]]
 name = "pipeline"
-config = "configs/runs/workflow_steps/step1_fix_flags_variants.toml"
+config = "configs/workflows/steps/step1_fix_flags_variants.toml"
 
 [groups.steps.overrides]
 # Set this to your starting branch before running.
@@ -33,7 +33,7 @@ mode = "serial"
 
 [[groups.steps]]
 name = "pipeline"
-config = "configs/runs/workflow_steps/step2_pqc_balanced_detect.toml"
+config = "configs/workflows/steps/step2_pqc_balanced_detect.toml"
 
 [groups.steps.overrides]
 fix_base_branch = "step1_fix_flags_variants"
@@ -49,7 +49,7 @@ mode = "serial"
 
 [[groups.steps]]
 name = "pipeline"
-config = "configs/runs/workflow_steps/step3_apply_qc_comments_variants.toml"
+config = "configs/workflows/steps/step3_apply_qc_comments_variants.toml"
 
 [groups.steps.overrides]
 fix_base_branch = "step2_pqc_balanced_detect"

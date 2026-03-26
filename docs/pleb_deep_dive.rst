@@ -520,8 +520,8 @@ Example TOML (single-run baseline)
 
    # Variant generation
    fix_generate_alltim_variants = true
-   fix_backend_classifications_path = "configs/settings/backend_classifications.toml"
-   fix_alltim_variants_path = "configs/settings/alltim_variants.toml"
+   fix_backend_classifications_path = "configs/catalogs/variants/backend_classifications_legacy_new.toml"
+   fix_alltim_variants_path = "configs/catalogs/variants/alltim_variants_legacy_new.toml"
 
    # Par defaults
    fix_ensure_ephem = "DE440"
@@ -531,7 +531,7 @@ Example TOML (single-run baseline)
 
    # PQC pass-through (detector details in PQC docs)
    pqc_backend_col = "group"
-   pqc_backend_profiles_path = "configs/settings/pqc_backend_profiles.toml"
+   pqc_backend_profiles_path = "configs/rules/pqc/backend_profiles.example.toml"
 
    # Optional post-QC cross-pulsar coincidence report
    qc_cross_pulsar_enabled = true
@@ -545,7 +545,7 @@ Execution
 
 .. code-block:: bash
 
-   pleb --config /work/git_projects/pleb/configs/settings/pipeline.toml
+   pleb --config /work/git_projects/pleb/configs/runs/pipeline/epta-dr3-v0.toml
 
 What to validate after run
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

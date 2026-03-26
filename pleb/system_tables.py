@@ -14,7 +14,7 @@ from typing import Any, Dict
 
 def _tables_dir() -> Path:
     repo_root = Path(__file__).resolve().parent.parent
-    return repo_root / "configs" / "system_tables"
+    return repo_root / "configs" / "catalogs" / "system_tables"
 
 
 def load_table(name: str, default: Dict[str, Any]) -> Dict[str, Any]:
@@ -23,7 +23,7 @@ def load_table(name: str, default: Dict[str, Any]) -> Dict[str, Any]:
     Parameters
     ----------
     name : str
-        Table basename under ``configs/system_tables`` (without extension).
+        Table basename under ``configs/catalogs/system_tables`` (without extension).
     default : dict
         Fallback mapping returned when file is absent or unreadable.
 

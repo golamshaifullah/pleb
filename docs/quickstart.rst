@@ -5,6 +5,21 @@ This page shows a minimal end-to-end run that produces residual plots and
 diagnostic tables. It assumes you already have a tempo2-compatible data set
 and a working tempo2 installation or container image.
 
+Config Layout Quick Reference
+-----------------------------
+
+Use this map when choosing where to put files:
+
+- ``configs/runs/``: runnable mode profiles passed to ``--config``.
+- ``configs/workflows/``: multi-step orchestration files passed to ``workflow --file``.
+- ``configs/workflows/steps/``: reusable workflow step configs.
+- ``configs/catalogs/``: reusable mapping/lookup data.
+- ``configs/rules/``: declarative behavior policies (relabel/overlap/PQC profiles).
+- ``configs/state/lockfiles/``: generated ingest lock snapshots/validation.
+- ``configs/settings/``: legacy location; do not add new files.
+
+For full layout guidance, see :doc:`config_layout`.
+
 Minimal configuration
 ---------------------
 
@@ -133,13 +148,13 @@ Exact-overlap keep/drop catalog
 -------------------------------
 
 The exact duplicate overlap map is loaded from
-``configs/system_tables/overlapped_timfiles.toml`` by default. To override:
+``configs/catalogs/system_tables/overlapped_timfiles.toml`` by default. To override:
 
 .. code-block:: bash
 
    pleb --config pipeline.toml \
      --set run_fix_dataset=true \
-     --set fix_overlap_exact_catalog_path="configs/system_tables/overlapped_timfiles.toml"
+     --set fix_overlap_exact_catalog_path="configs/catalogs/system_tables/overlapped_timfiles.toml"
 
 Next steps
 ----------
