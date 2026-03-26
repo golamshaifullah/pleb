@@ -45,4 +45,3 @@ def test_cross_pulsar_coincidence_report_generation(tmp_path: Path) -> None:
     clusters = pd.read_csv(out_dir / "coincidence_clusters.tsv", sep="\t")
     assert len(clusters) >= 1
     assert int(clusters["n_pulsars"].max()) >= 2
-

@@ -22,7 +22,13 @@ from .tim_reader import read_tim_file_robust
 
 
 class PlkParseError(ValueError):
-    """Raised when a tempo2 plk log cannot be parsed."""
+    """Parse failure for a tempo2 ``plk`` log.
+
+    Notes
+    -----
+    The exception carries both the source path and a short reason string so
+    downstream reporting can distinguish malformed logs from absent files.
+    """
 
     def __init__(self, path: Path, reason: str) -> None:
         """Initialize the error with a path and reason."""

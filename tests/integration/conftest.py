@@ -32,4 +32,3 @@ def require_existing_path(path: str | Path, reason: str | None = None) -> None:
     if not p.exists():
         msg = reason or f"required path missing: {p}"
         pytest.skip(msg)
-

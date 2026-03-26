@@ -147,7 +147,18 @@ def make_output_tree(
 
 
 def cleanup_empty_dirs(root: Path) -> None:
-    """Remove empty directories under a root (bottom-up)."""
+    """Remove empty directories under a root path.
+
+    Parameters
+    ----------
+    root : pathlib.Path
+        Root directory scanned recursively in bottom-up order.
+
+    Notes
+    -----
+    Non-empty directories are preserved. Removal failures are ignored to keep
+    cleanup best-effort and non-fatal.
+    """
     root = Path(root)
     if not root.exists():
         return
@@ -161,7 +172,17 @@ def cleanup_empty_dirs(root: Path) -> None:
 
 
 def remove_tree_if_exists(path: Path) -> None:
-    """Remove a directory tree if it exists."""
+    """Remove a directory tree if it exists.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Directory tree to delete.
+
+    Notes
+    -----
+    This helper is idempotent: if the path does not exist, no action is taken.
+    """
     path = Path(path)
     if not path.exists():
         return

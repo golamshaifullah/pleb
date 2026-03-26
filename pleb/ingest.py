@@ -95,7 +95,20 @@ class IngestMapping:
 
 
 class IngestError(RuntimeError):
-    """Raised when ingest configuration or source structure is invalid."""
+    """Error raised for invalid ingest configuration or source layout.
+
+    Notes
+    -----
+    This exception is used for deterministic, user-actionable ingest failures,
+    for example:
+
+    - required mapping keys are missing,
+    - source roots do not exist,
+    - backend mapping entries are malformed.
+
+    It is intentionally separate from low-level I/O exceptions so callers can
+    surface clear ingest-specific guidance.
+    """
 
 
 def _norm_backend_key(key: str) -> str:

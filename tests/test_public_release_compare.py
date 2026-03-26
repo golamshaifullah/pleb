@@ -92,4 +92,3 @@ def test_build_comparison_aggregates_provider_spread() -> None:
     row = cmp.iloc[0]
     assert int(row["n_providers"]) == 2
     assert abs(float(row["span"]) - 0.2) < 1e-12
-

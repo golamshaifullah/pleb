@@ -10,7 +10,6 @@ import pytest
 
 from .conftest import require_binary, require_existing_path, require_flag
 
-
 pytestmark = pytest.mark.integration
 
 

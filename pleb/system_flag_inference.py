@@ -142,7 +142,14 @@ class BackendMissingError(RuntimeError):
 
 
 class TelescopeMissingError(RuntimeError):
-    """Raised when a telescope cannot be inferred automatically."""
+    """Error raised when telescope inference fails for a tim file.
+
+    Notes
+    -----
+    This signals that neither filename heuristics nor TOA-content heuristics
+    yielded a valid telescope code. Callers should prompt for a manual
+    telescope value or provide explicit mapping rules.
+    """
 
     def __init__(self, timfile: Path, sample_toa_line: str):
         super().__init__(
@@ -333,7 +340,27 @@ def _enforce_allowlist(val: str, allowlist: Optional[Tuple[str, ...]]) -> bool:
 
 
 def load_system_flag_mapping(path: Path) -> Dict[str, object]:
-    """Load editable system-flag mapping/allowlist JSON."""
+    """Load editable JSON mappings used during system-flag inference.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to a JSON file containing allowlists, aliases, and optional
+        per-timfile overrides.
+
+    Returns
+    -------
+    dict of str to object
+        Normalized mapping dictionary with keys:
+        ``backend_allowlist``, ``telescope_allowlist``,
+        ``backend_aliases``, ``telescope_aliases``,
+        ``backend_by_timfile``, and ``telescope_by_timfile``.
+
+    Notes
+    -----
+    Allowlist and alias tokens are normalized to uppercase to keep matching
+    deterministic across mixed-case source data.
+    """
     data = json.loads(path.read_text(encoding="utf-8"))
 
     def _norm_list(val) -> Optional[Tuple[str, ...]]:

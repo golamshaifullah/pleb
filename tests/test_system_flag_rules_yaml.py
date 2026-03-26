@@ -55,4 +55,3 @@ EFF.P200.1380:
         "EFF.P200.1425",
     }
     assert set(inferred["group"].astype(str).tolist()) == {"EFF.P200.1380"}
-

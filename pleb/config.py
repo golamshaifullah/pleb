@@ -219,7 +219,14 @@ class ParamScanConfig:
 
 @dataclass(slots=True)
 class QCReportConfig:
-    """Configuration model for QC-report generation mode."""
+    """Configuration model for ``qc-report`` mode.
+
+    Notes
+    -----
+    This model configures report rendering only. It does not run PQC; it
+    consumes existing ``*_qc.csv`` outputs and generates summary artifacts
+    (plots, tables, optional compact PDF).
+    """
 
     run_dir: Path
     backend_col: str = "group"

@@ -1308,7 +1308,27 @@ def _load_overlap_rules(path: Path) -> List[Dict[str, object]]:
 
 
 def apply_overlap_rules(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
-    """Apply declarative overlap rules to per-backend tim files."""
+    """Apply declarative overlap rules to backend tim files for one pulsar.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory containing ``tims/`` inputs.
+    cfg : FixDatasetConfig
+        FixDataset configuration with overlap-rule settings.
+
+    Returns
+    -------
+    dict of str to object
+        Per-pulsar execution report including resolved rule file path and
+        per-rule actions/results.
+
+    Notes
+    -----
+    Rules are read from ``cfg.overlap_rules_path`` and executed in declaration
+    order. Missing rule files are reported as structured errors in the return
+    payload rather than raising.
+    """
     psr = psr_dir.name
     if not cfg.overlap_rules_path:
         return {"psr": psr, "skipped": True, "reason": "no overlap rules path"}

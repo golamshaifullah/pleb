@@ -47,7 +47,27 @@ nesw_value = None
 
 
 def two_column_fix(dmf, keyword=None, value=None):
-    """Fallback shim for missing notebook helper; returns input unchanged."""
+    """Fallback shim for notebook compatibility in legacy code paths.
+
+    Parameters
+    ----------
+    dmf : pandas.DataFrame
+        Input dataframe expected by historical notebook workflows.
+    keyword : str, optional
+        Unused compatibility parameter.
+    value : str, optional
+        Unused compatibility parameter.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The input dataframe unchanged.
+
+    Notes
+    -----
+    The original notebook helper is unavailable in this module. This shim keeps
+    legacy call sites importable and executable without altering data.
+    """
     return dmf
 
 
@@ -1403,7 +1423,22 @@ def insert_system_flags(
 
 
 def savenewfile(homepath, psr, timfile):
-    """Notebook-compatible wrapper that backs up and replaces a .tim using .new."""
+    """Replace a ``.tim`` file with its ``.new`` counterpart and keep backup.
+
+    Parameters
+    ----------
+    homepath : str
+        Root dataset path.
+    psr : str
+        Pulsar name.
+    timfile : str
+        Timfile name relative to ``<homepath>/<psr>/tims``.
+
+    Notes
+    -----
+    This function preserves historical notebook behavior by writing a ``.orig``
+    backup and moving ``*.new`` into place.
+    """
     tim_path = Path(homepath) / psr / "tims" / timfile
     _backup_and_replace_tim(tim_path)
     print(f"Replaced {tim_path.name} (backup at {tim_path.with_suffix('.orig').name})")
@@ -2013,7 +2048,15 @@ def run_full_notebook_fixes(
     magic_add_sysflag: bool = True,
     time_window: float = 0.0,
 ) -> None:
-    """Convenience wrapper mirroring the notebook flow (tim flags + overlap removal + par updates)."""
+    """Run the legacy notebook-style fix sequence for selected pulsars.
+
+    Notes
+    -----
+    This wrapper preserves the execution order used in historical notebooks:
+    tim-flag cleanup, overlap handling, and parameter-file updates. It exists
+    for backwards compatibility and should not be treated as the preferred
+    modern entry point.
+    """
     if magic_add_sysflag:
         update_timfiles(psr_info, homepath, magic_add_sysflag=True)
     # Overlap removal if you provide overlapped_timfiles and a time_window > 0

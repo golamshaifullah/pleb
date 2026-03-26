@@ -14,7 +14,6 @@ from __future__ import annotations
 from .compat import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-import io
 import json
 import re
 import tarfile
@@ -59,7 +58,23 @@ _SUPPORTED_ARCHIVE_SUFFIXES = (
 
 @dataclass(slots=True)
 class ProviderSpec:
-    """Release provider configuration."""
+    """Provider configuration for public-release discovery.
+
+    Attributes
+    ----------
+    name : str
+        Human-readable provider identifier used in outputs.
+    type : str, optional
+        Resolver backend type (currently ``"zenodo_search"``).
+    query : str, optional
+        Provider-specific search query used to discover release records.
+    max_records : int, optional
+        Maximum number of candidate records inspected per provider.
+    max_assets : int, optional
+        Maximum number of downloadable assets selected from a record.
+    asset_regex : str, optional
+        Regular expression used to filter downloadable asset names.
+    """
 
     name: str
     type: str = "zenodo_search"
@@ -71,7 +86,21 @@ class ProviderSpec:
 
 @dataclass(slots=True)
 class ReleaseAsset:
-    """Resolved downloadable release asset."""
+    """Resolved downloadable release artifact.
+
+    Attributes
+    ----------
+    provider : str
+        Provider name that yielded this asset.
+    release_id : str
+        Provider-native release identifier.
+    title : str
+        Human-readable release title.
+    url : str
+        Direct download URL for the asset.
+    filename : str
+        Original asset filename.
+    """
 
     provider: str
     release_id: str
@@ -81,7 +110,19 @@ class ReleaseAsset:
 
 
 def load_provider_specs(path: Path) -> List[ProviderSpec]:
-    """Load provider definitions from TOML."""
+    """Load provider definitions from a TOML catalog.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        TOML file path. The expected shape is a top-level ``[providers]``
+        table keyed by provider name.
+
+    Returns
+    -------
+    list of ProviderSpec
+        Parsed provider specifications. Invalid entries are skipped.
+    """
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     block = data.get("providers", {})
     out: List[ProviderSpec] = []
@@ -149,9 +190,7 @@ def _resolve_zenodo_assets(spec: ProviderSpec) -> List[ReleaseAsset]:
         rec_id = str(rec.get("id", ""))
         metadata = rec.get("metadata", {})
         title = (
-            str(metadata.get("title", ""))
-            if isinstance(metadata, dict)
-            else ""
+            str(metadata.get("title", "")) if isinstance(metadata, dict) else ""
         ) or rec_id
         files = rec.get("files", [])
         if not isinstance(files, list):
@@ -187,7 +226,23 @@ def _resolve_zenodo_assets(spec: ProviderSpec) -> List[ReleaseAsset]:
 
 
 def resolve_latest_assets(spec: ProviderSpec) -> List[ReleaseAsset]:
-    """Resolve latest downloadable assets for a provider."""
+    """Resolve latest downloadable assets for a provider.
+
+    Parameters
+    ----------
+    spec : ProviderSpec
+        Provider lookup specification.
+
+    Returns
+    -------
+    list of ReleaseAsset
+        Downloadable assets selected using provider-specific logic.
+
+    Raises
+    ------
+    ValueError
+        If ``spec.type`` is unsupported.
+    """
     typ = spec.type.strip().lower()
     if typ == "zenodo_search":
         return _resolve_zenodo_assets(spec)
@@ -268,14 +323,26 @@ def _extract_astrometry_context(df: pd.DataFrame) -> Dict[str, str]:
     return ctx
 
 
-def _normalize_astrometry_row(row: pd.Series, context: Dict[str, str]) -> Tuple[Optional[float], Optional[str], Optional[str]]:
+def _normalize_astrometry_row(
+    row: pd.Series, context: Dict[str, str]
+) -> Tuple[Optional[float], Optional[str], Optional[str]]:
     key = str(row["param"]).upper()
     raw = str(row["value_raw"])
     if key == "RAJ":
-        c = SkyCoord(ra=raw, dec=context.get("DECJ", "0d"), unit=(u.hourangle, u.deg), frame="icrs")
+        c = SkyCoord(
+            ra=raw,
+            dec=context.get("DECJ", "0d"),
+            unit=(u.hourangle, u.deg),
+            frame="icrs",
+        )
         return float(c.ra.deg), "deg", "icrs"
     if key == "DECJ":
-        c = SkyCoord(ra=context.get("RAJ", "0h"), dec=raw, unit=(u.hourangle, u.deg), frame="icrs")
+        c = SkyCoord(
+            ra=context.get("RAJ", "0h"),
+            dec=raw,
+            unit=(u.hourangle, u.deg),
+            frame="icrs",
+        )
         return float(c.dec.deg), "deg", "icrs"
     if key == "ELONG":
         elat = context.get("ELAT")
@@ -309,11 +376,32 @@ def _normalize_astrometry_row(row: pd.Series, context: Dict[str, str]) -> Tuple[
 
 
 def normalize_astrometry(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize astrometric parameters to common units/frames where possible."""
+    """Normalize astrometric parameters into common numeric conventions.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input parameter table containing at least ``provider``, ``pulsar``,
+        ``parfile``, ``param``, and ``value_raw`` columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of the input rows augmented with:
+        ``value_num`` (normalized numeric value when available),
+        ``unit_norm``, ``frame_norm``, and ``is_astrometry``.
+
+    Notes
+    -----
+    The function converts sky coordinates to an ICRS/degree basis where
+    possible to support cross-provider comparisons on a common frame.
+    """
     if df.empty:
         return df.copy()
     out_rows: List[Dict[str, object]] = []
-    for (provider, pulsar, parfile), sub in df.groupby(["provider", "pulsar", "parfile"], dropna=False):
+    for (provider, pulsar, parfile), sub in df.groupby(
+        ["provider", "pulsar", "parfile"], dropna=False
+    ):
         ctx = _extract_astrometry_context(sub)
         for row in sub.itertuples(index=False):
             s = pd.Series(row._asdict())
@@ -324,13 +412,16 @@ def normalize_astrometry(df: pd.DataFrame) -> pd.DataFrame:
                     "value_num": val_num,
                     "unit_norm": unit,
                     "frame_norm": frame,
-                    "is_astrometry": str(getattr(row, "param")).upper() in _ASTROMETRY_KEYS,
+                    "is_astrometry": str(getattr(row, "param")).upper()
+                    in _ASTROMETRY_KEYS,
                 }
             )
     return pd.DataFrame(out_rows)
 
 
-def _download_and_extract_assets(assets: Iterable[ReleaseAsset], cache_root: Path) -> Dict[str, List[Path]]:
+def _download_and_extract_assets(
+    assets: Iterable[ReleaseAsset], cache_root: Path
+) -> Dict[str, List[Path]]:
     provider_to_pars: Dict[str, List[Path]] = {}
     for a in assets:
         pdir = cache_root / a.provider / a.release_id
@@ -390,7 +481,28 @@ def compare_public_releases(
     out_dir: Path,
     providers_path: Optional[Path] = None,
 ) -> Dict[str, Path]:
-    """Download latest public releases and compare parfile parameter values."""
+    """Download latest public releases and compare pulsar parameter values.
+
+    Parameters
+    ----------
+    out_dir : pathlib.Path
+        Output directory for downloads and generated TSV reports.
+    providers_path : pathlib.Path, optional
+        Provider catalog TOML path. If omitted, the default catalog under
+        ``configs/catalogs/public_releases/providers.toml`` is used.
+
+    Returns
+    -------
+    dict of str to pathlib.Path
+        Paths to key artifacts:
+        ``out_dir``, ``raw``, ``normalized``, ``comparison``, ``assets``.
+
+    Raises
+    ------
+    RuntimeError
+        If no providers are configured, no assets resolve, or no parsable
+        ``.par`` files are found.
+    """
     out_dir = Path(out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     if providers_path is None:
@@ -448,7 +560,9 @@ def compare_public_releases(
     cmp_df.to_csv(cmp_out, sep="\t", index=False)
 
     assets_out = out_dir / "resolved_assets.tsv"
-    pd.DataFrame([a.__dict__ for a in all_assets]).to_csv(assets_out, sep="\t", index=False)
+    pd.DataFrame([a.__dict__ for a in all_assets]).to_csv(
+        assets_out, sep="\t", index=False
+    )
     return {
         "out_dir": out_dir,
         "raw": raw_out,
@@ -456,4 +570,3 @@ def compare_public_releases(
         "comparison": cmp_out,
         "assets": assets_out,
     }
-

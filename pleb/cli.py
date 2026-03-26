@@ -338,7 +338,14 @@ def build_workflow_parser() -> argparse.ArgumentParser:
 
 
 def build_compare_public_parser() -> argparse.ArgumentParser:
-    """Build the CLI parser for public release comparison mode."""
+    """Build the parser for the ``compare-public`` CLI mode.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured to resolve provider catalogs, download release
+        assets, and write normalized parameter-comparison tables.
+    """
     p = argparse.ArgumentParser(
         description=(
             "Download latest public NANOGrav/EPTA/IPTA releases and compare "
@@ -456,7 +463,19 @@ def run_workflow(argv: list[str] | None) -> int:
 
 
 def run_compare_public(argv: list[str] | None) -> int:
-    """Run public-release download and parameter comparison."""
+    """Execute public-release download and parameter comparison workflow.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Optional CLI argument list. When ``None``, arguments are read from the
+        active process command line.
+
+    Returns
+    -------
+    int
+        Process exit code, ``0`` on success.
+    """
     args = build_compare_public_parser().parse_args(argv)
     out = compare_public_releases(
         out_dir=Path(args.out_dir),

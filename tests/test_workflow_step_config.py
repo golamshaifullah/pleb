@@ -55,4 +55,3 @@ results_dir = "{tmp_path / "results_step"}"
     _run_step(step, base_cfg, ctx)
 
     assert captured["home_dir"] == str(step_home.resolve())
-
