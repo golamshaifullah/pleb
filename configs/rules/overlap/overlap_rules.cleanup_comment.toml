@@ -1,0 +1,16 @@
+# Overlap cleanup pass 1 (non-destructive).
+# Marks duplicate rows by commenting them out.
+#
+# Usage example:
+#   pleb workflow --file configs/workflows/tim_cleanup_two_pass.toml
+
+[[rules]]
+name = "wsrt_p2_prefer_dual_channel_comment"
+enabled = true
+kind = "prefer_multichannel"
+primary_glob = "WSRT.P2.*.tim"
+secondary_glob = "WSRT.P2.*_2.tim"
+mjd_tol_sec = 9.9e-7
+action = "comment"
+comment_prefix = "C CLEANUP_PASS1_PREFER_DUAL"
+

@@ -20,6 +20,7 @@ config = "configs/workflows/steps/step1_fix_flags_variants.toml"
 
 [groups.steps.overrides]
 # Set this to your starting branch before running.
+jobs = 2
 fix_base_branch = "raw_ingest"
 fix_branch_name = "step1_fix_flags_variants"
 fix_commit_message = "Step1: fix flags+jumps and generate variants"
@@ -36,6 +37,7 @@ name = "pipeline"
 config = "configs/workflows/steps/step2_pqc_balanced_detect.toml"
 
 [groups.steps.overrides]
+jobs = 2
 fix_base_branch = "step1_fix_flags_variants"
 fix_branch_name = "step2_pqc_balanced_detect"
 fix_commit_message = "Step2: balanced PQC detection run"
@@ -52,6 +54,7 @@ name = "pipeline"
 config = "configs/workflows/steps/step3_apply_qc_comments_variants.toml"
 
 [groups.steps.overrides]
+jobs = 2
 fix_base_branch = "step2_pqc_balanced_detect"
 fix_branch_name = "step3_apply_qc_comments_variants"
 fix_commit_message = "Step3: apply balanced QC comments"

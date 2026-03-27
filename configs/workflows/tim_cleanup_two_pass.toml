@@ -1,0 +1,103 @@
+# Two-pass tim cleanup workflow
+#
+# Pass 1: non-destructive review pass
+#   - comments duplicate overlaps (rule-driven)
+#   - comments exact keep/drop overlaps (catalog-driven)
+#   - commits to a review branch
+#
+# Pass 2: destructive cleanup pass
+#   - deletes reviewed multichannel-vs-single-channel duplicates (rule-driven)
+#   - removes within-file exact/tolerance duplicates
+#   - commits to a final cleanup branch
+#
+# Edit the branch names below before running.
+
+config = "/work/git_projects/pleb/configs/workflows/steps/step1_fix_flags_variants.toml"
+mode = "serial"
+
+[[groups]]
+name = "pass1_comment_duplicates_for_review"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "/work/git_projects/pleb/configs/workflows/steps/step1_fix_flags_variants.toml"
+
+[groups.steps.overrides]
+jobs = 2
+pulsars = "ALL"
+run_fix_dataset = true
+fix_apply = true
+
+run_tempo2 = false
+run_pqc = false
+qc_report = false
+make_plots = false
+make_reports = false
+make_covmat = false
+
+fix_base_branch = "cleanup_tim_dupes"
+fix_branch_name = "tim_cleanup_comment_review"
+fix_commit_message = "FixDataset: pass1 comment duplicate TOAs for review"
+branches = ["tim_cleanup_comment_review"]
+reference_branch = "tim_cleanup_comment_review"
+outdir_name = "wf_tim_cleanup_pass1_comment"
+
+# Keep this pass focused on duplicate handling only.
+fix_infer_system_flags = false
+fix_insert_missing_jumps = false
+fix_prune_stale_jumps = false
+fix_generate_alltim_variants = false
+fix_jump_reference_variants = false
+fix_update_alltim_includes = false
+fix_check_duplicate_backend_tims = true
+
+# Non-destructive duplicate handling.
+fix_dedupe_toas_within_tim = false
+fix_remove_overlaps_exact = true
+fix_overlap_rules_path = "/work/git_projects/pleb/configs/rules/overlap/overlap_rules.cleanup_comment.toml"
+fix_wsrt_p2_action = "comment"
+
+[[groups]]
+name = "pass2_delete_reviewed_duplicates"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "/work/git_projects/pleb/configs/workflows/steps/step1_fix_flags_variants.toml"
+
+[groups.steps.overrides]
+jobs = 2
+pulsars = "ALL"
+run_fix_dataset = true
+fix_apply = true
+
+run_tempo2 = false
+run_pqc = false
+qc_report = false
+make_plots = false
+make_reports = false
+make_covmat = false
+
+fix_base_branch = "tim_cleanup_comment_review"
+fix_branch_name = "tim_cleanup_delete_final"
+fix_commit_message = "FixDataset: pass2 delete reviewed duplicate TOAs"
+branches = ["tim_cleanup_delete_final"]
+reference_branch = "tim_cleanup_delete_final"
+outdir_name = "wf_tim_cleanup_pass2_delete"
+
+# Keep this pass focused on duplicate handling only.
+fix_infer_system_flags = false
+fix_insert_missing_jumps = false
+fix_prune_stale_jumps = false
+fix_generate_alltim_variants = false
+fix_jump_reference_variants = false
+fix_update_alltim_includes = false
+fix_check_duplicate_backend_tims = true
+
+# Destructive duplicate handling.
+fix_dedupe_toas_within_tim = true
+fix_remove_overlaps_exact = true
+fix_overlap_rules_path = "/work/git_projects/pleb/configs/rules/overlap/overlap_rules.cleanup_delete.toml"
+fix_wsrt_p2_action = "delete"
+
