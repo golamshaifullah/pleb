@@ -1,0 +1,9 @@
+[run]
+mode = "pipeline"
+run_tempo2 = true
+run_fix_dataset = false
+run_pqc = false
+qc_report = false
+
+[data]
+jobs = 2

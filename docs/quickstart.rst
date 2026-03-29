@@ -160,6 +160,8 @@ Next steps
 ----------
 
 - For details on the CLI, see :doc:`cli`.
+- For the new single-file UX wrapper (``pleb init/run/profile``), see
+  :doc:`ux_wrapper`.
 - For practical tuning of TOML settings and detection strategies, see
   :doc:`configuration_reference`.
 - For statistical context (chi-square, red noise, DM variations), see

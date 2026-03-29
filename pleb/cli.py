@@ -647,6 +647,10 @@ def main(argv=None) -> int:
     """
     if argv is None:
         argv = sys.argv[1:]
+    if argv and argv[0] in {"init", "run", "profile", "doctor", "explain"}:
+        from .ux import run_ux_cli
+
+        return run_ux_cli(argv)
     if argv and argv[0] == "qc-report":
         return run_qc_report(argv)
     if argv and argv[0] == "workflow":

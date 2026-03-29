@@ -1,0 +1,22 @@
+[run]
+mode = "pipeline"
+run_tempo2 = true
+run_fix_dataset = true
+run_pqc = true
+qc_report = true
+
+[data]
+jobs = 4
+
+[policy.fix]
+apply = true
+qc_action = "comment"
+qc_remove_outliers = true
+qc_outlier_cols = ["bad_point", "robust_outlier", "robust_global_outlier", "bad_mad"]
+
+[policy.pqc]
+backend_col = "sys"
+merge_tol_seconds = 10.0
+robust_enabled = true
+robust_scope = "backend"
+robust_z_thresh = 6.0

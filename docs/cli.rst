@@ -24,6 +24,39 @@ Override config values in place:
 
    pleb --config pipeline.toml --set results_dir=\"results\" --set jobs=8
 
+UX wrapper cheat sheet
+----------------------
+
+For the single-file UX layer (``pleb.toml``), use:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 35 45
+
+   * - Command
+     - Typical use
+     - Example
+   * - ``pleb init``
+     - Create starter UX config
+     - ``pleb init --config pleb.toml``
+   * - ``pleb profile list``
+     - List available presets
+     - ``pleb profile list``
+   * - ``pleb profile use <name>``
+     - Merge preset into UX config
+     - ``pleb profile use balanced --config pleb.toml``
+   * - ``pleb doctor``
+     - Validate resolved essentials
+     - ``pleb doctor --config pleb.toml``
+   * - ``pleb explain``
+     - Show UX->legacy mapping summary
+     - ``pleb explain --config pleb.toml``
+   * - ``pleb run``
+     - Execute selected mode via UX config
+     - ``pleb run --config pleb.toml --set run.mode=\"pipeline\"``
+
+See :doc:`ux_wrapper` for full UX-wrapper documentation.
+
 CLI overrides (1:1 with TOML)
 -----------------------------
 

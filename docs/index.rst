@@ -15,6 +15,7 @@ pleb - The EPTA Data Combination Pipeline
 
    configuration
    config_layout
+   ux_wrapper
    pleb_deep_dive
    running_modes
    modes
