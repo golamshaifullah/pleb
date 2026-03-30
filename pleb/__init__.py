@@ -84,7 +84,7 @@ def run_param_scan(cfg: PipelineConfig, **kwargs):
     ----------
     cfg : PipelineConfig
         Pipeline configuration.
-    **kwargs
+    ``**kwargs``
         Forwarded to :func:`pleb.param_scan.run_param_scan`.
 
     Returns

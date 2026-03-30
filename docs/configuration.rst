@@ -491,10 +491,10 @@ Workflow pattern (detect then apply)
    fix_branch_name = "step3_apply_qc_comments_variants"
 
 
+.. _config-repro:
+
 Reproducibility and Lockfiles
 -----------------------------
-
-.. _config-repro:
 
 Ingest lockfiles allow strict source-tree drift detection.
 

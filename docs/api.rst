@@ -2,7 +2,6 @@ API Reference
 =============
 
 .. automodule:: pleb
-   :members:
    :show-inheritance:
 
 Internal Modules (No Index)

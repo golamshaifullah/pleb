@@ -269,7 +269,7 @@ Compatibility notes (workflows):
 
 
 Other ways to run Pleb (Python API)
-----------------------------------
+------------------------------------
 
 For scripting or integration into larger systems, use the Python API:
 

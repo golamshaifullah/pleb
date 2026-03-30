@@ -39,7 +39,7 @@ Fix:
 - use one of: ``pipeline``, ``ingest``, ``workflow``, ``qc-report``.
 
 Run executes but behavior is unexpected
---------------------------------------
+----------------------------------------
 
 Likely causes:
 

@@ -14,12 +14,16 @@ Design choices (cheap + robust):
 - We never try to infer a header; we assume FORMAT 1 and use the 2nd column as frequency (MHz).
 - We drop/ignore any TOA lines whose frequency is non-numeric.
 - Backend inference:
-    1) per-TOA "-be" flag if present
-    2) filename stem heuristic: <TEL>.<BACKEND>....tim
-    3) otherwise raise BackendMissingError with a sample TOA line for the UI to show the user
+
+  1) per-TOA "-be" flag if present
+  2) filename stem heuristic: <TEL>.<BACKEND>....tim
+  3) otherwise raise BackendMissingError with a sample TOA line for the UI to show the user
+
 - Second pass canonicalisation across pulsars:
-    Use canonicalise_centres() on a combined table of inferred centres to "snap" them across pulsars
-    within a tolerance (default 1 MHz).
+
+  Use canonicalise_centres() on a combined table of inferred centres to "snap" them across pulsars
+  within a tolerance (default 1 MHz).
+
 See Also:
     pleb.dataset_fix.infer_and_apply_system_flags: Integration point for FixDataset.
 """
