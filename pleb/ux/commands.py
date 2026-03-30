@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import os
 import tempfile
+from dataclasses import fields
 from pathlib import Path
 from typing import Any, Dict
 
 from ..config_io import _parse_value_as_toml_literal, _set_dotted_key, _dump_toml_no_nulls
+from ..config import IngestConfig, PipelineConfig, QCReportConfig, WorkflowRunConfig
 from .adapter import ux_to_legacy_dict
 from .loader import deep_merge, load_ux_config, write_ux_config
 from .models import UXConfig
@@ -274,7 +276,75 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     legacy = ux_to_legacy_dict(ux)
 
     mode = str(ux.run.get("mode", "pipeline"))
+    issues: list[str] = []
+    undefined_keys: list[str] = []
     invalid_paths: list[str] = []
+    invalid_values: list[str] = []
+
+    known_keys = {
+        *(f.name for f in fields(PipelineConfig)),
+        *(f.name for f in fields(IngestConfig)),
+        *(f.name for f in fields(WorkflowRunConfig)),
+        "run_dir",
+        "backend_col",
+        "backend",
+        "report_dir",
+        "no_plots",
+        "structure_group_cols",
+        "no_feature_plots",
+        "compact_pdf",
+        "compact_pdf_name",
+        "qc_report_run_dir",
+        "qc_report_dir",
+    }
+    undefined_keys = sorted([k for k in legacy.keys() if k not in known_keys])
+
+    # Placeholder/sentinel values should fail doctor.
+    placeholder_invalid_keys: set[str] = set()
+    for k, v in legacy.items():
+        if isinstance(v, str):
+            s = v.strip()
+            if ("/path/to/" in s) or ("<run_tag>" in s):
+                placeholder_invalid_keys.add(k)
+
+    # Mode-specific parsing and validation.
+    try:
+        if mode in {"qc", "qc-report", "qc_report"}:
+            qc_run_dir = (
+                legacy.get("run_dir")
+                or legacy.get("qc_report_run_dir")
+                or legacy.get("qc_report_dir")
+            )
+            qcfg_dict = {
+                "run_dir": qc_run_dir,
+                "backend_col": legacy.get(
+                    "qc_report_backend_col", legacy.get("backend_col", "group")
+                ),
+                "backend": legacy.get("qc_report_backend", legacy.get("backend")),
+                "report_dir": legacy.get("qc_report_report_dir"),
+                "no_plots": legacy.get("qc_report_no_plots", False),
+                "structure_group_cols": legacy.get("qc_report_structure_group_cols"),
+                "no_feature_plots": legacy.get("qc_report_no_feature_plots", False),
+                "compact_pdf": legacy.get("qc_report_compact_pdf", False),
+                "compact_pdf_name": legacy.get(
+                    "qc_report_compact_pdf_name", "qc_compact_report.pdf"
+                ),
+            }
+            QCReportConfig.from_dict(qcfg_dict)
+        elif mode == "ingest":
+            icfg = IngestConfig.from_dict(legacy)
+            icfg.resolved_output_root()
+        elif mode == "workflow":
+            WorkflowRunConfig.from_dict(
+                {"workflow_file": legacy.get("workflow_file")}
+            )
+        elif mode == "pipeline":
+            PipelineConfig.from_dict(legacy)
+        else:
+            invalid_values.append("run.mode")
+    except Exception as e:
+        issues.append(str(e))
+
     if mode in {"qc", "qc-report", "qc_report"}:
         qc_run_dir = (
             legacy.get("run_dir")
@@ -287,7 +357,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     else:
         required = ["home_dir", "singularity_image"]
         missing = [k for k in required if not legacy.get(k)]
-        if legacy.get("home_dir") and not Path(str(legacy["home_dir"])).expanduser().exists():
+        if legacy.get("home_dir") and not Path(
+            str(legacy["home_dir"])
+        ).expanduser().exists():
             invalid_paths.append("home_dir")
         if legacy.get("singularity_image") and not Path(
             str(legacy["singularity_image"])
@@ -300,11 +372,34 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         print("missing_required=" + ",".join(missing))
     else:
         print("missing_required=none")
+    if undefined_keys:
+        print("undefined_keys=" + ",".join(undefined_keys))
+    else:
+        print("undefined_keys=none")
     if invalid_paths:
         print("invalid_paths=" + ",".join(invalid_paths))
     else:
         print("invalid_paths=none")
-    return 0 if (not missing and not invalid_paths) else 1
+    # Do not double-report path-like keys as both invalid path and invalid value.
+    if invalid_paths:
+        placeholder_invalid_keys.difference_update(set(invalid_paths))
+    invalid_values.extend(sorted(placeholder_invalid_keys))
+    if invalid_values:
+        print("invalid_values=" + ",".join(sorted(set(invalid_values))))
+    else:
+        print("invalid_values=none")
+    if issues:
+        print("validation_errors=" + " | ".join(issues))
+    else:
+        print("validation_errors=none")
+    ok = (
+        not missing
+        and not undefined_keys
+        and not invalid_paths
+        and not invalid_values
+        and not issues
+    )
+    return 0 if ok else 1
 
 
 def _cmd_explain(args: argparse.Namespace) -> int:
