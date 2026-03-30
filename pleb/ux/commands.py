@@ -165,9 +165,17 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     ux = load_ux_config(Path(args.config))
     legacy = ux_to_legacy_dict(ux)
 
-    required = ["home_dir", "singularity_image"]
-    missing = [k for k in required if not legacy.get(k)]
     mode = str(ux.run.get("mode", "pipeline"))
+    if mode in {"qc", "qc-report", "qc_report"}:
+        qc_run_dir = (
+            legacy.get("run_dir")
+            or legacy.get("qc_report_run_dir")
+            or legacy.get("qc_report_dir")
+        )
+        missing = [] if qc_run_dir else ["run_dir"]
+    else:
+        required = ["home_dir", "singularity_image"]
+        missing = [k for k in required if not legacy.get(k)]
 
     print(f"mode={mode}")
     print(f"resolved_keys={len(legacy)}")
@@ -209,7 +217,45 @@ def _dispatch_legacy(mode: str, cfg_data: Dict[str, Any]) -> int:
         if mode == "workflow":
             return legacy_main(["workflow", "--config", str(tmp_path)])
         if mode in {"qc", "qc-report", "qc_report"}:
-            return legacy_main(["qc-report", "--config", str(tmp_path)])
+            run_dir = (
+                cfg_data.get("run_dir")
+                or cfg_data.get("qc_report_run_dir")
+                or cfg_data.get("qc_report_dir")
+            )
+            if not run_dir:
+                raise SystemExit(
+                    "qc-report mode requires run_dir. "
+                    "Set [policy.report].run_dir (preferred) or run_dir."
+                )
+            qc_cfg = {
+                "qc_report": {
+                    "run_dir": run_dir,
+                    "backend_col": cfg_data.get(
+                        "qc_report_backend_col", cfg_data.get("backend_col", "group")
+                    ),
+                    "backend": cfg_data.get("qc_report_backend", cfg_data.get("backend")),
+                    "report_dir": cfg_data.get("qc_report_report_dir"),
+                    "no_plots": cfg_data.get("qc_report_no_plots", False),
+                    "structure_group_cols": cfg_data.get(
+                        "qc_report_structure_group_cols"
+                    ),
+                    "no_feature_plots": cfg_data.get(
+                        "qc_report_no_feature_plots", False
+                    ),
+                    "compact_pdf": cfg_data.get("qc_report_compact_pdf", False),
+                    "compact_pdf_name": cfg_data.get(
+                        "qc_report_compact_pdf_name", "qc_compact_report.pdf"
+                    ),
+                }
+            }
+            with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as qt:
+                qtmp = qt.name
+                qt.write(_dump_toml_no_nulls(qc_cfg))
+            try:
+                return legacy_main(["qc-report", "--config", str(qtmp)])
+            finally:
+                if os.path.exists(qtmp):
+                    os.unlink(qtmp)
         raise SystemExit(
             f"Unsupported run.mode={mode!r}. Use one of: pipeline, ingest, workflow, qc-report"
         )
