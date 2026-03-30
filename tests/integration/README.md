@@ -6,6 +6,7 @@ This directory contains starter integration tests for current PLEB modes:
 - `ingest`
 - `workflow`
 - `qc-report`
+- UX wrapper (`init`, mode-specific config generation)
 
 By default, only safe smoke checks run (CLI help + workflow file loadability).
 Runtime-heavy tests are opt-in and skipped unless corresponding environment
@@ -20,4 +21,3 @@ Run only integration scaffold tests:
 ```bash
 python -m pytest -q -m integration tests/integration
 ```
-

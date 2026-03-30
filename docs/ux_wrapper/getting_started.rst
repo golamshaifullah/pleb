@@ -17,7 +17,7 @@ Quick start
 .. code-block:: bash
 
    pleb profile list
-   pleb profile use minimal --config pleb.toml
+   pleb profile use minimal --config configs/runs/pipeline/pleb.pipeline.toml
 
 3. Inspect resolved mapping:
 
@@ -30,13 +30,13 @@ Quick start
 
 .. code-block:: bash
 
-   pleb run --config pleb.toml
+   pleb run --config configs/runs/pipeline/pleb.pipeline.toml
 
 5. Override a setting without editing file:
 
 .. code-block:: bash
 
-   pleb run --config pleb.toml --set data.jobs=8 --set run.run_pqc=true
+   pleb run --config configs/runs/pipeline/pleb.pipeline.toml --set data.jobs=8 --set run.run_pqc=true
 
 Command reference
 -----------------
@@ -44,11 +44,26 @@ Command reference
 ``pleb init``
 ~~~~~~~~~~~~~
 
-Creates a starter ``pleb.toml``.
+Creates starter UX config files.
 
 .. code-block:: bash
 
    pleb init --config pleb.toml --force
+
+Mode-specific starter:
+
+.. code-block:: bash
+
+   pleb init --mode pipeline
+   pleb init --mode ingest
+   pleb init --mode workflow
+   pleb init --mode qc-report
+
+Generate one file per mode:
+
+.. code-block:: bash
+
+   pleb init --all-modes --outdir configs/runs/ux --force
 
 Use ``--force`` only when you explicitly want to overwrite.
 
