@@ -31,6 +31,11 @@ _MODE_SUBDIR = {
 }
 
 
+def _mode_path(mode_name: str, root_dir: Path) -> Path:
+    """Return canonical UX init output path for a mode under a config root."""
+    return root_dir / _MODE_SUBDIR[mode_name] / _MODE_FILE_BASENAME[mode_name]
+
+
 def run_ux_cli(argv: list[str] | None) -> int:
     """Execute UX subcommands.
 

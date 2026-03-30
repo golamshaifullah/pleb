@@ -765,6 +765,9 @@ def run_pqc_for_parfile(
                         logger.warning(
                             "pqc backend profile run failed for %s: %s", be, e
                         )
+                        # Backend-profile workspaces are temporary scratch inputs.
+                        logger.info("Cleaned backend-profile temp dir: %s", tmp)
+                        shutil.rmtree(tmp, ignore_errors=True)
                         continue
                     key_be = _row_key_series(df_be, str(cfg.backend_col)).astype(str)
                     shared_cols = [c for c in df_be.columns if c in df.columns]
@@ -784,6 +787,29 @@ def run_pqc_for_parfile(
                         ",".join(sorted(overrides.keys())),
                         matched,
                     )
+                    # Backend-profile workspaces are temporary scratch inputs.
+                    shutil.rmtree(tmp, ignore_errors=True)
+                    logger.info("Cleaned backend-profile temp dir: %s", tmp)
+                # Best-effort cleanup of now-empty profile root.
+                try:
+                    profile_root = out_csv.parent / ".pqc_backend_profiles" / parfile.stem
+                    if profile_root.exists():
+                        for d in sorted(profile_root.rglob("*"), reverse=True):
+                            if d.is_dir():
+                                try:
+                                    d.rmdir()
+                                except OSError:
+                                    pass
+                        try:
+                            profile_root.rmdir()
+                        except OSError:
+                            pass
+                        try:
+                            (out_csv.parent / ".pqc_backend_profiles").rmdir()
+                        except OSError:
+                            pass
+                except Exception:
+                    pass
 
     _assert_timfile_metadata(df, source=str(parfile))
     df.to_csv(out_csv, index=False)
