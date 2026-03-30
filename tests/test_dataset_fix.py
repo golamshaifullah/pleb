@@ -184,3 +184,46 @@ def test_apply_pqc_outliers_can_write_pqc_flag_labels(tmp_path: Path) -> None:
     assert "-pqc good" in text
     assert "-pqc bad" in text
     assert "-pqc event_step" in text
+
+
+def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0001"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "\tf 1400 56000 1 1\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,bad_point\n"
+            "BACKEND.tim,56000,True\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_action="comment",
+        qc_comment_prefix="CQC_OUTLIER",
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    lines = tim.read_text(encoding="utf-8").splitlines()
+    toa_comments = [ln for ln in lines if ln.startswith("C ")]
+    assert len(toa_comments) == 1
+    assert toa_comments[0].startswith("C QC_OUTLIER ")
+    assert "\tf 1400" not in toa_comments[0]

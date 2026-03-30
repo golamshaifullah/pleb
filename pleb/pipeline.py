@@ -306,8 +306,8 @@ def _build_fixdataset_config(
                 _cfg_get(cfg, "fix_qc_solar_action", "comment") or "comment"
             ),
             qc_solar_comment_prefix=str(
-                _cfg_get(cfg, "fix_qc_solar_comment_prefix", "# QC_SOLAR")
-                or "# QC_SOLAR"
+                _cfg_get(cfg, "fix_qc_solar_comment_prefix", "C QC_SOLAR")
+                or "C QC_SOLAR"
             ),
             qc_remove_orbital_phase=bool(
                 _cfg_get(cfg, "fix_qc_remove_orbital_phase", False)
@@ -317,9 +317,9 @@ def _build_fixdataset_config(
             ),
             qc_orbital_phase_comment_prefix=str(
                 _cfg_get(
-                    cfg, "fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE"
+                    cfg, "fix_qc_orbital_phase_comment_prefix", "C QC_BIANRY_ECLIPSE"
                 )
-                or "# QC_BIANRY_ECLIPSE"
+                or "C QC_BIANRY_ECLIPSE"
             ),
             qc_write_pqc_flag=bool(_cfg_get(cfg, "fix_qc_write_pqc_flag", False)),
             qc_pqc_flag_name=str(_cfg_get(cfg, "fix_qc_pqc_flag_name", "-pqc") or "-pqc"),

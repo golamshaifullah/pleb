@@ -255,10 +255,10 @@ class FixDatasetConfig:
     qc_remove_transients: bool = False
     qc_remove_solar: bool = False
     qc_solar_action: str = "comment"
-    qc_solar_comment_prefix: str = "# QC_SOLAR"
+    qc_solar_comment_prefix: str = "C QC_SOLAR"
     qc_remove_orbital_phase: bool = False
     qc_orbital_phase_action: str = "comment"
-    qc_orbital_phase_comment_prefix: str = "# QC_BIANRY_ECLIPSE"
+    qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
     qc_write_pqc_flag: bool = False
     qc_pqc_flag_name: str = "-pqc"
     qc_pqc_good_value: str = "good"
@@ -282,6 +282,37 @@ def _backup_file(path: Path) -> None:
     if b.exists():
         return
     shutil.copy2(path, b)
+
+
+def strip_leading_whitespace(line: str) -> str:
+    """Strip leading whitespace characters from a tim line."""
+    return line.lstrip()
+
+
+def _normalise_c_comment_prefix(prefix: str) -> str:
+    """Normalise a comment prefix so it starts with ``C ``."""
+    p = strip_leading_whitespace(str(prefix or "").strip())
+    if not p:
+        return "C"
+    if p.startswith("#"):
+        p = p[1:].lstrip()
+    if p.startswith("C"):
+        rest = p[1:].lstrip()
+        return f"C {rest}".rstrip()
+    return f"C {p}".rstrip()
+
+
+def _to_c_comment_line(text: str) -> str:
+    """Return a canonical tim comment line that always begins with ``C ``."""
+    s = strip_leading_whitespace(cleanline(text))
+    if not s:
+        return "C"
+    if s.startswith("#"):
+        s = s[1:].lstrip()
+    if s.startswith("C"):
+        rest = s[1:].lstrip()
+        return f"C {rest}".rstrip()
+    return f"C {s}".rstrip()
 
 
 def update_alltim_includes(
@@ -1907,11 +1938,15 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         }
 
     tol = float(cfg.qc_merge_tol_days or (2.0 / 86400.0))
-    comment_prefix = str(cfg.qc_comment_prefix or "C QC_OUTLIER").strip()
-    solar_prefix = str(cfg.qc_solar_comment_prefix or "# QC_SOLAR").strip()
-    orbital_prefix = str(
-        cfg.qc_orbital_phase_comment_prefix or "# QC_BINARY_ECLIPSE"
-    ).strip()
+    comment_prefix = _normalise_c_comment_prefix(
+        str(cfg.qc_comment_prefix or "C QC_OUTLIER")
+    )
+    solar_prefix = _normalise_c_comment_prefix(
+        str(cfg.qc_solar_comment_prefix or "C QC_SOLAR")
+    )
+    orbital_prefix = _normalise_c_comment_prefix(
+        str(cfg.qc_orbital_phase_comment_prefix or "C QC_BINARY_ECLIPSE")
+    )
     pqc_flag_name = str(cfg.qc_pqc_flag_name or "-pqc").strip()
     pqc_good_value = str(cfg.qc_pqc_good_value or "good").strip()
 
@@ -2010,11 +2045,14 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if solar_action == "delete":
                     removed += 1
                     continue
-                if solar_prefix and raw_toa.lstrip().startswith(solar_prefix):
-                    new_lines.append(raw_toa)
+                toa_no_ws = strip_leading_whitespace(raw_toa)
+                if solar_prefix and toa_no_ws.startswith(solar_prefix):
+                    new_lines.append(toa_no_ws)
                 else:
                     new_lines.append(
-                        f"{solar_prefix} {raw_toa}" if solar_prefix else raw_toa
+                        _to_c_comment_line(
+                            f"{solar_prefix} {toa_no_ws}" if solar_prefix else toa_no_ws
+                        )
                     )
                     commented += 1
                 continue
@@ -2024,11 +2062,16 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if orbital_action == "delete":
                     removed += 1
                     continue
-                if orbital_prefix and raw_toa.lstrip().startswith(orbital_prefix):
-                    new_lines.append(raw_toa)
+                toa_no_ws = strip_leading_whitespace(raw_toa)
+                if orbital_prefix and toa_no_ws.startswith(orbital_prefix):
+                    new_lines.append(toa_no_ws)
                 else:
                     new_lines.append(
-                        f"{orbital_prefix} {raw_toa}" if orbital_prefix else raw_toa
+                        _to_c_comment_line(
+                            f"{orbital_prefix} {toa_no_ws}"
+                            if orbital_prefix
+                            else toa_no_ws
+                        )
                     )
                     commented += 1
                 continue
@@ -2038,11 +2081,16 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if action == "delete":
                     removed += 1
                     continue
-                if comment_prefix and raw_toa.lstrip().startswith(comment_prefix):
-                    new_lines.append(raw_toa)
+                toa_no_ws = strip_leading_whitespace(raw_toa)
+                if comment_prefix and toa_no_ws.startswith(comment_prefix):
+                    new_lines.append(toa_no_ws)
                 else:
                     new_lines.append(
-                        f"{comment_prefix} {raw_toa}" if comment_prefix else raw_toa
+                        _to_c_comment_line(
+                            f"{comment_prefix} {toa_no_ws}"
+                            if comment_prefix
+                            else toa_no_ws
+                        )
                     )
                     commented += 1
                 continue
@@ -3203,10 +3251,12 @@ def remove_overlaps_exact(
                 if k in retain_keys and not raw.lstrip().startswith("C"):
                     # Non-destructive default: keep line but comment it with reason.
                     new_lines.append(
-                        "C OVERLAP_DUPLICATE(retain="
-                        + retain_name
-                        + ") "
-                        + cleanline(raw)
+                        _to_c_comment_line(
+                            "C OVERLAP_DUPLICATE(retain="
+                            + retain_name
+                            + ") "
+                            + strip_leading_whitespace(cleanline(raw))
+                        )
                     )
                     commented += 1
                     file_changed = True
@@ -3333,6 +3383,7 @@ def prefer_multichannel_pair_rule(
     mode = str(action or "comment").strip().lower()
     if mode not in {"comment", "delete"}:
         mode = "comment"
+    comment_prefix = _normalise_c_comment_prefix(comment_prefix)
     tol_days = float(mjd_tol_sec) / 86400.0
     tims = list_backend_timfiles(psr_dir)
 
@@ -3417,8 +3468,10 @@ def prefer_multichannel_pair_rule(
             if mode == "delete":
                 continue
             out_lines.append(
-                f"{comment_prefix}(dual={dual_file.name},tol={mjd_tol_sec:.3g}s) "
-                + cleanline(raw)
+                _to_c_comment_line(
+                    f"{comment_prefix} (dual={dual_file.name},tol={mjd_tol_sec:.3g}s) "
+                    + strip_leading_whitespace(cleanline(raw))
+                )
             )
 
         changed_files.append(str(single_file))

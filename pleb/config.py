@@ -804,10 +804,10 @@ class PipelineConfig:
     fix_qc_remove_transients: bool = False
     fix_qc_remove_solar: bool = False
     fix_qc_solar_action: str = "comment"
-    fix_qc_solar_comment_prefix: str = "# QC_SOLAR"
+    fix_qc_solar_comment_prefix: str = "C QC_SOLAR"
     fix_qc_remove_orbital_phase: bool = False
     fix_qc_orbital_phase_action: str = "comment"
-    fix_qc_orbital_phase_comment_prefix: str = "# QC_BIANRY_ECLIPSE"
+    fix_qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
     fix_qc_write_pqc_flag: bool = False
     fix_qc_pqc_flag_name: str = "-pqc"
     fix_qc_pqc_good_value: str = "good"
