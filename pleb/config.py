@@ -513,6 +513,11 @@ class PipelineConfig:
         fix_qc_remove_orbital_phase: Act on orbital-phase flags.
         fix_qc_orbital_phase_action: Action for orbital-phase flagged TOAs (comment/delete).
         fix_qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
+        fix_qc_write_pqc_flag: Add ``-pqc`` classification flag to TOA rows.
+        fix_qc_pqc_flag_name: TOA flag token used for QC class (default ``-pqc``).
+        fix_qc_pqc_good_value: Value for non-outlier, non-event TOAs.
+        fix_qc_pqc_bad_value: Value for outlier-only TOAs.
+        fix_qc_pqc_event_prefix: Prefix for event values (for example ``event_step``).
         fix_qc_merge_tol_days: MJD tolerance when matching TOAs.
         fix_qc_results_dir: Directory containing pqc CSV outputs. If unset and
             fix_apply is true, defaults to ``<results>/qc/<fix_branch_name>``.
@@ -803,6 +808,11 @@ class PipelineConfig:
     fix_qc_remove_orbital_phase: bool = False
     fix_qc_orbital_phase_action: str = "comment"
     fix_qc_orbital_phase_comment_prefix: str = "# QC_BIANRY_ECLIPSE"
+    fix_qc_write_pqc_flag: bool = False
+    fix_qc_pqc_flag_name: str = "-pqc"
+    fix_qc_pqc_good_value: str = "good"
+    fix_qc_pqc_bad_value: str = "bad"
+    fix_qc_pqc_event_prefix: str = "event_"
     fix_qc_merge_tol_days: float = 2.0 / 86400.0
     fix_qc_results_dir: Optional[Path] = None
     fix_qc_branch: Optional[str] = None

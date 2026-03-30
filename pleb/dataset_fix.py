@@ -157,6 +157,11 @@ class FixDatasetConfig:
         qc_remove_orbital_phase: Apply orbital-phase flags from QC.
         qc_orbital_phase_action: ``comment`` or ``delete`` for orbital-phase TOAs.
         qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
+        qc_write_pqc_flag: Write ``-pqc`` classification on each TOA after QC.
+        qc_pqc_flag_name: Flag token used for QC classification.
+        qc_pqc_good_value: Value for TOAs that are neither outliers nor events.
+        qc_pqc_bad_value: Value for outliers that are not part of events.
+        qc_pqc_event_prefix: Prefix used for event labels (for example ``event_step``).
         qc_merge_tol_days: MJD tolerance for QC matching.
         qc_results_dir: Directory containing QC CSV outputs.
         qc_branch: Subdirectory for QC results (optional).
@@ -254,6 +259,11 @@ class FixDatasetConfig:
     qc_remove_orbital_phase: bool = False
     qc_orbital_phase_action: str = "comment"
     qc_orbital_phase_comment_prefix: str = "# QC_BIANRY_ECLIPSE"
+    qc_write_pqc_flag: bool = False
+    qc_pqc_flag_name: str = "-pqc"
+    qc_pqc_good_value: str = "good"
+    qc_pqc_bad_value: str = "bad"
+    qc_pqc_event_prefix: str = "event_"
     qc_merge_tol_days: float = 2.0 / 86400.0
     qc_results_dir: Optional[Path] = None
     qc_branch: Optional[str] = None
@@ -1720,6 +1730,103 @@ def _collect_qc_mjds(
     return out
 
 
+def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
+    """Return a stable event type label for a QC row, if any."""
+    event_checks: list[tuple[str, str]] = [
+        ("step_member", "step"),
+        ("dm_step_member", "dm_step"),
+        ("solar_event_member", "solar"),
+        ("eclipse_member", "eclipse"),
+        ("gaussian_bump_member", "gaussian_bump"),
+        ("glitch_member", "glitch"),
+        ("orbital_phase_bad", "orbital_phase"),
+    ]
+    for col, label in event_checks:
+        if col in df.columns:
+            try:
+                val = df.iloc[row_idx][col]
+                if pd.isna(val):
+                    continue
+                if bool(val):
+                    return label
+            except Exception:
+                continue
+
+    if "transient_id" in df.columns:
+        try:
+            tval = df.iloc[row_idx]["transient_id"]
+            if pd.isna(tval):
+                return None
+            if int(tval) >= 0:
+                return "transient"
+        except Exception:
+            pass
+
+    if "event_member" in df.columns:
+        try:
+            eval_ = df.iloc[row_idx]["event_member"]
+            if pd.isna(eval_):
+                return None
+            if bool(eval_):
+                return "event"
+        except Exception:
+            pass
+
+    return None
+
+
+def _collect_qc_pqc_labels(
+    df: pd.DataFrame, cfg: FixDatasetConfig
+) -> Dict[Optional[str], list[tuple[float, str]]]:
+    """Build per-TOA ``-pqc`` labels from a QC table."""
+    if "mjd" not in df.columns or len(df) == 0:
+        return {}
+
+    outlier_cols = (
+        list(cfg.qc_outlier_cols)
+        if cfg.qc_outlier_cols
+        else [
+            "outlier_any",
+            "bad_point",
+            "bad_hard",
+            "robust_outlier",
+            "robust_global_outlier",
+            "bad_mad",
+            "bad_ou",
+        ]
+    )
+    outlier_mask = np.zeros(len(df), dtype=bool)
+    for col in outlier_cols:
+        if col in df.columns:
+            outlier_mask |= df[col].fillna(False).astype(bool).to_numpy()
+
+    good_val = str(cfg.qc_pqc_good_value or "good")
+    bad_val = str(cfg.qc_pqc_bad_value or "bad")
+    event_prefix = str(cfg.qc_pqc_event_prefix or "event_")
+
+    labels = [good_val] * len(df)
+    for i in range(len(df)):
+        event_type = _first_event_type_for_row(df, i)
+        if event_type:
+            labels[i] = f"{event_prefix}{event_type}"
+        elif bool(outlier_mask[i]):
+            labels[i] = bad_val
+
+    mapping: Dict[Optional[str], list[tuple[float, str]]] = {}
+    if "_timfile" in df.columns:
+        for i in range(len(df)):
+            raw_name = str(df.iloc[i]["_timfile"])
+            key: Optional[str]
+            try:
+                key = Path(raw_name).name
+            except Exception:
+                key = raw_name
+            mapping.setdefault(key, []).append((float(df.iloc[i]["mjd"]), labels[i]))
+    else:
+        mapping[None] = [(float(df.iloc[i]["mjd"]), labels[i]) for i in range(len(df))]
+    return mapping
+
+
 def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
     """Apply QC decisions from ``pqc`` CSV to backend tim files.
 
@@ -1766,10 +1873,14 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         return {"pulsar": psr, "qc_csv": str(qc_csv), "error": str(e)}
 
     mjd_maps = _collect_qc_mjds(df, cfg)
+    pqc_label_map = (
+        _collect_qc_pqc_labels(df, cfg) if bool(cfg.qc_write_pqc_flag) else {}
+    )
     if (
         not mjd_maps.get("standard")
         and not mjd_maps.get("solar")
         and not mjd_maps.get("orbital")
+        and not pqc_label_map
     ):
         return {"pulsar": psr, "qc_csv": str(qc_csv), "matched": 0, "changed": False}
 
@@ -1801,9 +1912,12 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     orbital_prefix = str(
         cfg.qc_orbital_phase_comment_prefix or "# QC_BINARY_ECLIPSE"
     ).strip()
+    pqc_flag_name = str(cfg.qc_pqc_flag_name or "-pqc").strip()
+    pqc_good_value = str(cfg.qc_pqc_good_value or "good").strip()
 
     tims = list_backend_timfiles(psr_dir)
     total_matched = 0
+    total_pqc_flagged = 0
     changed_files = 0
     file_reports: list[Dict[str, object]] = []
 
@@ -1819,6 +1933,9 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             and (None not in solar_map)
             and (key not in orbital_map)
             and (None not in orbital_map)
+            and (key not in pqc_label_map)
+            and (None not in pqc_label_map)
+            and not bool(cfg.qc_write_pqc_flag)
         ):
             continue
         target_mjds = np.asarray(std_map.get(key, std_map.get(None, [])), dtype=float)
@@ -1828,10 +1945,19 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         target_mjds_orbital = np.asarray(
             orbital_map.get(key, orbital_map.get(None, [])), dtype=float
         )
+        target_pqc_labels = pqc_label_map.get(key, pqc_label_map.get(None, []))
+        if target_pqc_labels:
+            target_mjds_pqc = np.asarray([float(m) for m, _ in target_pqc_labels])
+            target_vals_pqc = [str(v) for _, v in target_pqc_labels]
+        else:
+            target_mjds_pqc = np.asarray([], dtype=float)
+            target_vals_pqc = []
         if (
             target_mjds.size == 0
             and target_mjds_solar.size == 0
             and target_mjds_orbital.size == 0
+            and target_mjds_pqc.size == 0
+            and not bool(cfg.qc_write_pqc_flag)
         ):
             continue
 
@@ -1839,6 +1965,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         new_lines: list[str] = []
         removed = 0
         commented = 0
+        pqc_flagged = 0
         time_offset_sec = 0.0
 
         for raw in lines:
@@ -1858,6 +1985,18 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 new_lines.append(raw)
                 continue
 
+            raw_toa = raw
+            if bool(cfg.qc_write_pqc_flag):
+                pqc_val = pqc_good_value
+                if target_mjds_pqc.size > 0:
+                    idx = np.where(np.abs(target_mjds_pqc - mjd) <= tol)[0]
+                    if idx.size > 0:
+                        pqc_val = target_vals_pqc[int(idx[0])]
+                parts = raw.split()
+                if _token_set_flag(parts, pqc_flag_name, pqc_val):
+                    pqc_flagged += 1
+                raw_toa = " ".join(parts)
+
             is_solar = target_mjds_solar.size > 0 and np.any(
                 np.abs(target_mjds_solar - mjd) <= tol
             )
@@ -1871,10 +2010,12 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if solar_action == "delete":
                     removed += 1
                     continue
-                if solar_prefix and raw.lstrip().startswith(solar_prefix):
-                    new_lines.append(raw)
+                if solar_prefix and raw_toa.lstrip().startswith(solar_prefix):
+                    new_lines.append(raw_toa)
                 else:
-                    new_lines.append(f"{solar_prefix} {raw}" if solar_prefix else raw)
+                    new_lines.append(
+                        f"{solar_prefix} {raw_toa}" if solar_prefix else raw_toa
+                    )
                     commented += 1
                 continue
 
@@ -1883,11 +2024,11 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if orbital_action == "delete":
                     removed += 1
                     continue
-                if orbital_prefix and raw.lstrip().startswith(orbital_prefix):
-                    new_lines.append(raw)
+                if orbital_prefix and raw_toa.lstrip().startswith(orbital_prefix):
+                    new_lines.append(raw_toa)
                 else:
                     new_lines.append(
-                        f"{orbital_prefix} {raw}" if orbital_prefix else raw
+                        f"{orbital_prefix} {raw_toa}" if orbital_prefix else raw_toa
                     )
                     commented += 1
                 continue
@@ -1897,23 +2038,25 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if action == "delete":
                     removed += 1
                     continue
-                if comment_prefix and raw.lstrip().startswith(comment_prefix):
-                    new_lines.append(raw)
+                if comment_prefix and raw_toa.lstrip().startswith(comment_prefix):
+                    new_lines.append(raw_toa)
                 else:
                     new_lines.append(
-                        f"{comment_prefix} {raw}" if comment_prefix else raw
+                        f"{comment_prefix} {raw_toa}" if comment_prefix else raw_toa
                     )
                     commented += 1
                 continue
 
-            new_lines.append(raw)
+            new_lines.append(raw_toa)
 
-        changed = (removed + commented) > 0
+        total_pqc_flagged += int(pqc_flagged)
+        changed = (removed + commented + pqc_flagged) > 0
         file_reports.append(
             {
                 "timfile": str(tim),
                 "removed": int(removed),
                 "commented": int(commented),
+                "pqc_flagged": int(pqc_flagged),
                 "changed": bool(changed),
             }
         )
@@ -1929,6 +2072,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         "pulsar": psr,
         "qc_csv": str(qc_csv),
         "matched": int(total_matched),
+        "pqc_flagged": int(total_pqc_flagged),
         "changed_files": int(changed_files),
         "files": file_reports,
     }
@@ -2452,7 +2596,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         )
         report["steps"].append({"coord_convert": rep})
 
-    if cfg.qc_remove_outliers:
+    if cfg.qc_remove_outliers or cfg.qc_write_pqc_flag:
         try:
             rep = apply_pqc_outliers(psr_dir, cfg)
         except Exception as e:

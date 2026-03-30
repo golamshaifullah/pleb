@@ -5,13 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from pleb.dataset_fix import (
+    FixDatasetConfig,
+    apply_pqc_outliers,
     count_toa_lines,
-    parse_include_lines,
-    update_alltim_includes,
-    ensure_timfile_flags,
     extract_flag_values,
-    update_parfile_jumps,
+    ensure_timfile_flags,
+    parse_include_lines,
     remove_patterns_from_par_tim,
+    update_alltim_includes,
+    update_parfile_jumps,
 )
 
 
@@ -138,3 +140,47 @@ def test_remove_patterns_from_par_tim(tmp_path: Path) -> None:
 
     assert "NRT.NUPPI." not in par.read_text(encoding="utf-8")
     assert "NRT.NUPPI." not in tim.read_text(encoding="utf-8")
+
+
+def test_apply_pqc_outliers_can_write_pqc_flag_labels(tmp_path: Path) -> None:
+    psr = "J0000+0000"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "f 1400 55000 1 1\n"
+            "f 1400 55001 1 1\n"
+            "f 1400 55002 1 1\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,bad_point,step_member,transient_id\n"
+            "BACKEND.tim,55000,False,False,-1\n"
+            "BACKEND.tim,55001,True,False,-1\n"
+            "BACKEND.tim,55002,False,True,-1\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=False,
+        qc_write_pqc_flag=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    assert rep["pqc_flagged"] == 3
+    text = tim.read_text(encoding="utf-8")
+    assert "-pqc good" in text
+    assert "-pqc bad" in text
+    assert "-pqc event_step" in text

@@ -321,6 +321,17 @@ def _build_fixdataset_config(
                 )
                 or "# QC_BIANRY_ECLIPSE"
             ),
+            qc_write_pqc_flag=bool(_cfg_get(cfg, "fix_qc_write_pqc_flag", False)),
+            qc_pqc_flag_name=str(_cfg_get(cfg, "fix_qc_pqc_flag_name", "-pqc") or "-pqc"),
+            qc_pqc_good_value=str(
+                _cfg_get(cfg, "fix_qc_pqc_good_value", "good") or "good"
+            ),
+            qc_pqc_bad_value=str(
+                _cfg_get(cfg, "fix_qc_pqc_bad_value", "bad") or "bad"
+            ),
+            qc_pqc_event_prefix=str(
+                _cfg_get(cfg, "fix_qc_pqc_event_prefix", "event_") or "event_"
+            ),
             qc_bad_tau_corr_days=float(
                 _cfg_get(cfg, "fix_qc_bad_tau_corr_days", 0.02) or 0.02
             ),
