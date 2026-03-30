@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
+import warnings
 
 # Common tempo2 directive words in .tim files.
 TIM_DIRECTIVES = {
@@ -28,6 +29,8 @@ TIM_DIRECTIVES = {
     "T2EQUAD",
 }
 
+_WARNED_LOWERCASE_C_COMMENT = False
+
 
 def is_toa_line(line: str) -> bool:
     """Return whether a line appears to be a TOA data line.
@@ -45,10 +48,39 @@ def is_toa_line(line: str) -> bool:
     s = line.strip()
     if not s:
         return False
-    if s.startswith(("C", "#")):
+    global _WARNED_LOWERCASE_C_COMMENT
+    s_l = line.lstrip()
+    if s_l.startswith("c") and (len(s_l) == 1 or s_l[1].isspace()):
+        if not _WARNED_LOWERCASE_C_COMMENT:
+            warnings.warn(
+                "Found lowercase 'c' comment marker in tim file. Only '#' and 'C ' are recognized comments.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            _WARNED_LOWERCASE_C_COMMENT = True
+        return False
+    if is_tim_comment_line(s):
         return False
     head = s.split()[0]
     return head not in TIM_DIRECTIVES
+
+
+def is_tim_comment_line(line: str) -> bool:
+    """Return whether a line is a tim comment/directive comment.
+
+    A line is treated as a comment when it starts (after whitespace) with:
+    ``#`` or ``C`` followed by whitespace/end-of-line.
+    """
+    s = line.lstrip()
+    if not s:
+        return False
+    if s.startswith("#"):
+        return True
+    if s[0] == "C":
+        if len(s) == 1:
+            return True
+        return s[1].isspace()
+    return False
 
 
 def count_toa_lines(timfile: Path) -> int:

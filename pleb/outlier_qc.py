@@ -79,6 +79,7 @@ except Exception:  # pragma: no cover
     tomllib = None  # type: ignore
 
 from .logging_utils import get_logger
+from .tim_utils import is_toa_line as _tim_is_toa_line
 
 logger = get_logger("pleb.qc")
 
@@ -327,29 +328,7 @@ def _extract_flag_value(line: str, flag: str) -> Optional[str]:
 
 
 def _is_toa_line(raw: str) -> bool:
-    s = raw.strip()
-    if not s:
-        return False
-    if s.startswith(("C", "#")):
-        return False
-    head = s.split()[0]
-    return head not in {
-        "FORMAT",
-        "MODE",
-        "TIME",
-        "EFAC",
-        "EQUAD",
-        "ECORR",
-        "JUMP",
-        "INCLUDE",
-        "SKIP",
-        "TRACK",
-        "PHASE",
-        "FREQ",
-        "SCALE",
-        "T2EFAC",
-        "T2EQUAD",
-    }
+    return _tim_is_toa_line(raw)
 
 
 def _prepare_backend_filtered_par(

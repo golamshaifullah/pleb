@@ -64,6 +64,7 @@ from .tim_utils import (
     cleanline,
     count_toa_lines,
     extract_flag_values,
+    is_tim_comment_line,
     is_toa_line,
     list_backend_timfiles,
     mjd_from_toa_line,
@@ -3248,7 +3249,7 @@ def remove_overlaps_exact(
                 if k is None:
                     new_lines.append(cleanline(raw))
                     continue
-                if k in retain_keys and not raw.lstrip().startswith("C"):
+                if k in retain_keys and not is_tim_comment_line(raw):
                     # Non-destructive default: keep line but comment it with reason.
                     new_lines.append(
                         _to_c_comment_line(

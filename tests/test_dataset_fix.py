@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
+from pleb.tim_utils import is_toa_line
 from pleb.dataset_fix import (
     FixDatasetConfig,
     apply_pqc_outliers,
@@ -38,6 +40,19 @@ file3 1400 55002 1.0 1.0
 """,
     )
     assert count_toa_lines(t) == 3
+
+
+def test_is_toa_line_allows_filename_starting_with_c_or_C() -> None:
+    assert is_toa_line("Cfile 1400 55000 1 1")
+    assert is_toa_line("cfile 1400 55000 1 1")
+    assert not is_toa_line("C this is comment")
+
+
+def test_is_toa_line_warns_for_lowercase_c_comment_marker() -> None:
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        assert not is_toa_line("c this is comment")
+    assert any("lowercase 'c' comment marker" in str(w.message) for w in rec)
 
 
 def test_update_alltim_includes_dry_run_and_apply(tmp_path: Path) -> None:
