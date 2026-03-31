@@ -14,4 +14,5 @@ clean:
 	@rm -rf "$(BUILDDIR)"
 
 html:
+	@python ../scripts/generate_settings_catalog.py
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS)

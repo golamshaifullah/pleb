@@ -1,6 +1,27 @@
 Release Notes
 =============
 
+Scope Freeze Notice (Current Release Line)
+------------------------------------------
+
+The current release line is scope-frozen for user-facing surface area.
+
+Allowed in this line:
+
+- bug fixes,
+- stability/reproducibility improvements,
+- tests/CI hardening,
+- documentation improvements.
+
+Planned next-major initiative (not in current scope):
+
+- N-pass compiler DSL.
+
+See also:
+
+- ``ROADMAP.md``
+- ``CONTRIBUTING.md``
+
 Since ``release/v0.1.0``
 ------------------------
 
@@ -75,4 +96,3 @@ Mode and config usability
   supplied.
 - Mode-specific config models are available (pipeline, ingest, workflow,
   qc-report, param-scan).
-

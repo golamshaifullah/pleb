@@ -7,6 +7,7 @@ reporting PTA pulsar timing datasets.
 
 Docs: https://golamshaifullah.github.io/pleb/
 Config guide (TOML strategies): https://golamshaifullah.github.io/pleb/configuration_reference.html
+Roadmap: `ROADMAP.md`
 
 ## Core capabilities
 
@@ -30,6 +31,13 @@ Config guide (TOML strategies): https://golamshaifullah.github.io/pleb/configura
 - Declarative relabel/overlap rule catalogs in TOML.
 
 See `docs/release_notes.rst` for details.
+
+## Scope Status
+
+Current release line is scope-frozen for user-facing surface area.
+
+- In scope: bugfixes, stability, tests, docs.
+- Next major initiative: N-pass compiler DSL (see `ROADMAP.md`).
 
 ## Modes
 

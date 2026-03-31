@@ -20,6 +20,7 @@ from .config import PipelineConfig
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
+from .public_release_compare import compare_public_releases
 from .ingest import ingest_dataset
 from .logging_utils import get_logger, set_log_dir
 from .config_io import _load_config_dict, _parse_value_as_toml_literal, _set_dotted_key
@@ -60,10 +61,17 @@ def _load_workflow(path: Path) -> Dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(str(path))
     if path.suffix.lower() == ".json":
-        return json.loads(path.read_text(encoding="utf-8"))
-    if path.suffix.lower() in (".toml", ".tml"):
-        return tomllib.loads(path.read_text(encoding="utf-8"))
-    raise ValueError(f"Unsupported workflow file type: {path.suffix}")
+        data = json.loads(path.read_text(encoding="utf-8"))
+    elif path.suffix.lower() in (".toml", ".tml"):
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    else:
+        raise ValueError(f"Unsupported workflow file type: {path.suffix}")
+    wf_ver = int(data.get("workflow_version", 1) or 1)
+    if wf_ver != 1:
+        raise ValueError(
+            f"Unsupported workflow_version={wf_ver}. Supported: workflow_version=1."
+        )
+    return data
 
 
 def _normalize_step(step: Any) -> Dict[str, Any]:
@@ -229,7 +237,14 @@ def _run_step(
     if step_cfg_path:
         step_base_dict = _load_config_dict(str(step_cfg_path))
     cfg = _build_cfg(step_base_dict, step.get("set", []), step.get("overrides", {}))
-    if name in ("pipeline", "fix_dataset", "fix_apply", "param_scan"):
+    if name in (
+        "pipeline",
+        "fix_dataset",
+        "fix_apply",
+        "param_scan",
+        "whitenoise",
+        "compare_public",
+    ):
         try:
             home_dir = Path(cfg.home_dir)
         except Exception:
@@ -325,6 +340,36 @@ def _run_step(
             btx_max_fb=getattr(cfg, "param_scan_btx_max_fb", None),
         )
         ctx.last_run_dir = out_paths.get("tag")
+        return
+
+    if name == "whitenoise":
+        # Whitenoise-only step: run pipeline harness with only white-noise stage enabled.
+        cfg.run_whitenoise = True
+        cfg.run_tempo2 = False
+        cfg.run_pqc = False
+        cfg.qc_report = False
+        cfg.run_fix_dataset = False
+        cfg.make_plots = False
+        cfg.make_reports = False
+        cfg.make_covmat = False
+        out_paths = run_pipeline(cfg)
+        ctx.last_run_dir = out_paths.get("tag")
+        ctx.last_pipeline_run_dir = out_paths.get("tag")
+        return
+
+    if name == "compare_public":
+        out_dir = getattr(cfg, "compare_public_out_dir", None)
+        if out_dir is None:
+            if ctx.last_pipeline_run_dir:
+                out_dir = Path(ctx.last_pipeline_run_dir) / "public_release_compare"
+            else:
+                out_dir = Path(cfg.results_dir) / "public_release_compare"
+        providers_path = getattr(cfg, "compare_public_providers_path", None)
+        out = compare_public_releases(
+            out_dir=Path(out_dir),
+            providers_path=(Path(providers_path) if providers_path else None),
+        )
+        ctx.last_run_dir = Path(out["out_dir"])
         return
 
     if name == "qc_report":

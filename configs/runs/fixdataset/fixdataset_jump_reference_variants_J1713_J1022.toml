@@ -12,7 +12,7 @@ singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 branches = ["main"]
 reference_branch = "main"
 pulsars = ["J1713+0747", "J1022+1001"]
-jobs = 2
+jobs = 8
 
 run_tempo2 = true
 make_plots = true
@@ -92,12 +92,12 @@ pqc_delta_chi2_thresh = 16.0
 pqc_exp_dip_min_duration_days = 7.0
 
 # Step/DM-step
-pqc_step_enabled = true
+pqc_step_enabled = false
 pqc_step_min_points = 10
 pqc_step_delta_chi2_thresh = 12.0
 pqc_step_scope = "both"
 
-pqc_dm_step_enabled = true
+pqc_dm_step_enabled = false
 pqc_dm_step_min_points = 10
 pqc_dm_step_delta_chi2_thresh = 12.0
 pqc_dm_step_scope = "both"

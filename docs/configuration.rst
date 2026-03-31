@@ -52,6 +52,11 @@ If you are onboarding quickly:
 3. use :ref:`config-minimal-patterns` for your first runnable profile;
 4. use :doc:`full_settings_catalog` for per-key lookup.
 
+The settings catalog page is generated from the UX key registry:
+
+- source of truth: ``pleb/ux/key_catalog.py``
+- generator: ``scripts/generate_settings_catalog.py``
+
 If you are maintaining production pipelines:
 
 1. read :ref:`config-composition`;

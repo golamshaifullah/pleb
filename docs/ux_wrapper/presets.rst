@@ -10,6 +10,11 @@ Current built-ins
 
 - ``minimal``
 - ``balanced``
+- ``safe``
+- ``sensitive``
+- ``expert``
+- ``feature_hunt``
+- ``production``
 
 List presets
 ------------
@@ -25,6 +30,12 @@ Apply preset
 
    pleb profile use minimal --config pleb.toml
    pleb profile use balanced --config pleb.toml
+
+Or apply at run-time (no file mutation):
+
+.. code-block:: bash
+
+   pleb run --config pleb.toml --profile balanced --profile production
 
 Merge semantics
 ---------------

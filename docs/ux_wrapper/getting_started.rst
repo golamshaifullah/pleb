@@ -23,14 +23,28 @@ Quick start
 
 .. code-block:: bash
 
-   pleb doctor --config pleb.toml
-   pleb explain --config pleb.toml
+   pleb doctor --config configs/runs/pipeline/pleb.pipeline.toml
+   pleb explain --config configs/runs/pipeline/pleb.pipeline.toml
 
 4. Run:
 
 .. code-block:: bash
 
    pleb run --config configs/runs/pipeline/pleb.pipeline.toml
+
+Golden-path journey shortcuts:
+
+.. code-block:: bash
+
+   pleb run detect --config configs/runs/pipeline/pleb.pipeline.toml --confirm
+   pleb run apply --config configs/runs/pipeline/pleb.pipeline.toml --confirm
+   pleb run publish --config configs/runs/pipeline/pleb.pipeline.toml
+
+Plan first (no execution):
+
+.. code-block:: bash
+
+   pleb run --config configs/runs/pipeline/pleb.pipeline.toml --plan
 
 5. Override a setting without editing file:
 
@@ -50,11 +64,13 @@ Creates starter UX config files.
 
    pleb init --config pleb.toml --force
 
-Mode-specific starter:
+Mode-specific starter (with verbosity):
 
 .. code-block:: bash
 
-   pleb init --mode pipeline
+   pleb init --mode pipeline --level minimal
+   pleb init --mode pipeline --level balanced
+   pleb init --mode pipeline --level full
    pleb init --mode ingest
    pleb init --mode workflow
    pleb init --mode qc-report
@@ -63,7 +79,13 @@ Generate one file per mode:
 
 .. code-block:: bash
 
-   pleb init --all-modes --outdir configs/runs/ux --force
+   pleb init --all-modes --outdir configs --level balanced --force
+
+Generate a 3-pass workflow blueprint (detect -> apply -> post-clean):
+
+.. code-block:: bash
+
+   pleb init --workflow-template 3pass-clean --outdir configs --force
 
 Use ``--force`` only when you explicitly want to overwrite.
 
@@ -97,6 +119,12 @@ Prints section-level UX->legacy mapping summary for debugging.
 
 Compiles UX config into legacy flat config and dispatches to current PLEB mode
 execution.
+
+Profiles can be applied at run time before ``--set`` overrides:
+
+.. code-block:: bash
+
+   pleb run --config configs/runs/pipeline/pleb.pipeline.toml --profile balanced
 
 What files you edit vs what you do not edit
 -------------------------------------------

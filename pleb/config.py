@@ -542,6 +542,10 @@ class PipelineConfig:
         ingest_commit_branch_name: Optional name for the ingest branch.
         ingest_commit_base_branch: Base branch for the ingest commit.
         ingest_commit_message: Commit message for ingest.
+        compare_public_out_dir: Optional output directory for public-release
+            comparisons.
+        compare_public_providers_path: Optional providers catalog path for
+            public-release comparisons.
     """
 
     # Root of the data repository (contains pulsar folders like Jxxxx+xxxx/)
@@ -848,6 +852,8 @@ class PipelineConfig:
     ingest_commit_base_branch: Optional[str] = None
     ingest_commit_message: Optional[str] = None
     ingest_verify: bool = False
+    compare_public_out_dir: Optional[Path] = None
+    compare_public_providers_path: Optional[Path] = None
 
     def resolved(self) -> "PipelineConfig":
         """Return a copy with paths expanded and resolved.
@@ -956,6 +962,14 @@ class PipelineConfig:
             c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
         if c.ingest_output_dir is not None:
             c.ingest_output_dir = Path(c.ingest_output_dir).expanduser().resolve()
+        if c.compare_public_out_dir is not None:
+            c.compare_public_out_dir = (
+                Path(c.compare_public_out_dir).expanduser().resolve()
+            )
+        if c.compare_public_providers_path is not None:
+            c.compare_public_providers_path = (
+                Path(c.compare_public_providers_path).expanduser().resolve()
+            )
         return c
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1013,6 +1027,12 @@ class PipelineConfig:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
             d["ingest_output_dir"] = str(d["ingest_output_dir"])
+        if d.get("compare_public_out_dir") is not None:
+            d["compare_public_out_dir"] = str(d["compare_public_out_dir"])
+        if d.get("compare_public_providers_path") is not None:
+            d["compare_public_providers_path"] = str(
+                d["compare_public_providers_path"]
+            )
         return d
 
     @staticmethod
@@ -1437,6 +1457,16 @@ class PipelineConfig:
             ingest_commit_base_branch=opt_str("ingest_commit_base_branch"),
             ingest_commit_message=opt_str("ingest_commit_message"),
             ingest_verify=bool(d.get("ingest_verify", False)),
+            compare_public_out_dir=(
+                Path(d["compare_public_out_dir"])
+                if d.get("compare_public_out_dir")
+                else None
+            ),
+            compare_public_providers_path=(
+                Path(d["compare_public_providers_path"])
+                if d.get("compare_public_providers_path")
+                else None
+            ),
         )
 
     @staticmethod

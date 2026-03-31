@@ -33,6 +33,16 @@ Subfolders are mode-oriented:
 
 Use these as templates and copy into your project-specific profile files.
 
+UX can generate these with increasing completeness:
+
+- ``pleb init --mode pipeline --level minimal``
+- ``pleb init --mode pipeline --level balanced``
+- ``pleb init --mode pipeline --level full``
+
+And can scaffold a chained three-pass workflow:
+
+- ``pleb init --workflow-template 3pass-clean --outdir configs``
+
 ### `configs/workflows/`
 
 Workflow mode files passed to `pleb workflow --file ...`.

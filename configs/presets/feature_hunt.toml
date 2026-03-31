@@ -1,0 +1,27 @@
+[run]
+mode = "pipeline"
+run_tempo2 = true
+run_fix_dataset = true
+run_pqc = true
+qc_report = true
+
+[data]
+jobs = 8
+
+[policy.fix]
+apply = true
+infer_system_flags = true
+system_flag_overwrite_existing = true
+insert_missing_jumps = true
+remove_overlaps_exact = false
+
+[policy.pqc]
+backend_col = "sys"
+merge_tol_seconds = 1.0
+structure_mode = "both"
+event_instrument = true
+step_delta_chi2_thresh = 10.0
+dm_step_delta_chi2_thresh = 10.0
+gaussian_bump_delta_chi2_thresh = 10.0
+glitch_delta_chi2_thresh = 10.0
+glitch_noise_k = 0.7
