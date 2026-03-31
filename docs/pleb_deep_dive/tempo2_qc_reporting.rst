@@ -5,7 +5,7 @@ This chapter covers runtime expectations and output interpretation for the
 analysis stages.
 
 tempo2 run coordination
---------------------
+----------------------
 
 PLEB can run tempo2 directly or through a configured container image depending
 on runtime configuration.
@@ -17,7 +17,7 @@ Check:
 - expected par/tim paths resolved by stage.
 
 PQC integration (forwarded settings only)
------------------------------------
+-----------------------------------------
 
 PLEB forwards ``pqc_*`` settings and does not re-implement detector logic.
 

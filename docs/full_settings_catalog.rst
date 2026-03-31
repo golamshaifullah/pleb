@@ -1623,7 +1623,7 @@ workflow
 
 ``workflow_file``
   Type: ``Path``
-  Default: ````
+  Default: ``""``
   Modes: ``workflow``
   Level: ``minimal``
 
