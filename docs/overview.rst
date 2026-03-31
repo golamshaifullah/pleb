@@ -36,11 +36,11 @@ For example, residuals can be summarized by a reduced chi-square statistic:
 
 .. math::
 
-   \\chi^2_\\nu = \\frac{1}{N - p} \\sum_{i=1}^{N} \\frac{r_i^2}{\\sigma_i^2},
+   \chi^2_{\nu} = \frac{1}{N - p} \sum_{i=1}^{N} \frac{r_{i}^{2}}{\sigma_{i}^{2}},
 
-where :math:`r_i` are residuals, :math:`\\sigma_i` are TOA uncertainties, and
+where :math:`r_{i}` are residuals, :math:`\sigma_{i}` are TOA uncertainties, and
 :math:`p` is the number of fitted parameters. Deviations in
-:math:`\\chi^2_\\nu` or structure in residuals versus time, frequency, or
+:math:`\chi^2_{\nu}` or structure in residuals versus time, frequency, or
 backend are indicators that the model is incomplete or the data contain
 systematic effects. [Edwards2006]_ [Hobbs2006]_
 

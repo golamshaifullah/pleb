@@ -14,7 +14,7 @@ are
 
 .. math::
 
-   r_i = t^{\\mathrm{obs}}_i - t^{\\mathrm{model}}_i(\\theta).
+   r_{i} = t^{\mathrm{obs}}_{i} - t^{\mathrm{model}}_{i}(\theta).
 
 Residuals near zero with no obvious structure indicate that the timing model
 captures the dominant deterministic behavior. Systematic patterns can point to
@@ -28,9 +28,9 @@ The pipeline reports reduced chi-square to summarize goodness of fit:
 
 .. math::
 
-   \\chi^2_\\nu = \\frac{1}{N - p} \\sum_{i=1}^{N} \\frac{r_i^2}{\\sigma_i^2},
+   \chi^2_{\nu} = \frac{1}{N - p} \sum_{i=1}^{N} \frac{r_{i}^{2}}{\sigma_{i}^{2}},
 
-where :math:`\\sigma_i` are TOA uncertainties and :math:`p` is the number of
+where :math:`\sigma_{i}` are TOA uncertainties and :math:`p` is the number of
 fitted parameters. Values significantly greater than 1 often indicate that
 noise is underestimated or that the model is incomplete; values much smaller
 than 1 can indicate overestimated uncertainties or absorbed systematics.
@@ -64,10 +64,10 @@ model is a power-law power spectral density:
 
 .. math::
 
-   P(f) = A^2 \\left(\\frac{f}{f_0}\\right)^{-\\gamma},
+   P(f) = A^{2} \left(\frac{f}{f_{0}}\right)^{-\gamma},
 
 with amplitude :math:`A`, spectral index :math:`\\gamma`, and reference
-frequency :math:`f_0`. The pipeline does not fit these models directly, but
+frequency :math:`f_{0}`. The pipeline does not fit these models directly, but
 residual plots and outlier diagnostics can guide when such modeling is needed.
 [Coles2011]_ [Lentati2014]_
 

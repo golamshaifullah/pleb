@@ -25,7 +25,7 @@ def _fmt_default(v) -> str:
 
 
 def main() -> int:
-    out = Path("docs/full_settings_catalog.rst")
+    out = ROOT / "docs" / "full_settings_catalog.rst"
     specs = all_key_specs()
     lines = [
         "Full Settings Catalog",
