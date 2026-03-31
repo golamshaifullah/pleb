@@ -62,9 +62,9 @@ Ensure classification + variant catalogs are both set and compatible.
 Comment and whitespace normalization
 ------------------------------------
 
-When FixDataset comments TOAs, comments are normalized to start with ``C `` and
-leading whitespace is stripped from rewritten comment lines. This avoids parser
-ambiguity in downstream tools.
+When FixDataset comments TOAs, comments are normalized to start with ``C``
+followed by a space, and leading whitespace is stripped from rewritten comment
+lines. This avoids parser ambiguity in downstream tools.
 
 Debug order for missing expected outputs
 ----------------------------------------
