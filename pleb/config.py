@@ -1030,9 +1030,7 @@ class PipelineConfig:
         if d.get("compare_public_out_dir") is not None:
             d["compare_public_out_dir"] = str(d["compare_public_out_dir"])
         if d.get("compare_public_providers_path") is not None:
-            d["compare_public_providers_path"] = str(
-                d["compare_public_providers_path"]
-            )
+            d["compare_public_providers_path"] = str(d["compare_public_providers_path"])
         return d
 
     @staticmethod

@@ -70,9 +70,13 @@ def test_ux_init_workflow_template_3pass(tmp_path: Path) -> None:
         "--force",
     )
     assert proc.returncode == 0, proc.stderr
-    run_cfg = tmp_path / "configs" / "runs" / "pipeline" / "pleb.3pass-clean.pipeline.toml"
+    run_cfg = (
+        tmp_path / "configs" / "runs" / "pipeline" / "pleb.3pass-clean.pipeline.toml"
+    )
     wf_cfg = tmp_path / "configs" / "workflows" / "pleb.3pass-clean.toml"
-    ux_wf_cfg = tmp_path / "configs" / "runs" / "workflow" / "pleb.3pass-clean.workflow.toml"
+    ux_wf_cfg = (
+        tmp_path / "configs" / "runs" / "workflow" / "pleb.3pass-clean.workflow.toml"
+    )
     assert run_cfg.exists(), f"missing expected file: {run_cfg}"
     assert wf_cfg.exists(), f"missing expected file: {wf_cfg}"
     assert ux_wf_cfg.exists(), f"missing expected file: {ux_wf_cfg}"

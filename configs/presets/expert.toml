@@ -1,0 +1,19 @@
+[run]
+mode = "pipeline"
+run_tempo2 = true
+run_fix_dataset = true
+run_pqc = true
+qc_report = true
+run_whitenoise = true
+
+[data]
+jobs = 10
+
+[policy.fix]
+apply = true
+
+[policy.pqc]
+backend_col = "sys"
+merge_tol_seconds = 0.5
+event_instrument = true
+structure_mode = "both"

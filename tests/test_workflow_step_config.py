@@ -57,7 +57,9 @@ results_dir = "{tmp_path / "results_step"}"
     assert captured["home_dir"] == str(step_home.resolve())
 
 
-def test_workflow_whitenoise_step_dispatches_pipeline(monkeypatch, tmp_path: Path) -> None:
+def test_workflow_whitenoise_step_dispatches_pipeline(
+    monkeypatch, tmp_path: Path
+) -> None:
     home = tmp_path / "home"
     home.mkdir(parents=True, exist_ok=True)
     image = tmp_path / "tempo2.sif"

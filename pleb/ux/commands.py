@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any, Dict
 
 from ..config import IngestConfig, PipelineConfig, QCReportConfig, WorkflowRunConfig
-from ..config_io import _dump_toml_no_nulls, _parse_value_as_toml_literal, _set_dotted_key
+from ..config_io import (
+    _dump_toml_no_nulls,
+    _parse_value_as_toml_literal,
+    _set_dotted_key,
+)
 from .adapter import ux_to_legacy_dict
 from .key_catalog import default_for_spec, grouped_specs, specs_for_mode_level
 from .loader import deep_merge, load_ux_config, write_ux_config
@@ -94,7 +98,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Preset profile name to merge before --set overrides.",
     )
-    p_run.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE")
+    p_run.add_argument(
+        "--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE"
+    )
     p_run.add_argument(
         "--plan",
         action="store_true",
@@ -169,7 +175,9 @@ def _init_workflow_template_3pass(root: Path, level: str, force: bool) -> list[P
     ux_runner_cfg = root / "runs" / "workflow" / "pleb.3pass-clean.workflow.toml"
 
     run_payload = _render_cfg_for_mode("pipeline", max(level, "balanced"))
-    run_payload.setdefault("data", {}).update({"pulsars": ["J1713+0747", "J1022+1001"], "jobs": 2})
+    run_payload.setdefault("data", {}).update(
+        {"pulsars": ["J1713+0747", "J1022+1001"], "jobs": 2}
+    )
     run_payload.setdefault("policy", {}).setdefault("fix", {}).update(
         {
             "apply": True,
@@ -291,7 +299,13 @@ def _init_workflow_template_golden_path(root: Path, force: bool) -> list[Path]:
         },
     }
     policy = {
-        "run": {"mode": "pipeline", "run_tempo2": True, "run_fix_dataset": True, "run_pqc": True, "qc_report": True},
+        "run": {
+            "mode": "pipeline",
+            "run_tempo2": True,
+            "run_fix_dataset": True,
+            "run_pqc": True,
+            "qc_report": True,
+        },
         "policy": {
             "fix": {
                 "apply": True,
@@ -301,10 +315,18 @@ def _init_workflow_template_golden_path(root: Path, force: bool) -> list[Path]:
                 "remove_overlaps_exact": False,
                 "qc_action": "comment",
                 "qc_remove_outliers": True,
-                "qc_outlier_cols": ["bad_point", "robust_outlier", "robust_global_outlier", "bad_mad"],
+                "qc_outlier_cols": [
+                    "bad_point",
+                    "robust_outlier",
+                    "robust_global_outlier",
+                    "bad_mad",
+                ],
             },
             "pqc": {"backend_col": "sys", "merge_tol_seconds": 1.0},
-            "whitenoise": {"single_toa_mode": "combined", "fit_timing_model_first": True},
+            "whitenoise": {
+                "single_toa_mode": "combined",
+                "fit_timing_model_first": True,
+            },
         },
     }
     for p, payload in ((project_cfg, project), (policy_cfg, policy)):
@@ -356,7 +378,9 @@ compare_public_out_dir = "results/public_compare_publish"
 compare_public_providers_path = "configs/catalogs/public_releases/providers.toml"
 """
     if workflow_cfg.exists() and not force:
-        raise SystemExit(f"Refusing to overwrite existing file: {workflow_cfg}. Use --force.")
+        raise SystemExit(
+            f"Refusing to overwrite existing file: {workflow_cfg}. Use --force."
+        )
     workflow_cfg.parent.mkdir(parents=True, exist_ok=True)
     workflow_cfg.write_text(wf_text.strip() + "\n", encoding="utf-8")
 
@@ -545,18 +569,28 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     missing: list[str]
     try:
         if mode in {"qc", "qc-report", "qc_report"}:
-            qrun = legacy.get("run_dir") or legacy.get("qc_report_run_dir") or legacy.get("qc_report_dir")
+            qrun = (
+                legacy.get("run_dir")
+                or legacy.get("qc_report_run_dir")
+                or legacy.get("qc_report_dir")
+            )
             QCReportConfig.from_dict(
                 {
                     "run_dir": qrun,
-                    "backend_col": legacy.get("qc_report_backend_col", legacy.get("backend_col", "group")),
+                    "backend_col": legacy.get(
+                        "qc_report_backend_col", legacy.get("backend_col", "group")
+                    ),
                     "backend": legacy.get("qc_report_backend", legacy.get("backend")),
                     "report_dir": legacy.get("qc_report_report_dir"),
                     "no_plots": legacy.get("qc_report_no_plots", False),
-                    "structure_group_cols": legacy.get("qc_report_structure_group_cols"),
+                    "structure_group_cols": legacy.get(
+                        "qc_report_structure_group_cols"
+                    ),
                     "no_feature_plots": legacy.get("qc_report_no_feature_plots", False),
                     "compact_pdf": legacy.get("qc_report_compact_pdf", False),
-                    "compact_pdf_name": legacy.get("qc_report_compact_pdf_name", "qc_compact_report.pdf"),
+                    "compact_pdf_name": legacy.get(
+                        "qc_report_compact_pdf_name", "qc_compact_report.pdf"
+                    ),
                 }
             )
             missing = [] if qrun else ["run_dir"]
@@ -566,7 +600,10 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             icfg = IngestConfig.from_dict(legacy)
             icfg.resolved_output_root()
             missing = [k for k in ("ingest_mapping_file",) if not legacy.get(k)]
-            if legacy.get("ingest_mapping_file") and not Path(str(legacy["ingest_mapping_file"])).expanduser().exists():
+            if (
+                legacy.get("ingest_mapping_file")
+                and not Path(str(legacy["ingest_mapping_file"])).expanduser().exists()
+            ):
                 invalid_paths.append("ingest_mapping_file")
         elif mode == "workflow":
             WorkflowRunConfig.from_dict({"workflow_file": legacy.get("workflow_file")})
@@ -588,27 +625,51 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
                         for si, step in enumerate(steps):
                             name = str(step.get("name", "")).strip()
                             ov = dict(step.get("overrides", {}) or {})
-                            if name in {"pipeline", "fix_apply", "fix_dataset"} and ov.get("fix_apply", False):
+                            if name in {
+                                "pipeline",
+                                "fix_apply",
+                                "fix_dataset",
+                            } and ov.get("fix_apply", False):
                                 bname = ov.get("fix_branch_name")
                                 if not bname:
-                                    invalid_values.append(f"groups[{gi}].steps[{si}].overrides.fix_branch_name")
+                                    invalid_values.append(
+                                        f"groups[{gi}].steps[{si}].overrides.fix_branch_name"
+                                    )
                                 base = ov.get("fix_base_branch")
-                                if prev_branch and base and str(base) != str(prev_branch):
-                                    invalid_values.append(f"groups[{gi}].steps[{si}].overrides.fix_base_branch")
+                                if (
+                                    prev_branch
+                                    and base
+                                    and str(base) != str(prev_branch)
+                                ):
+                                    invalid_values.append(
+                                        f"groups[{gi}].steps[{si}].overrides.fix_base_branch"
+                                    )
                                 if bname:
                                     prev_branch = bname
         elif mode == "pipeline":
             PipelineConfig.from_dict(legacy)
-            missing = [k for k in ("home_dir", "singularity_image") if not legacy.get(k)]
-            if legacy.get("home_dir") and not Path(str(legacy["home_dir"])).expanduser().exists():
+            missing = [
+                k for k in ("home_dir", "singularity_image") if not legacy.get(k)
+            ]
+            if (
+                legacy.get("home_dir")
+                and not Path(str(legacy["home_dir"])).expanduser().exists()
+            ):
                 invalid_paths.append("home_dir")
-            if legacy.get("singularity_image") and not Path(str(legacy["singularity_image"])).expanduser().exists():
+            if (
+                legacy.get("singularity_image")
+                and not Path(str(legacy["singularity_image"])).expanduser().exists()
+            ):
                 invalid_paths.append("singularity_image")
             if legacy.get("run_whitenoise", False):
                 wsp = legacy.get("whitenoise_source_path")
                 if wsp and not Path(str(wsp)).expanduser().exists():
                     invalid_paths.append("whitenoise_source_path")
-                if str(legacy.get("whitenoise_single_toa_mode", "combined")) not in {"combined", "equad0", "ecorr0"}:
+                if str(legacy.get("whitenoise_single_toa_mode", "combined")) not in {
+                    "combined",
+                    "equad0",
+                    "ecorr0",
+                }:
                     invalid_values.append("whitenoise_single_toa_mode")
         else:
             missing = []
@@ -625,10 +686,22 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     print(f"resolved_keys={len(legacy)}")
     print("missing_required=" + (",".join(missing) if missing else "none"))
     print("undefined_keys=" + (",".join(undefined_keys) if undefined_keys else "none"))
-    print("invalid_paths=" + (",".join(sorted(set(invalid_paths))) if invalid_paths else "none"))
-    print("invalid_values=" + (",".join(sorted(set(invalid_values))) if invalid_values else "none"))
+    print(
+        "invalid_paths="
+        + (",".join(sorted(set(invalid_paths))) if invalid_paths else "none")
+    )
+    print(
+        "invalid_values="
+        + (",".join(sorted(set(invalid_values))) if invalid_values else "none")
+    )
     print("validation_errors=" + (" | ".join(issues) if issues else "none"))
-    ok = not missing and not undefined_keys and not invalid_paths and not invalid_values and not issues
+    ok = (
+        not missing
+        and not undefined_keys
+        and not invalid_paths
+        and not invalid_values
+        and not issues
+    )
     return 0 if ok else 1
 
 
@@ -662,20 +735,36 @@ def _dispatch_legacy(mode: str, cfg_data: Dict[str, Any]) -> int:
         if mode == "workflow":
             return legacy_main(["workflow", "--config", str(tmp_path)])
         if mode in {"qc", "qc-report", "qc_report"}:
-            run_dir = cfg_data.get("run_dir") or cfg_data.get("qc_report_run_dir") or cfg_data.get("qc_report_dir")
+            run_dir = (
+                cfg_data.get("run_dir")
+                or cfg_data.get("qc_report_run_dir")
+                or cfg_data.get("qc_report_dir")
+            )
             if not run_dir:
-                raise SystemExit("qc-report mode requires run_dir. Set [policy.report].run_dir or run_dir.")
+                raise SystemExit(
+                    "qc-report mode requires run_dir. Set [policy.report].run_dir or run_dir."
+                )
             qc_cfg = {
                 "qc_report": {
                     "run_dir": run_dir,
-                    "backend_col": cfg_data.get("qc_report_backend_col", cfg_data.get("backend_col", "group")),
-                    "backend": cfg_data.get("qc_report_backend", cfg_data.get("backend")),
+                    "backend_col": cfg_data.get(
+                        "qc_report_backend_col", cfg_data.get("backend_col", "group")
+                    ),
+                    "backend": cfg_data.get(
+                        "qc_report_backend", cfg_data.get("backend")
+                    ),
                     "report_dir": cfg_data.get("qc_report_report_dir"),
                     "no_plots": cfg_data.get("qc_report_no_plots", False),
-                    "structure_group_cols": cfg_data.get("qc_report_structure_group_cols"),
-                    "no_feature_plots": cfg_data.get("qc_report_no_feature_plots", False),
+                    "structure_group_cols": cfg_data.get(
+                        "qc_report_structure_group_cols"
+                    ),
+                    "no_feature_plots": cfg_data.get(
+                        "qc_report_no_feature_plots", False
+                    ),
                     "compact_pdf": cfg_data.get("qc_report_compact_pdf", False),
-                    "compact_pdf_name": cfg_data.get("qc_report_compact_pdf_name", "qc_compact_report.pdf"),
+                    "compact_pdf_name": cfg_data.get(
+                        "qc_report_compact_pdf_name", "qc_compact_report.pdf"
+                    ),
                 }
             }
             with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as qt:
@@ -719,7 +808,11 @@ def _dict_to_ux(d: Dict[str, Any]) -> UXConfig:
         data=dict(d.get("data", {})) if isinstance(d.get("data"), dict) else {},
         run=dict(d.get("run", {})) if isinstance(d.get("run"), dict) else {},
         policy=dict(d.get("policy", {})) if isinstance(d.get("policy"), dict) else {},
-        workflow=dict(d.get("workflow", {})) if isinstance(d.get("workflow"), dict) else {},
-        pipeline=dict(d.get("pipeline", {})) if isinstance(d.get("pipeline"), dict) else {},
+        workflow=(
+            dict(d.get("workflow", {})) if isinstance(d.get("workflow"), dict) else {}
+        ),
+        pipeline=(
+            dict(d.get("pipeline", {})) if isinstance(d.get("pipeline"), dict) else {}
+        ),
         extra={k: v for k, v in d.items() if k not in known},
     )

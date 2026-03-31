@@ -1,0 +1,17 @@
+[run]
+mode = "pipeline"
+run_tempo2 = true
+run_fix_dataset = false
+run_pqc = true
+qc_report = true
+run_whitenoise = false
+
+[data]
+jobs = 4
+
+[policy.pqc]
+backend_col = "sys"
+merge_tol_seconds = 1.0
+robust_enabled = true
+robust_scope = "backend"
+robust_z_thresh = 6.5

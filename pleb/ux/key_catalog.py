@@ -76,7 +76,11 @@ def _modes_for_key(name: str) -> Sequence[str]:
         return ("workflow",)
     if name.startswith("whitenoise_") or name == "run_whitenoise":
         return ("pipeline", "workflow")
-    if name.startswith("fix_") or name.startswith("pqc_") or name.startswith("qc_cross_pulsar_"):
+    if (
+        name.startswith("fix_")
+        or name.startswith("pqc_")
+        or name.startswith("qc_cross_pulsar_")
+    ):
         return ("pipeline", "workflow")
     return ("pipeline", "workflow")
 
@@ -100,7 +104,9 @@ def _level_for_key(name: str) -> str:
     return "minimal"
 
 
-def _spec_from_field(name: str, type_name: str, default: Any, required: bool) -> KeySpec:
+def _spec_from_field(
+    name: str, type_name: str, default: Any, required: bool
+) -> KeySpec:
     return KeySpec(
         name=name,
         type_name=type_name,
