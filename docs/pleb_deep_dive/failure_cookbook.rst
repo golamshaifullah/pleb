@@ -86,6 +86,30 @@ Checks:
 - verify run tag path,
 - confirm pqc outputs exist before report stage.
 
+``Unsupported workflow_version=<N>``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Likely cause:
+
+- workflow file uses a contract version not supported by current PLEB.
+
+Checks:
+
+- set ``workflow_version = 1`` for current code line,
+- verify you are running the expected branch/install of PLEB.
+
+``unrecognized arguments: --set groups...``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Likely cause:
+
+- shell override syntax is trying to mutate deep workflow arrays directly.
+
+Checks:
+
+- edit workflow TOML directly for group/step arrays,
+- use ``--set`` for scalar keys only (or generate via UX templates).
+
 Operational recipes
 -------------------
 

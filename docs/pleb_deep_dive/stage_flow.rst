@@ -38,7 +38,10 @@ Typical actions:
 - insert/prune JUMPs,
 - apply overlap/relabel rules,
 - enforce par defaults,
-- generate variants.
+- generate variants,
+- optional TOA QC labeling via ``-pqc`` flag,
+- comment-line normalization (comments written as ``C ...`` with leading
+  whitespace removed).
 
 Stage 3: tempo2 products (optional)
 ------------------------------------
@@ -57,11 +60,23 @@ Stage 5: Post-QC apply (optional)
 PLEB can apply comments/deletions based on selected QC columns and policy
 controls.
 
-Stage 6: Reporting (optional)
------------------------------
+Stage 6: Reporting and coincidence (optional)
+---------------------------------------------
 
 PLEB generates QC summaries, optional compact PDF, and optional cross-pulsar
 coincidence report.
+
+Stage 7: Whitenoise (optional)
+------------------------------
+
+PLEB can run optional whitenoise noise estimation on cleaned products. This is
+typically done after QC and apply stages.
+
+Stage 8: Public-release comparison (optional)
+---------------------------------------------
+
+PLEB can compare local par values with public releases (EPTA/NANOGrav/IPTA
+provider catalog).
 
 Execution layout
 ------------------
@@ -71,5 +86,12 @@ PLEB supports:
 - serial runs,
 - parallel runs (per stage where supported),
 - grouped serial/parallel workflow stages.
+- serial/parallel groups with barriers between groups.
 
 Use workflows when you need stage barriers (e.g. detect first, apply later).
+
+Workflow contract note
+----------------------
+
+Workflow files are versioned. Current supported contract is
+``workflow_version = 1``.

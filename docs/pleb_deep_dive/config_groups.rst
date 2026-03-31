@@ -23,6 +23,7 @@ Primary keys:
 - ``run_fix_dataset``
 - ``run_tempo2``
 - ``run_pqc``
+- ``run_whitenoise``
 - ``qc_report``
 
 FixDataset mutation controls
@@ -47,8 +48,17 @@ Primary keys:
 - ``fix_alltim_variants_path``
 - jump-reference variant par options (if enabled in your profile)
 
+System/group rule-table controls
+--------------------------------
+
+Primary keys:
+
+- ``fix_system_flag_table_path`` (table used for ``-sys``/``-group`` inference)
+- ``fix_flag_sys_freq_rules_enabled``
+- ``fix_flag_sys_freq_rules_path`` (YAML rules file)
+
 PQC forwarded controls
--------------------------
+----------------------
 
 Primary keys:
 
@@ -63,6 +73,7 @@ Primary keys:
 - ``fix_qc_action``
 - ``fix_qc_remove_outliers``
 - ``fix_qc_outlier_cols``
+- ``fix_qc_write_pqc_flag`` / ``fix_qc_pqc_flag_name``
 
 Reporting controls
 ------------------
@@ -71,6 +82,16 @@ Primary keys:
 
 - ``qc_report_*``
 - ``qc_cross_pulsar_*``
+
+Whitenoise and public-compare controls
+--------------------------------------
+
+Primary keys:
+
+- ``run_whitenoise``
+- ``whitenoise_*``
+- ``compare_public_out_dir``
+- ``compare_public_providers_path``
 
 See also
 --------

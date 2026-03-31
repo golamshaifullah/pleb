@@ -15,6 +15,8 @@ PLEB is the run-coordination layer for:
 - applying deterministic dataset-fix policies,
 - running tempo2 and PQC stages,
 - applying post-QC actions,
+- optionally running whitenoise EFAC/EQUAD/ECORR estimation,
+- optionally comparing against public release par values,
 - generating run and review output files with reproducibility metadata.
 
 A practical production pattern is:
@@ -23,7 +25,8 @@ A practical production pattern is:
 2. run fix normalization and variant generation,
 3. run detection,
 4. apply comments/actions in a separate pass,
-5. publish compact reports for reviewer triage.
+5. run whitening and public-compare on cleaned outputs,
+6. publish compact reports for reviewer triage.
 
 How to read the deep dive
 -------------------------
@@ -53,6 +56,7 @@ Related docs
 
 - Config layout map: :doc:`config_layout`
 - Configuration system guide: :doc:`configuration`
+- UX wrapper (project-style config): :doc:`ux_wrapper`
 - Full key-by-key catalog: :doc:`full_settings_catalog`
 - CLI and run-mode usage: :doc:`cli`, :doc:`running_modes`, :doc:`modes`
 - PQC detector internals: https://golamshaifullah.github.io/pqc/index.html

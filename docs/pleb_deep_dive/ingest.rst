@@ -13,6 +13,9 @@ Ingest uses mapping catalogs to determine:
 - ignore suffix handling,
 - alias and priority behavior.
 
+If source-priority mapping is configured, clash resolution follows priority
+order (for example, DR3 over DR2 over DR1).
+
 Verification behavior
 ---------------------
 
@@ -47,6 +50,12 @@ Branch behavior
 Ingest commit target is controlled by ingest base/branch settings. Ensure the
 intended git repo root is used (not a nested output path with independent git
 state).
+
+Operational note:
+
+- if ingest output is itself a nested git repository, ingest commits go there;
+- to commit into a parent repository, set ingest output under that parent repo
+  tree and avoid nested ``.git`` directories.
 
 Troubleshooting checklist
 -------------------------

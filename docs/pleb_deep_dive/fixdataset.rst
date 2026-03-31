@@ -12,8 +12,9 @@ A practical order for understanding behavior:
 2. overlap/relabel policy application,
 3. jump insertion/pruning,
 4. par default enforcement,
-5. variant generation,
-6. optional QC-based apply actions.
+5. variant generation (tim + optional variant par),
+6. optional QC-based apply actions,
+7. optional per-TOA ``-pqc`` class tagging.
 
 Policy boundaries
 -----------------
@@ -22,6 +23,13 @@ Use catalogs for static mappings/tables and rules for strategy decisions:
 
 - catalogs: ``configs/catalogs/*``
 - rules: ``configs/rules/*``
+
+This includes:
+
+- overlap catalogs/rules,
+- relabel rules,
+- system/group table,
+- optional frequency-based YAML rules for system assignment.
 
 Non-destructive first
 ---------------------
@@ -50,6 +58,13 @@ FixDataset can generate:
 - variant par products (when configured)
 
 Ensure classification + variant catalogs are both set and compatible.
+
+Comment and whitespace normalization
+------------------------------------
+
+When FixDataset comments TOAs, comments are normalized to start with ``C `` and
+leading whitespace is stripped from rewritten comment lines. This avoids parser
+ambiguity in downstream tools.
 
 Debug order for missing expected outputs
 ----------------------------------------

@@ -20,6 +20,8 @@ PQC integration (forwarded settings only)
 -----------------------------------------
 
 PLEB forwards ``pqc_*`` settings and does not re-implement detector logic.
+Per-backend override profiles can be supplied with
+``pqc_backend_profiles_path``.
 
 Use PLEB for:
 
@@ -45,6 +47,8 @@ PLEB reporting can include:
 - plots,
 - compact PDF,
 - per-backend action CSV lists,
+- residual-vs-TOA-uncertainty diagnostic plots (by backend and by ``-pqc`` class),
+- JUMP summary tables in compact reporting,
 - optional cross-pulsar coincidence report.
 
 Compact report usage

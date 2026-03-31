@@ -11,6 +11,7 @@ PLEB owns
 - branch-aware dataset update control,
 - fix policies for tim/par edits,
 - stage ordering and run layout (serial/parallel/workflow grouping),
+- optional post-fit tools (whitenoise and public release comparison),
 - output file placement and reproducibility metadata.
 
 PQC owns
@@ -33,6 +34,15 @@ The practical boundary is:
 
 - PLEB decides **what to run, where to read/write, and how to apply outputs**.
 - PQC decides **which points/events are flagged by detector logic**.
+
+UX boundary
+-----------
+
+The UX module (``pleb init/run/doctor``) is a configuration front-end:
+
+- UX builds project-style TOML files,
+- UX translates them to the flat runtime config,
+- core execution remains in the same ingest/fix/pipeline/workflow code paths.
 
 Cross-reference
 ---------------
