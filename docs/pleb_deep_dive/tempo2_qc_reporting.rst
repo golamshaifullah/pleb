@@ -5,7 +5,7 @@ This chapter covers runtime expectations and output interpretation for the
 analysis stages.
 
 tempo2 run coordination
-----------------------
+-----------------------
 
 PLEB can run tempo2 directly or through a configured container image depending
 on runtime configuration.
