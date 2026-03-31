@@ -8,10 +8,10 @@ PLEB owns
 ---------
 
 - data ingest/discovery/copy/verification,
-- branch-aware dataset mutation orchestration,
+- branch-aware dataset update control,
 - fix policies for tim/par edits,
-- stage ordering and run topology (serial/parallel/workflow grouping),
-- artifact placement and reproducibility metadata.
+- stage ordering and run layout (serial/parallel/workflow grouping),
+- output file placement and reproducibility metadata.
 
 PQC owns
 --------
@@ -25,9 +25,9 @@ Operational model
 
 Think of PLEB as:
 
-1. a stage orchestrator,
+1. a stage coordinator,
 2. a policy applier,
-3. an artifact/reproducibility manager.
+3. an output/reproducibility manager.
 
 The practical boundary is:
 

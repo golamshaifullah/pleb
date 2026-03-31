@@ -14,7 +14,7 @@ Supported modes / entry points:
 2. QC report (post-processing only)
 3. Param scan (param_check)
 4. Ingest
-5. Workflow (multi-step orchestration)
+5. Workflow (multi-step run plan)
 
 Allowed permutations:
 
@@ -113,7 +113,7 @@ Key config flags:
 2. QC report mode
 -----------------
 
-Generates QC report artifacts from existing QC CSVs (no re-fit).
+Generates QC report output files from existing QC CSVs (no re-fit).
 Outputs land under ``<run_dir>/qc_report``.
 
 Typical outputs:
@@ -161,11 +161,11 @@ Interpretation notes:
 4. Ingest mode
 --------------
 
-Mapping-driven ingest of ``.par``/``.tim``/``.tmplts`` into a canonical layout.
+Mapping-driven ingest of ``.par``/``.tim``/``.tmplts`` into a standard layout.
 
 Typical outputs:
 
-- ``<output-dir>/<Jpulsar>/`` (canonical pulsar folders)
+- ``<output-dir>/<Jpulsar>/`` (standard pulsar folders)
 - ``<output-dir>/<Jpulsar>/tims/`` (renamed tim files)
 - ``<output-dir>/<Jpulsar>/tmplts/`` (templates retained with original names)
 

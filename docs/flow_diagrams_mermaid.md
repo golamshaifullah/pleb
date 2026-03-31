@@ -25,7 +25,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[Read ingest mapping] --> B[Discover source par tim tmplts]
-    B --> C[Copy to canonical pulsar layout]
+    B --> C[Copy to standard pulsar layout]
     C --> D{ingest_verify or lockfile checks?}
     D -->|yes| E[Validate expected files + lock state]
     D -->|no| F
@@ -124,4 +124,3 @@ flowchart TD
     J2 --> J3[Set outlier_any compatibility field]
     J3 --> K[Write *_qc.csv]
 ```
-

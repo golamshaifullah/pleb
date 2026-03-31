@@ -3,7 +3,7 @@ Operator Quickstart
 
 This is the shortest production path.
 
-1. Generate a golden-path scaffold:
+1. Generate a golden-path starter setup:
 
 .. code-block:: bash
 

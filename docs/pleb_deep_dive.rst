@@ -9,13 +9,13 @@ one long monolithic page.
 Quick overview
 --------------
 
-PLEB is the orchestration layer for:
+PLEB is the run-coordination layer for:
 
 - ingesting and structuring timing data,
 - applying deterministic dataset-fix policies,
 - running tempo2 and PQC stages,
 - applying post-QC actions,
-- generating run and review artifacts with reproducibility metadata.
+- generating run and review output files with reproducibility metadata.
 
 A practical production pattern is:
 

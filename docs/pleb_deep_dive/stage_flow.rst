@@ -1,7 +1,7 @@
 Stage-by-Stage Flow
 ===================
 
-This chapter describes the execution sequence and stage contracts.
+This chapter describes the execution sequence and the expected inputs/outputs of each stage.
 
 Stage 0: Input resolution
 -------------------------
@@ -48,7 +48,7 @@ When enabled, tempo2 products are generated and stored under run results.
 Stage 4: PQC detection (optional)
 ---------------------------------
 
-PLEB runs PQC over selected pulsars/branches with configured pass-through
+PLEB runs PQC over selected pulsars/branches with configured forwarded
 settings and stores QC outputs in run results.
 
 Stage 5: Post-QC apply (optional)
@@ -63,7 +63,7 @@ Stage 6: Reporting (optional)
 PLEB generates QC summaries, optional compact PDF, and optional cross-pulsar
 coincidence report.
 
-Execution topology
+Execution layout
 ------------------
 
 PLEB supports:

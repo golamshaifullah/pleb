@@ -11,10 +11,10 @@ Config Layout Quick Reference
 Use this map when choosing where to put files:
 
 - ``configs/runs/``: runnable mode profiles passed to ``--config``.
-- ``configs/workflows/``: multi-step orchestration files passed to ``workflow --file``.
+- ``configs/workflows/``: multi-step run-plan files passed to ``workflow --file``.
 - ``configs/workflows/steps/``: reusable workflow step configs.
 - ``configs/catalogs/``: reusable mapping/lookup data.
-- ``configs/rules/``: declarative behavior policies (relabel/overlap/PQC profiles).
+- ``configs/rules/``: rule-based behavior policies (relabel/overlap/PQC profiles).
 - ``configs/state/lockfiles/``: generated ingest lock snapshots/validation.
 - ``configs/settings/``: legacy location; do not add new files.
 
@@ -60,7 +60,7 @@ directory you will find:
 
 - Residual plots grouped by backend and pulsar.
 - Change reports comparing the configured branches.
-- Summary tables and QC artifacts (if enabled).
+- Summary tables and QC output files (if enabled).
 
 Optional QC stage
 -----------------

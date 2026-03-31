@@ -8,7 +8,7 @@ Key modules
 
 - UX layer: ``pleb/ux/*``
 - Workflow engine: ``pleb/workflow.py``
-- Pipeline orchestration: ``pleb/pipeline.py``
+- Pipeline run coordination: ``pleb/pipeline.py``
 - Config models: ``pleb/config.py``
 
 Contract notes

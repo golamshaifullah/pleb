@@ -67,7 +67,7 @@ Step 7: Compare and validate
 
 - run ``pleb doctor`` and ``pleb explain``,
 - run pilot on small scope,
-- compare branch artifacts and run outputs with legacy baseline.
+- compare branch output files and run outputs with legacy baseline.
 
 Parity checklist
 ----------------

@@ -16,7 +16,7 @@ Compilation order
 
 The adapter builds legacy config in this order:
 
-1. ``[pipeline]`` pass-through keys
+1. ``[pipeline]`` forwarded keys
 2. ``[paths]`` keys
 3. ``[data]`` keys
 4. ``[run]`` keys (except UX-only ``mode``/``profile``)

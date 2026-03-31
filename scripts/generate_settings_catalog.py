@@ -20,6 +20,8 @@ def _fmt_default(v) -> str:
     if v is None:
         return "None"
     if isinstance(v, str):
+        if v == "":
+            return "``\"\"``"
         return f"``{v}``"
     return f"``{v}``"
 

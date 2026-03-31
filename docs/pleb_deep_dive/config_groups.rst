@@ -47,12 +47,12 @@ Primary keys:
 - ``fix_alltim_variants_path``
 - jump-reference variant par options (if enabled in your profile)
 
-PQC pass-through controls
+PQC forwarded controls
 -------------------------
 
 Primary keys:
 
-- ``pqc_*`` keys (detector config pass-through)
+- ``pqc_*`` keys (detector config forwarded values)
 - ``pqc_backend_profiles_path``
 
 QC action policy controls

@@ -117,7 +117,7 @@ Prints section-level UX->legacy mapping summary for debugging.
 ``pleb run``
 ~~~~~~~~~~~~
 
-Compiles UX config into legacy flat config and dispatches to current PLEB mode
+Translates UX config into the current flat PLEB config and routes to the selected mode
 execution.
 
 Profiles can be applied at run time before ``--set`` overrides:

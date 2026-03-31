@@ -4,7 +4,7 @@ tempo2, PQC, and Reporting
 This chapter covers runtime expectations and output interpretation for the
 analysis stages.
 
-tempo2 orchestration
+tempo2 run coordination
 --------------------
 
 PLEB can run tempo2 directly or through a configured container image depending
@@ -16,14 +16,14 @@ Check:
 - bind paths for containerized runs,
 - expected par/tim paths resolved by stage.
 
-PQC integration (pass-through only)
+PQC integration (forwarded settings only)
 -----------------------------------
 
 PLEB forwards ``pqc_*`` settings and does not re-implement detector logic.
 
 Use PLEB for:
 
-- stage orchestration,
+- stage coordination,
 - branch/result routing,
 - post-QC apply policy.
 
@@ -51,7 +51,7 @@ Compact report usage
 --------------------
 
 Use compact report when you need a reviewer-oriented summary instead of raw
-artifact browsing.
+output-file browsing.
 
 Align compact report outlier columns with your apply strategy so report and
 action policy are consistent.

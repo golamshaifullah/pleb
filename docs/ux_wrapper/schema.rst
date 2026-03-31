@@ -8,7 +8,7 @@ The UX wrapper reads a structured TOML file with these top-level sections:
 - ``[run]``
 - ``[policy]``
 - ``[workflow]``
-- ``[pipeline]`` (optional direct pass-through)
+- ``[pipeline]`` (optional direct forwarded section)
 
 Section: ``[paths]``
 --------------------
@@ -45,7 +45,7 @@ Typical keys:
 - ``run_pqc``
 - ``qc_report``
 
-``mode`` selects dispatch target (see :doc:`modes`).
+``mode`` selects the target mode to run (see :doc:`modes`).
 
 Section: ``[policy]``
 ---------------------
@@ -71,7 +71,7 @@ Workflow-specific options. Example:
 Section: ``[pipeline]``
 -----------------------
 
-Optional direct pass-through for advanced users. Keys here are copied directly
+Optional direct forwarding for advanced users. Keys here are copied directly
 into the legacy flat config dictionary.
 
 Use this when a needed legacy key does not yet have a UX-friendly alias.

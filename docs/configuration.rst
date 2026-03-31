@@ -4,7 +4,7 @@ Configuration Guide
 This chapter explains how to structure, author, validate, and operate PLEB
 configuration at scale.
 
-For the canonical filesystem map of ``configs/`` (directory-by-directory),
+For the standard filesystem map of ``configs/`` (directory-by-directory),
 start with :doc:`config_layout`.
 
 It is intentionally focused on configuration system behavior (layout,
@@ -28,10 +28,10 @@ PLEB configuration is organized around five concerns:
 1. run intent,
 2. reusable domain catalogs,
 3. policy rules,
-4. orchestration of multi-step execution,
+4. coordination of multi-step execution,
 5. generated state for reproducibility.
 
-The configuration model is intentionally declarative. In practice, this means:
+The configuration model is intentionally rule-based. In practice, this means:
 
 - Python code defines **execution semantics**.
 - Config files define **dataset-specific behavior**.
@@ -124,7 +124,7 @@ Examples:
 Directory Layout (Current Canonical)
 ------------------------------------
 
-The canonical layout is:
+The standard layout is:
 
 .. code-block:: text
 
@@ -158,7 +158,7 @@ Interpretation by intent
 - ``workflows/``: files you pass to ``pleb workflow --file``.
 - ``catalogs/``: reusable data assets.
 - ``rules/``: reusable behavior policy.
-- ``schemas/``: validation/tooling artifacts.
+- ``schemas/``: validation/tooling files.
 - ``state/``: generated snapshots.
 - ``settings/``: legacy area; avoid for new config.
 
@@ -231,7 +231,7 @@ operations usually migrate to workflows for clearer stage boundaries.
 Workflows and Step Configs
 --------------------------
 
-Workflow files are orchestration plans.
+Workflow files are run plans.
 
 A workflow usually:
 
@@ -280,7 +280,7 @@ Ingest source mappings:
 System/telescope/backend inference assets:
 
 - JSON mapping/allowlist files,
-- YAML sys-frequency declarative rules.
+- YAML sys-frequency rule files.
 
 ``configs/catalogs/system_tables``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -345,10 +345,10 @@ Use these for:
 Generated State
 ---------------
 
-``configs/state`` stores generated artifacts tied to run state, not authored
+``configs/state`` stores generated files tied to run state, not authored
 source configuration.
 
-Current canonical usage:
+Current standard usage:
 
 - ``configs/state/lockfiles`` for ingest lock snapshots and validation records.
 
@@ -367,7 +367,7 @@ PLEB configuration composes from:
 2. TOML file values,
 3. CLI overrides.
 
-Precedence is deterministic:
+Precedence is reproducible:
 
 - CLI overrides take priority over TOML.
 - TOML values take priority over defaults.
@@ -375,11 +375,11 @@ Precedence is deterministic:
 Practical implications:
 
 - put stable baseline behavior in TOML;
-- use CLI overrides for temporary experimental deltas;
+- use CLI overrides for temporary experimental changes;
 - if a run is meant to be reproducible, record override usage in run logs.
 
 PLEB already writes executed command/config snapshots into run outputs; keep
-those artifacts with results.
+those files with results.
 
 
 Path Strategy
@@ -516,7 +516,7 @@ Freeze phase
 ~~~~~~~~~~~~
 
 - generate/update lock snapshot,
-- commit lock artifacts under ``configs/state/lockfiles``,
+- commit lock files under ``configs/state/lockfiles``,
 - enable strict validation for production reruns.
 
 CI/production rerun phase
@@ -641,7 +641,7 @@ Separation of concerns
 
 - authored configs under ``runs/catalogs/rules/workflows``;
 - generated state under ``state``;
-- avoid writing generated artifacts into authored folders.
+- avoid writing generated files into authored folders.
 
 Documentation hygiene
 ~~~~~~~~~~~~~~~~~~~~~
@@ -749,7 +749,7 @@ Primary risks:
 
 Configuration controls that matter most:
 
-- ``pqc_*`` detector pass-through values,
+- ``pqc_*`` detector forwarded values,
 - backend profile path and backend key selection,
 - explicit outlier column strategy in apply stage,
 - workflow group ordering and branch hand-off.
@@ -783,7 +783,7 @@ Primary assets:
 
 - stable workflows,
 - frozen catalogs/rules,
-- lockfile snapshots and validation artifacts.
+- lockfile snapshots and validation files.
 
 Primary risks:
 
@@ -842,7 +842,7 @@ Do not add:
 ``configs/runs/pqc/``
 ~~~~~~~~~~~~~~~~~~~~~
 
-Put files here when the main stage is QC detection/action orchestration.
+Put files here when the main stage is QC detection/action coordination.
 
 Good additions:
 
@@ -875,7 +875,7 @@ Do not add:
 ``configs/workflows/``
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Use this folder for top-level orchestration plans.
+Use this folder for top-level run plans.
 
 Good additions:
 
@@ -894,9 +894,9 @@ Use this folder for reusable per-step run profiles that workflows reference.
 
 Good additions:
 
-- canonical detect step,
-- canonical apply-comments step,
-- canonical fix-and-variants step.
+- standard detect step,
+- standard apply-comments step,
+- standard fix-and-variants step.
 
 Do not add:
 
@@ -920,7 +920,7 @@ Do not add:
 ``configs/catalogs/system_flags/``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use this folder for manual/curated mapping and declarative system-frequency
+Use this folder for manual/curated mapping and rule-based system-frequency
 rules.
 
 Good additions:
@@ -966,7 +966,7 @@ Do not add:
 ``configs/rules/relabel/`` and ``configs/rules/overlap/``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use these folders for declarative mutation policy.
+Use these folders for rule-based mutation policy.
 
 Good additions:
 
@@ -995,12 +995,12 @@ Do not add:
 ``configs/schemas/``
 ~~~~~~~~~~~~~~~~~~~~
 
-Use this folder for schema artifacts used by tooling and UI.
+Use this folder for schema files used by tooling and UI.
 
 ``configs/state/lockfiles/``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use this folder for generated ingest lock snapshots and validation artifacts.
+Use this folder for generated ingest lock snapshots and validation files.
 
 Treat content as generated state:
 
@@ -1057,7 +1057,7 @@ Use workflow overrides to propagate branch/result paths between stages.
 
 Benefits:
 
-- explicit stage contract,
+- explicit stage input/output expectations,
 - less manual command editing,
 - fewer branch/path mismatches.
 
@@ -1076,7 +1076,7 @@ Problem:
 Correction:
 
 - move policy into ``configs/catalogs`` or ``configs/rules``,
-- keep run files as thin orchestration wrappers.
+- keep run files as thin run wrappers.
 
 Anti-pattern: Generated state mixed with authored config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1087,7 +1087,7 @@ Problem:
 
 Correction:
 
-- keep generated lock and validation artifacts under ``configs/state`` only.
+- keep generated lock and validation files under ``configs/state`` only.
 
 Anti-pattern: Legacy path usage in new profiles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1099,7 +1099,7 @@ Problem:
 
 Correction:
 
-- update to canonical paths documented in :ref:`config-layout`.
+- update to standard paths documented in :ref:`config-layout`.
 
 Anti-pattern: Single profile doing detect and apply without clear barriers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1216,7 +1216,7 @@ Layer 2: pilot execution
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 - run on one or two pulsars only,
-- verify branch creation and artifact placement,
+- verify branch creation and output placement,
 - verify expected variant/par/tim outputs.
 
 Layer 3: campaign execution
@@ -1230,7 +1230,7 @@ Layer 4: reproducibility rerun
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - rerun same profiles with strict lock validation where applicable,
-- verify deterministic behavior and stable artifact set.
+- verify reproducible behavior and stable output file set.
 
 
 What To Put In PR Descriptions For Config Changes

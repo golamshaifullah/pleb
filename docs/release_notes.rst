@@ -4,7 +4,7 @@ Release Notes
 Scope Freeze Notice (Current Release Line)
 ------------------------------------------
 
-The current release line is scope-frozen for user-facing surface area.
+The current release line is scope-frozen for user-facing features.
 
 Allowed in this line:
 
@@ -68,7 +68,7 @@ Example:
      "bad_mad",
    ]
 
-Workflow orchestration upgrades
+Workflow coordination upgrades
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Workflow files support serial/parallel execution control.
@@ -80,7 +80,7 @@ Ingest reproducibility and source control
 - Ingest lockfiles are generated and can be validated in strict mode
   (fail-fast when source trees change).
 - Source-priority mapping is supported to resolve clashes across DR1/DR2/DR3
-  style roots deterministically.
+  style roots in a reproducible way.
 
 Declarative data-fix rules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

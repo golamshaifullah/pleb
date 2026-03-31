@@ -1,7 +1,7 @@
 Ingest Mapping
 ==============
 
-The ingest mode builds a canonical pulsar layout from arbitrary folders using
+The ingest mode builds a standard pulsar layout from arbitrary folders using
 an explicit JSON mapping file. Backend names are **never auto-parsed**. Every
 backend is defined in the mapping file using the PETA naming convention:
 
@@ -119,7 +119,7 @@ How to populate the mapping
 1. **List data roots** (optional): ``sources`` is informative only.
 2. **Define par roots**: directories where ``*.par`` are stored.
 3. **Define template roots**: directories containing profile templates.
-4. **Add pulsar aliases**: map every B-name to its canonical J-name.
+4. **Add pulsar aliases**: map every B-name to its standard J-name.
 5. **Define backends**: one entry per backend using the PETA naming convention.
    Each backend entry must include a ``root`` path that contains the tim files
    for that backend. No automatic parsing or guessing is performed.

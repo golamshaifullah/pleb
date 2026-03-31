@@ -41,7 +41,7 @@ Ingest Mode
    [Discover source par/tim/tmplts]
            |
            v
-   [Copy into canonical pulsar layout]
+   [Copy into standard pulsar layout]
            |
            v
    [Optional verify + lockfile checks]
@@ -214,4 +214,3 @@ The sequence below reflects how PQC is executed from ``pleb``.
                    |
                    v
    [Write per-TOA QC flags to *_qc.csv]
-

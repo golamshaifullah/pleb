@@ -19,7 +19,7 @@ What this chapter set covers
 - UX config schema,
 - UX->legacy mapping behavior,
 - presets,
-- mode dispatch,
+- mode routing,
 - troubleshooting,
 - migration from legacy run files.
 

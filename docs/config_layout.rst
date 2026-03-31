@@ -1,7 +1,7 @@
 Configuration Layout
 ====================
 
-This chapter is the canonical map of the ``configs/`` tree and explains how to
+This chapter is the standard map of the ``configs/`` tree and explains how to
 place, name, and maintain configuration files in a way that scales for
 production operations.
 
@@ -17,8 +17,8 @@ PLEB keeps authored configuration separate from generated state.
 The goal is to avoid common failure modes:
 
 - policy duplicated across many run files,
-- generated lock artifacts mixed with authored files,
-- unclear ownership between run profiles, catalogs, and workflow orchestration.
+- generated lock files mixed with authored files,
+- unclear ownership between run profiles, catalogs, and workflow run plans.
 
 
 Canonical Tree
@@ -70,7 +70,7 @@ Do not use this for reusable mapping data that many profiles share.
 ``configs/workflows/``
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Top-level workflow orchestration files passed to
+Top-level workflow run-plan files passed to
 ``pleb workflow --file ...``.
 
 Use this for:
@@ -142,7 +142,7 @@ Use this decision rule:
 
 1. Is it directly executed with ``--config``?
    Put it under ``configs/runs/<mode>/``.
-2. Is it a multi-step orchestration file?
+2. Is it a multi-step run-plan file?
    Put it under ``configs/workflows/``.
 3. Is it static mapping/lookup data reused by many runs?
    Put it under ``configs/catalogs/<domain>/``.
@@ -256,12 +256,12 @@ Examples:
 Generated State Policy
 ----------------------
 
-``configs/state/lockfiles`` contains generated lock artifacts.
+``configs/state/lockfiles`` contains generated lock files.
 
 Recommended practice:
 
 - exploratory ingest: lock strictness relaxed,
-- production ingest: lock strictness enforced and lock artifacts tracked.
+- production ingest: lock strictness enforced and lock files tracked.
 
 Do not manually hand-edit lockfiles unless debugging.
 
@@ -303,5 +303,5 @@ Cross References
 
 - Overview of settings strategy: :doc:`configuration`
 - Full key catalog: :doc:`full_settings_catalog`
-- Stage orchestration and behavior: :doc:`pleb_deep_dive`
+- Stage coordination and behavior: :doc:`pleb_deep_dive`
 - Run mode usage: :doc:`running_modes`, :doc:`modes`
