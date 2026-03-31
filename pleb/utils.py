@@ -136,6 +136,7 @@ def make_output_tree(
         "binary_analysis": base / tag / "binary_analysis",
         "param_scan": base / tag / "param_scan",
         "qc": base / tag / "qc",
+        "whitenoise": base / tag / "whitenoise",
     }
     safe_mkdir(base)
     safe_mkdir(base / tag)

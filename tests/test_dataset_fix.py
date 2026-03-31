@@ -163,12 +163,7 @@ def test_apply_pqc_outliers_can_write_pqc_flag_labels(tmp_path: Path) -> None:
     tim = psr_dir / "tims" / "BACKEND.tim"
     _write(
         tim,
-        (
-            "FORMAT 1\n"
-            "f 1400 55000 1 1\n"
-            "f 1400 55001 1 1\n"
-            "f 1400 55002 1 1\n"
-        ),
+        ("FORMAT 1\n" "f 1400 55000 1 1\n" "f 1400 55001 1 1\n" "f 1400 55002 1 1\n"),
     )
 
     qc_root = tmp_path / "qc"
@@ -209,20 +204,14 @@ def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     tim = psr_dir / "tims" / "BACKEND.tim"
     _write(
         tim,
-        (
-            "FORMAT 1\n"
-            "\tf 1400 56000 1 1\n"
-        ),
+        ("FORMAT 1\n" "\tf 1400 56000 1 1\n"),
     )
 
     qc_root = tmp_path / "qc"
     qc_csv = qc_root / "main" / f"{psr}_qc.csv"
     _write(
         qc_csv,
-        (
-            "_timfile,mjd,bad_point\n"
-            "BACKEND.tim,56000,True\n"
-        ),
+        ("_timfile,mjd,bad_point\n" "BACKEND.tim,56000,True\n"),
     )
 
     cfg = FixDatasetConfig(

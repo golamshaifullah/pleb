@@ -40,4 +40,3 @@ def test_ux_init_all_modes_creates_mode_specific_files(tmp_path: Path) -> None:
     ]
     for p in expected:
         assert p.exists(), f"missing expected file: {p}"
-

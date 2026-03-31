@@ -174,6 +174,7 @@ def _build_compact_decisions(
 def _write_compact_pdf(
     csvs: list[Path],
     pdf_path: Path,
+    run_dir: Path,
     backend_col: str = "group",
     outlier_cols: Optional[list[str]] = None,
 ) -> None:
@@ -316,6 +317,105 @@ def _write_compact_pdf(
             pdf.savefig(fig, bbox_inches="tight")
             plt.close(fig)
 
+            # Residual-vs-uncertainty diagnostics (colored by backend and PQC class).
+            def _uncert_series(frame: pd.DataFrame) -> pd.Series:
+                for c in (
+                    "sigma_us",
+                    "toa_err_us",
+                    "err_us",
+                    "toa_uncertainty_us",
+                    "sigma",
+                    "toa_err",
+                    "error",
+                    "err",
+                ):
+                    if c in frame.columns:
+                        return pd.to_numeric(frame[c], errors="coerce")
+                return pd.Series([pd.NA] * len(frame), index=frame.index, dtype=float)
+
+            def _pqc_class_series(frame: pd.DataFrame) -> pd.Series:
+                out = pd.Series(["good"] * len(frame), index=frame.index, dtype=object)
+                event_cols = [
+                    ("step_member", "step"),
+                    ("dm_step_member", "dm_step"),
+                    ("transient_member", "transient"),
+                    ("solar_event_member", "solar"),
+                    ("orbital_phase_bad", "orbital_phase"),
+                    ("eclipse_member", "eclipse"),
+                    ("gaussian_bump_member", "gaussian_bump"),
+                    ("glitch_member", "glitch"),
+                ]
+                for col, label in event_cols:
+                    sel = _bool_series(frame, col)
+                    out.loc[sel] = f"event_{label}"
+                if "transient_id" in frame.columns:
+                    tid = (
+                        pd.to_numeric(frame["transient_id"], errors="coerce")
+                        .fillna(-1)
+                        .astype(int)
+                    )
+                    out.loc[tid >= 0] = "event_transient"
+                out.loc[frame["decision"] == "BAD_TOA"] = "bad"
+                out.loc[frame["decision"] == "REVIEW_EVENT"] = "event_review"
+                return out.astype(str)
+
+            resid2 = pd.to_numeric(
+                d.get("resid_us", d.get("resid", pd.Series([]))), errors="coerce"
+            )
+            unc = _uncert_series(d)
+            valid2 = resid2.notna() & unc.notna()
+            dd2 = d.loc[valid2].copy()
+            if not dd2.empty:
+                dd2["_resid"] = resid2.loc[valid2].astype(float)
+                dd2["_unc"] = unc.loc[valid2].astype(float)
+                dd2["_pqc_class"] = _pqc_class_series(d).loc[valid2]
+                bcol3 = (
+                    backend_col
+                    if backend_col in dd2.columns
+                    else ("sys" if "sys" in dd2.columns else None)
+                )
+
+                fig2, axarr = plt.subplots(1, 2, figsize=(11, 4.6))
+                axb, axc = axarr[0], axarr[1]
+
+                if bcol3 is not None:
+                    for be, g in dd2.groupby(bcol3):
+                        axb.scatter(
+                            g["_unc"],
+                            g["_resid"],
+                            s=11,
+                            alpha=0.75,
+                            label=str(be),
+                        )
+                    axb.legend(loc="best", fontsize=6, frameon=False, ncol=2)
+                else:
+                    axb.scatter(dd2["_unc"], dd2["_resid"], s=11, alpha=0.75)
+                axb.set_title(f"{psr}: Residual vs TOA uncertainty (by backend)")
+                axb.set_xlabel("TOA uncertainty")
+                axb.set_ylabel("Residual")
+
+                cls_palette = {
+                    "good": "#6c757d",
+                    "bad": "#d62728",
+                    "event_review": "#d95f02",
+                }
+                for cls, g in dd2.groupby("_pqc_class"):
+                    axc.scatter(
+                        g["_unc"],
+                        g["_resid"],
+                        s=11 if cls == "good" else 14,
+                        alpha=0.62 if cls == "good" else 0.84,
+                        c=cls_palette.get(str(cls), None),
+                        label=str(cls),
+                    )
+                axc.legend(loc="best", fontsize=6, frameon=False, ncol=2)
+                axc.set_title(f"{psr}: Residual vs TOA uncertainty (by -pqc class)")
+                axc.set_xlabel("TOA uncertainty")
+                axc.set_ylabel("Residual")
+
+                pdf.savefig(fig2, bbox_inches="tight")
+                plt.close(fig2)
+
             # Per-backend action list page with artifact pointers.
             fig = plt.figure(figsize=(11, 8.5))
             ax = fig.add_subplot(111)
@@ -421,6 +521,100 @@ def _write_compact_pdf(
                 )
             pdf.savefig(fig, bbox_inches="tight")
             plt.close(fig)
+
+            # JUMP summary table page (best effort par-file discovery).
+            def _find_par() -> Optional[Path]:
+                for c in ("_parfile", "parfile"):
+                    if c in d.columns:
+                        vals = d[c].dropna().astype(str).unique().tolist()
+                        for v in vals:
+                            pp = Path(v).expanduser()
+                            if pp.exists():
+                                return pp
+                roots = [run_dir, run_dir.parent, run_dir.parent.parent]
+                seen = set()
+                for root in roots:
+                    rr = Path(root).resolve()
+                    if rr in seen or not rr.exists():
+                        continue
+                    seen.add(rr)
+                    direct = rr / psr / f"{psr}.par"
+                    if direct.exists():
+                        return direct
+                    try:
+                        candidates = list(rr.glob(f"**/{psr}/{psr}.par"))
+                    except Exception:
+                        candidates = []
+                    if candidates:
+                        return sorted(candidates, key=lambda x: len(str(x)))[0]
+                return None
+
+            def _read_jumps(par: Path) -> pd.DataFrame:
+                rows_j = []
+                try:
+                    lines = par.read_text(
+                        encoding="utf-8", errors="ignore"
+                    ).splitlines()
+                except Exception:
+                    return pd.DataFrame([])
+                for ln in lines:
+                    s = ln.strip()
+                    if not s or s.startswith(("C ", "#")):
+                        continue
+                    if not s.startswith("JUMP"):
+                        continue
+                    parts = s.split()
+                    if len(parts) < 5:
+                        continue
+                    jump_flag = parts[1]
+                    system = parts[2]
+                    value = parts[3]
+                    fit_flag = parts[4]
+                    rows_j.append(
+                        {
+                            "jump_flag": jump_flag,
+                            "system": system,
+                            "value": value,
+                            "fit_flag": fit_flag,
+                        }
+                    )
+                return pd.DataFrame(rows_j)
+
+            par_path = _find_par()
+            figj = plt.figure(figsize=(11, 8.5))
+            axj = figj.add_subplot(111)
+            axj.axis("off")
+            axj.set_title(f"{psr}: JUMP summary", fontsize=14, pad=10)
+            if par_path is None:
+                axj.text(
+                    0.02,
+                    0.90,
+                    "Could not locate par file for JUMP summary.",
+                    fontsize=10,
+                )
+            else:
+                jdf = _read_jumps(par_path)
+                axj.text(
+                    0.02, 0.95, f"par: {par_path.as_posix()}", fontsize=8, va="top"
+                )
+                if jdf.empty:
+                    axj.text(
+                        0.02, 0.90, "No JUMP lines found in par file.", fontsize=10
+                    )
+                else:
+                    show_cols = ["jump_flag", "system", "value", "fit_flag"]
+                    table = axj.table(
+                        cellText=jdf[show_cols].values.tolist(),
+                        colLabels=show_cols,
+                        loc="upper left",
+                        cellLoc="left",
+                        colLoc="left",
+                    )
+                    table.auto_set_font_size(False)
+                    table.set_fontsize(8)
+                    table.scale(1, 1.2)
+            pdf.savefig(figj, bbox_inches="tight")
+            plt.close(figj)
 
 
 def _find_qc_csvs(run_dir: Path) -> list[Path]:
@@ -701,6 +895,7 @@ def generate_qc_report(
         _write_compact_pdf(
             csvs,
             pdf_path,
+            run_dir=run_dir,
             backend_col=backend_col,
             outlier_cols=compact_outlier_cols,
         )

@@ -9,7 +9,11 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any, Dict
 
-from ..config_io import _parse_value_as_toml_literal, _set_dotted_key, _dump_toml_no_nulls
+from ..config_io import (
+    _parse_value_as_toml_literal,
+    _set_dotted_key,
+    _dump_toml_no_nulls,
+)
 from ..config import IngestConfig, PipelineConfig, QCReportConfig, WorkflowRunConfig
 from .adapter import ux_to_legacy_dict
 from .loader import deep_merge, load_ux_config, write_ux_config
@@ -209,7 +213,9 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
     def _write_one(path: Path, cfg: Dict[str, Any]) -> None:
         if path.exists() and not args.force:
-            raise SystemExit(f"Refusing to overwrite existing file: {path}. Use --force.")
+            raise SystemExit(
+                f"Refusing to overwrite existing file: {path}. Use --force."
+            )
         write_ux_config(path, cfg)
 
     if args.all_modes:
@@ -340,9 +346,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             icfg = IngestConfig.from_dict(legacy)
             icfg.resolved_output_root()
         elif mode == "workflow":
-            WorkflowRunConfig.from_dict(
-                {"workflow_file": legacy.get("workflow_file")}
-            )
+            WorkflowRunConfig.from_dict({"workflow_file": legacy.get("workflow_file")})
         elif mode == "pipeline":
             PipelineConfig.from_dict(legacy)
         else:
@@ -362,13 +366,15 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     else:
         required = ["home_dir", "singularity_image"]
         missing = [k for k in required if not legacy.get(k)]
-        if legacy.get("home_dir") and not Path(
-            str(legacy["home_dir"])
-        ).expanduser().exists():
+        if (
+            legacy.get("home_dir")
+            and not Path(str(legacy["home_dir"])).expanduser().exists()
+        ):
             invalid_paths.append("home_dir")
-        if legacy.get("singularity_image") and not Path(
-            str(legacy["singularity_image"])
-        ).expanduser().exists():
+        if (
+            legacy.get("singularity_image")
+            and not Path(str(legacy["singularity_image"])).expanduser().exists()
+        ):
             invalid_paths.append("singularity_image")
 
     print(f"mode={mode}")
@@ -454,7 +460,9 @@ def _dispatch_legacy(mode: str, cfg_data: Dict[str, Any]) -> int:
                     "backend_col": cfg_data.get(
                         "qc_report_backend_col", cfg_data.get("backend_col", "group")
                     ),
-                    "backend": cfg_data.get("qc_report_backend", cfg_data.get("backend")),
+                    "backend": cfg_data.get(
+                        "qc_report_backend", cfg_data.get("backend")
+                    ),
                     "report_dir": cfg_data.get("qc_report_report_dir"),
                     "no_plots": cfg_data.get("qc_report_no_plots", False),
                     "structure_group_cols": cfg_data.get(
@@ -510,9 +518,14 @@ def _dict_to_ux(d: Dict[str, Any]) -> UXConfig:
         data=dict(d.get("data", {})) if isinstance(d.get("data"), dict) else {},
         run=dict(d.get("run", {})) if isinstance(d.get("run"), dict) else {},
         policy=dict(d.get("policy", {})) if isinstance(d.get("policy"), dict) else {},
-        workflow=dict(d.get("workflow", {})) if isinstance(d.get("workflow"), dict) else {},
-        pipeline=dict(d.get("pipeline", {})) if isinstance(d.get("pipeline"), dict) else {},
+        workflow=(
+            dict(d.get("workflow", {})) if isinstance(d.get("workflow"), dict) else {}
+        ),
+        pipeline=(
+            dict(d.get("pipeline", {})) if isinstance(d.get("pipeline"), dict) else {}
+        ),
         extra={k: v for k, v in d.items() if k not in known},
     )
+
     def _mode_path(mode_name: str, root_dir: Path) -> Path:
         return root_dir / _MODE_SUBDIR[mode_name] / _MODE_FILE_BASENAME[mode_name]

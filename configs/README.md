@@ -127,6 +127,19 @@ Avoid embedding one-off absolute paths into shared catalogs unless they are inte
 
 Consumes one run profile and optional catalog/rule paths referenced by that profile.
 
+Optional white-noise estimation stage (EFAC/EQUAD/ECORR):
+
+- `run_whitenoise = true`
+- `whitenoise_source_path = "/work/git_projects/whitenoise/src"` (optional fallback)
+- `whitenoise_epoch_tolerance_seconds = 1.0`
+- `whitenoise_single_toa_mode = "combined"` (`combined`, `equad0`, `ecorr0`)
+- `whitenoise_fit_timing_model_first = true`
+- `whitenoise_timfile_name = "{pulsar}_all.tim"` (optional template override)
+
+Outputs are written to:
+
+- `<results>/<outdir>/<tag>/whitenoise/<branch>/whitenoise_summary.tsv`
+
 ### Ingest mode
 
 `pleb ingest --config configs/runs/ingest/<file>.toml`
@@ -242,4 +255,3 @@ If you have old references to:
 - `configs/system_tables/...` use `configs/catalogs/system_tables/...`
 - `configs/runs/workflow_steps/...` use `configs/workflows/steps/...`
 - `configs/settings/*.lock*.json` use `configs/state/lockfiles/...`
-

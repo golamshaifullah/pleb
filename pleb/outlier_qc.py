@@ -792,7 +792,9 @@ def run_pqc_for_parfile(
                     logger.info("Cleaned backend-profile temp dir: %s", tmp)
                 # Best-effort cleanup of now-empty profile root.
                 try:
-                    profile_root = out_csv.parent / ".pqc_backend_profiles" / parfile.stem
+                    profile_root = (
+                        out_csv.parent / ".pqc_backend_profiles" / parfile.stem
+                    )
                     if profile_root.exists():
                         for d in sorted(profile_root.rglob("*"), reverse=True):
                             if d.is_dir():

@@ -6,7 +6,6 @@ from typing import Any, Dict
 
 from .models import UXConfig
 
-
 _POLICY_SECTION_PREFIX = {
     "fix": "fix_",
     "pqc": "pqc_",

@@ -78,3 +78,28 @@ fix_flag_sys_freq_rules_path = "/tmp/flag_sys_freq_rules.yaml"
     assert cfg.qc_cross_pulsar_min_pulsars == 3
     assert cfg.fix_flag_sys_freq_rules_enabled is True
     assert str(cfg.fix_flag_sys_freq_rules_path) == "/tmp/flag_sys_freq_rules.yaml"
+
+
+def test_config_parses_whitenoise_keys(tmp_path: Path) -> None:
+    toml_text = """
+home_dir = "/tmp/repo"
+singularity_image = "/tmp/tempo2.sif"
+dataset_name = "."
+results_dir = "/tmp/results"
+run_whitenoise = true
+whitenoise_source_path = "/tmp/whitenoise/src"
+whitenoise_epoch_tolerance_seconds = 2.5
+whitenoise_single_toa_mode = "equad0"
+whitenoise_fit_timing_model_first = false
+whitenoise_timfile_name = "{pulsar}_all.new.tim"
+"""
+    cfg_path = tmp_path / "cfg_wn.toml"
+    cfg_path.write_text(toml_text, encoding="utf-8")
+
+    cfg = PipelineConfig.load(cfg_path)
+    assert cfg.run_whitenoise is True
+    assert str(cfg.whitenoise_source_path) == "/tmp/whitenoise/src"
+    assert cfg.whitenoise_epoch_tolerance_seconds == 2.5
+    assert cfg.whitenoise_single_toa_mode == "equad0"
+    assert cfg.whitenoise_fit_timing_model_first is False
+    assert cfg.whitenoise_timfile_name == "{pulsar}_all.new.tim"

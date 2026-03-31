@@ -373,6 +373,16 @@ class PipelineConfig:
         make_covmat: Convenience toggle to control covariance heatmaps.
         testing_mode: If True, skip change reports (useful for CI).
         run_pqc: Enable optional pqc stage.
+        run_whitenoise: Enable optional whitenoise EFAC/EQUAD/ECORR estimation stage.
+        whitenoise_source_path: Optional path to a folder containing
+            ``whitenoise_estimator.py`` when not importable from the environment.
+        whitenoise_epoch_tolerance_seconds: Epoch grouping tolerance in seconds.
+        whitenoise_single_toa_mode: Single-TOA identifiability mode for whitenoise
+            (``combined``, ``equad0``, or ``ecorr0``).
+        whitenoise_fit_timing_model_first: Run a timing-model fit in libstempo
+            before estimating whitenoise parameters.
+        whitenoise_timfile_name: Optional timfile name template used per pulsar for
+            whitenoise (supports ``{pulsar}``).
         pqc_backend_col: Backend grouping column for pqc.
         pqc_drop_unmatched: Drop unmatched TOAs in pqc.
         pqc_merge_tol_seconds: Merge tolerance in seconds for pqc.
@@ -588,6 +598,12 @@ class PipelineConfig:
     # Optional outlier/QC stage using the external `pqc` package (libstempo-based).
     # This is separate from the existing general2-based outlier summaries.
     run_pqc: bool = False
+    run_whitenoise: bool = False
+    whitenoise_source_path: Optional[str] = None
+    whitenoise_epoch_tolerance_seconds: float = 1.0
+    whitenoise_single_toa_mode: str = "combined"
+    whitenoise_fit_timing_model_first: bool = True
+    whitenoise_timfile_name: Optional[str] = None
     pqc_backend_col: str = "group"
     pqc_drop_unmatched: bool = False
     pqc_merge_tol_seconds: float = 2.0
@@ -900,6 +916,10 @@ class PipelineConfig:
             c.pqc_backend_profiles_path = (
                 Path(c.pqc_backend_profiles_path).expanduser().resolve()
             )
+        if c.whitenoise_source_path is not None:
+            c.whitenoise_source_path = (
+                Path(c.whitenoise_source_path).expanduser().resolve()
+            )
         if c.fix_system_flag_mapping_path is not None:
             c.fix_system_flag_mapping_path = (
                 Path(c.fix_system_flag_mapping_path).expanduser().resolve()
@@ -987,6 +1007,8 @@ class PipelineConfig:
             )
         if d.get("pqc_backend_profiles_path") is not None:
             d["pqc_backend_profiles_path"] = str(d["pqc_backend_profiles_path"])
+        if d.get("whitenoise_source_path") is not None:
+            d["whitenoise_source_path"] = str(d["whitenoise_source_path"])
         if d.get("ingest_mapping_file") is not None:
             d["ingest_mapping_file"] = str(d["ingest_mapping_file"])
         if d.get("ingest_output_dir") is not None:
@@ -1067,6 +1089,18 @@ class PipelineConfig:
             make_covmat=(d.get("make_covmat") if "make_covmat" in d else None),
             testing_mode=bool(d.get("testing_mode", False)),
             run_pqc=bool(d.get("run_pqc", False)),
+            run_whitenoise=bool(d.get("run_whitenoise", False)),
+            whitenoise_source_path=opt_str("whitenoise_source_path"),
+            whitenoise_epoch_tolerance_seconds=float(
+                d.get("whitenoise_epoch_tolerance_seconds", 1.0)
+            ),
+            whitenoise_single_toa_mode=str(
+                d.get("whitenoise_single_toa_mode", "combined")
+            ),
+            whitenoise_fit_timing_model_first=bool(
+                d.get("whitenoise_fit_timing_model_first", True)
+            ),
+            whitenoise_timfile_name=opt_str("whitenoise_timfile_name"),
             pqc_backend_col=str(d.get("pqc_backend_col", "group")),
             pqc_drop_unmatched=bool(d.get("pqc_drop_unmatched", False)),
             pqc_merge_tol_seconds=float(d.get("pqc_merge_tol_seconds", 2.0)),

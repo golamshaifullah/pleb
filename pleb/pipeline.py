@@ -59,6 +59,11 @@ from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
 from .outlier_qc import PTAQCConfig, run_pqc_for_parfile_subprocess, summarize_pqc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
 from .qc_report import generate_cross_pulsar_coincidence_report, generate_qc_report
+from .whitenoise_integration import (
+    WhiteNoiseStageConfig,
+    estimate_white_noise_for_pulsar,
+    resolve_timfile_for_pulsar,
+)
 
 logger = get_logger("pleb")
 
@@ -322,13 +327,13 @@ def _build_fixdataset_config(
                 or "C QC_BIANRY_ECLIPSE"
             ),
             qc_write_pqc_flag=bool(_cfg_get(cfg, "fix_qc_write_pqc_flag", False)),
-            qc_pqc_flag_name=str(_cfg_get(cfg, "fix_qc_pqc_flag_name", "-pqc") or "-pqc"),
+            qc_pqc_flag_name=str(
+                _cfg_get(cfg, "fix_qc_pqc_flag_name", "-pqc") or "-pqc"
+            ),
             qc_pqc_good_value=str(
                 _cfg_get(cfg, "fix_qc_pqc_good_value", "good") or "good"
             ),
-            qc_pqc_bad_value=str(
-                _cfg_get(cfg, "fix_qc_pqc_bad_value", "bad") or "bad"
-            ),
+            qc_pqc_bad_value=str(_cfg_get(cfg, "fix_qc_pqc_bad_value", "bad") or "bad"),
             qc_pqc_event_prefix=str(
                 _cfg_get(cfg, "fix_qc_pqc_event_prefix", "event_") or "event_"
             ),
@@ -567,12 +572,14 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     run_fix_dataset = _cfg_get_bool(cfg, "run_fix_dataset", False)
     fix_apply = _cfg_get_bool(cfg, "fix_apply", False)
     run_pqc = bool(getattr(cfg, "run_pqc", False))
+    run_whitenoise = bool(getattr(cfg, "run_whitenoise", False))
 
     logger.info(
-        "Config flags: run_fix_dataset=%s fix_apply=%s run_pqc=%s",
+        "Config flags: run_fix_dataset=%s fix_apply=%s run_pqc=%s run_whitenoise=%s",
         run_fix_dataset,
         fix_apply,
         run_pqc,
+        run_whitenoise,
     )
     if fix_apply:
         logger.info(
@@ -791,6 +798,111 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             desc=f"tempo2 ({branch})",
                         ):
                             fut.result()
+
+            if run_whitenoise:
+                wn_cfg = WhiteNoiseStageConfig(
+                    source_path=(
+                        Path(cfg.whitenoise_source_path)
+                        if getattr(cfg, "whitenoise_source_path", None)
+                        else None
+                    ),
+                    epoch_tolerance_seconds=float(
+                        getattr(cfg, "whitenoise_epoch_tolerance_seconds", 1.0)
+                    ),
+                    single_toa_mode=str(
+                        getattr(cfg, "whitenoise_single_toa_mode", "combined")
+                    ),
+                    fit_timing_model_first=bool(
+                        getattr(cfg, "whitenoise_fit_timing_model_first", True)
+                    ),
+                    timfile_name=getattr(cfg, "whitenoise_timfile_name", None),
+                )
+                wn_out_dir = out_paths["whitenoise"] / branch
+                wn_out_dir.mkdir(parents=True, exist_ok=True)
+                wn_rows: List[Dict[str, object]] = []
+                n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+
+                def _run_whitenoise(p: str) -> Dict[str, object]:
+                    psr_dir = cfg.home_dir / cfg.dataset_name / p
+                    parfile = psr_dir / f"{p}.par"
+                    timfile = resolve_timfile_for_pulsar(
+                        psr_dir, p, wn_cfg.timfile_name
+                    )
+                    if not parfile.exists():
+                        return {
+                            "pulsar": p,
+                            "branch": branch,
+                            "parfile": str(parfile),
+                            "timfile": "",
+                            "success": False,
+                            "error": f"Missing parfile: {parfile}",
+                        }
+                    if timfile is None:
+                        hint = (
+                            wn_cfg.timfile_name
+                            if wn_cfg.timfile_name
+                            else f"{p}_all.tim or {p}.tim"
+                        )
+                        return {
+                            "pulsar": p,
+                            "branch": branch,
+                            "parfile": str(parfile),
+                            "timfile": "",
+                            "success": False,
+                            "error": f"Missing timfile candidate ({hint}) under {psr_dir}",
+                        }
+                    try:
+                        row = estimate_white_noise_for_pulsar(parfile, timfile, wn_cfg)
+                    except Exception as e:
+                        return {
+                            "pulsar": p,
+                            "branch": branch,
+                            "parfile": str(parfile),
+                            "timfile": str(timfile),
+                            "success": False,
+                            "error": str(e),
+                        }
+                    row.update(
+                        {
+                            "pulsar": p,
+                            "branch": branch,
+                            "parfile": str(parfile),
+                            "timfile": str(timfile),
+                        }
+                    )
+                    return row
+
+                if n_jobs == 1:
+                    for pulsar in tqdm(pulsars, desc=f"whitenoise ({branch})"):
+                        wn_rows.append(_run_whitenoise(pulsar))
+                else:
+                    futures = []
+                    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+                        for pulsar in pulsars:
+                            futures.append(ex.submit(_run_whitenoise, pulsar))
+                        for fut in tqdm(
+                            as_completed(futures),
+                            total=len(futures),
+                            desc=f"whitenoise ({branch})",
+                        ):
+                            wn_rows.append(fut.result())
+
+                if wn_rows:
+                    dfw = pd.DataFrame(wn_rows)
+                    dfw.to_csv(
+                        wn_out_dir / "whitenoise_summary.tsv",
+                        sep="\t",
+                        index=False,
+                    )
+                    n_ok = int(dfw.get("success", pd.Series([], dtype=bool)).sum())
+                    n_fail = int(len(dfw) - n_ok)
+                    logger.info(
+                        "whitenoise stage (%s): %d success, %d failed (summary: %s)",
+                        branch,
+                        n_ok,
+                        n_fail,
+                        wn_out_dir / "whitenoise_summary.tsv",
+                    )
 
             if qc_enabled:
                 qc_cfg = PTAQCConfig(
