@@ -1,12 +1,12 @@
 [variants.legacy]
 include_classes = ["legacy"]
-exclude_classes = []
-mixed_policy = "any"
+exclude_classes = ["new"]
+mixed_policy = "error"
 
 [variants.new]
 include_classes = ["new"]
-exclude_classes = []
-mixed_policy = "any"
+exclude_classes = ["legacy"]
+mixed_policy = "error"
 
 [variants.combined]
 include_classes = ["legacy", "new"]

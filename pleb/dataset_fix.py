@@ -579,7 +579,18 @@ def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
 
 def _parse_tim_system_rows(
     timfile: Path,
+    system_flag: str = "-sys",
 ) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]]]:
+    """Split TOAs into per-system buffers using the selected tim flag.
+
+    Parameters
+    ----------
+    timfile : pathlib.Path
+        Tim file to parse.
+    system_flag : str, optional
+        Tim flag token used to identify system membership (for example
+        ``"-sys"`` or ``"-group"``), by default ``"-sys"``.
+    """
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     systems: Set[str] = set()
     errs: Dict[str, List[float]] = {}
@@ -589,9 +600,9 @@ def _parse_tim_system_rows(
         parts = raw.strip().split()
         if len(parts) < 4:
             continue
-        if "-sys" not in parts:
+        if system_flag not in parts:
             continue
-        i = parts.index("-sys")
+        i = parts.index(system_flag)
         if i + 1 >= len(parts):
             continue
         sys_val = parts[i + 1]
@@ -605,8 +616,8 @@ def _parse_tim_system_rows(
     for raw in lines:
         if is_toa_line(raw):
             parts = raw.strip().split()
-            if "-sys" in parts:
-                i = parts.index("-sys")
+            if system_flag in parts:
+                i = parts.index(system_flag)
                 if i + 1 < len(parts):
                     s = parts[i + 1]
                     if s in by_sys:
@@ -644,8 +655,8 @@ def build_variant_reference_jump_pars(
     -----
     Reference system choice is a deterministic rank:
 
-    1. smallest median TOA uncertainty (microseconds),
-    2. then largest TOA count,
+    1. largest TOA count,
+    2. then smallest median TOA uncertainty (microseconds),
     3. then lexical system name.
 
     ``median`` is used because it is robust to heavy-tailed TOA-error
@@ -709,6 +720,7 @@ def build_variant_reference_jump_pars(
     )
 
     out_variants: Dict[str, object] = {}
+    jump_flag = str(cfg.jump_reference_jump_flag or "-sys")
     for alltim in all_variants:
         vname = _variant_name_from_alltim(psr, alltim)
         include_paths = sorted(parse_include_lines(alltim))
@@ -719,7 +731,9 @@ def build_variant_reference_jump_pars(
             src_tim = psr_dir / rel
             if not src_tim.exists():
                 continue
-            by_sys, systems, errs = _parse_tim_system_rows(src_tim)
+            by_sys, systems, errs = _parse_tim_system_rows(
+                src_tim, system_flag=jump_flag
+            )
             if not systems:
                 continue
             for sysv in systems:
@@ -779,16 +793,16 @@ def build_variant_reference_jump_pars(
             }
             continue
 
-        # smallest median err first, then largest n_toa, then lexical system.
+        # Prefer representative systems: larger TOA support first, then precision.
         rows_sorted = sorted(
             rows,
             key=lambda x: (
+                -int(x.get("n_toa", 0)),
                 (
                     np.inf
                     if np.isnan(float(x.get("median_toa_err_us", np.nan)))
                     else float(x.get("median_toa_err_us", np.nan))
                 ),
-                -int(x.get("n_toa", 0)),
                 str(x.get("system", "")),
             ),
         )
@@ -807,7 +821,6 @@ def build_variant_reference_jump_pars(
         # Build variant par with jumps for all systems in this variant:
         # reference fixed at 0 0, others start at 0 with fit flag 1.
         par_out = psr_dir / f"{psr}.{vname}.par"
-        jump_flag = str(cfg.jump_reference_jump_flag or "-sys")
         out_lines = []
         for ln in no_jump_lines:
             out_lines.append(ln)

@@ -1,0 +1,7 @@
+[backend_profiles]
+# Reduce LOFAR dominance so higher-precision backends can drive event detection.
+"LOFAR.*" = { robust_z_thresh = 8.0, fdr_q = 0.001, delta_chi2_thresh = 80.0, step_delta_chi2_thresh = 80.0, dm_step_delta_chi2_thresh = 80.0, gaussian_bump_delta_chi2_thresh = 80.0, glitch_delta_chi2_thresh = 80.0 }
+
+# Increase sensitivity for high-precision systems.
+"WSRT.P2.*" = { delta_chi2_thresh = 12.0, step_delta_chi2_thresh = 10.0, dm_step_delta_chi2_thresh = 10.0, gaussian_bump_delta_chi2_thresh = 12.0, glitch_delta_chi2_thresh = 12.0 }
+"EFF.*" = { delta_chi2_thresh = 14.0, step_delta_chi2_thresh = 12.0, dm_step_delta_chi2_thresh = 12.0, gaussian_bump_delta_chi2_thresh = 14.0, glitch_delta_chi2_thresh = 14.0 }
