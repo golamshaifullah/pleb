@@ -1,0 +1,14 @@
+maximize = true
+score_offset = 0.0
+
+[weights]
+residual_cleanliness = 2.0
+residual_whiteness = 1.0
+event_coherence = 0.75
+stability = 0.75
+event_stability = 0.5
+bad_fraction = -1.5
+event_fraction = -0.25
+overfragmentation_penalty = -1.0
+backend_inconsistency_penalty = -0.75
+parameter_complexity_penalty = -0.25

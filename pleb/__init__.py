@@ -48,6 +48,7 @@ from .config import (
 )
 from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
 from .pulsar_analysis import BinaryAnalysisConfig, write_binary_analysis
+from .optimize import OptimizationConfig, run_optimization
 
 
 def run_pipeline(cfg: PipelineConfig):
@@ -114,4 +115,6 @@ __all__ = [
     "write_fix_report",
     "BinaryAnalysisConfig",
     "write_binary_analysis",
+    "OptimizationConfig",
+    "run_optimization",
 ]

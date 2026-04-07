@@ -1,0 +1,23 @@
+[optimize]
+base_config_path = "configs/runs/pipeline/epta-dr3-v0.toml"
+execution_mode = "pipeline"
+search_space_path = "configs/optimize/search_spaces/pqc_balanced_v1.toml"
+objective_path = "configs/optimize/objectives/balanced_qc.toml"
+folds_path = "configs/optimize/folds/time_blocks.toml"
+out_dir = "results/optimize/example_pipeline"
+study_name = "example_pipeline_pqc"
+n_trials = 20
+sampler = "random"
+seed = 12345
+jobs = 1
+keep_trial_runs = true
+fail_fast = false
+write_best_config = true
+
+[optimize.fixed_overrides]
+pulsars = ["J1713+0747"]
+run_pqc = true
+run_tempo2 = true
+run_fix_dataset = false
+qc_report = false
+pqc_backend_col = "sys"

@@ -1,0 +1,5 @@
+[folds]
+mode = "time_blocks"
+n_splits = 4
+time_col = "mjd"
+backend_col = "sys"

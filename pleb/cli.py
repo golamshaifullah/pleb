@@ -48,6 +48,8 @@ from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
 from .public_release_compare import compare_public_releases
+from .optimize.cli import load_optimization_config
+from .optimize.optimizer import run_optimization
 from .config_io import (
     _dump_toml_no_nulls,
     _load_config_dict,
@@ -371,6 +373,20 @@ def build_compare_public_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_optimize_parser() -> argparse.ArgumentParser:
+    """Build the parser for optimization mode."""
+    p = argparse.ArgumentParser(
+        description="Optimize PQC and workflow settings against QC-derived metrics."
+    )
+    p.add_argument("optimize", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument(
+        "--config",
+        required=True,
+        help="Optimization config file (.toml or .json).",
+    )
+    return p
+
+
 def run_qc_report(argv: list[str] | None) -> int:
     """Run the ``qc-report`` subcommand.
 
@@ -483,6 +499,21 @@ def run_compare_public(argv: list[str] | None) -> int:
     )
     _write_run_settings(Path(out["out_dir"]), argv, None)
     print(str(out["out_dir"]))
+    return 0
+
+
+def run_optimize(argv: list[str] | None) -> int:
+    """Execute optimization mode."""
+    args = build_optimize_parser().parse_args(argv)
+    cfg = load_optimization_config(Path(args.config))
+    result = run_optimization(cfg)
+    _write_run_settings(
+        Path(result.out_dir),
+        argv,
+        None,
+        cfg_data={"optimize": {"config": str(Path(args.config).expanduser().resolve())}},
+    )
+    print(str(result.out_dir))
     return 0
 
 
@@ -659,6 +690,8 @@ def main(argv=None) -> int:
         return run_ingest(argv)
     if argv and argv[0] == "compare-public":
         return run_compare_public(argv)
+    if argv and argv[0] == "optimize":
+        return run_optimize(argv)
     parser = build_parser()
     args, unknown = parser.parse_known_args(argv)
     cfg_keys = {f.name for f in fields(PipelineConfig)}

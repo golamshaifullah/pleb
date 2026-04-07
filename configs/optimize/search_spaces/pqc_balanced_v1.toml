@@ -1,0 +1,76 @@
+[parameters.pqc_fdr_q]
+type = "float"
+low = 0.001
+high = 0.05
+log = true
+
+[parameters.pqc_tau_corr_minutes]
+type = "float"
+low = 5.0
+high = 180.0
+log = true
+
+[parameters.pqc_window_mult]
+type = "float"
+low = 2.0
+high = 8.0
+step = 0.5
+
+[parameters.pqc_delta_chi2_thresh]
+type = "float"
+low = 10.0
+high = 60.0
+step = 1.0
+
+[parameters.pqc_robust_z_thresh]
+type = "float"
+low = 3.0
+high = 8.0
+step = 0.25
+
+[parameters.pqc_mark_only_worst_per_day]
+type = "bool"
+
+[parameters.pqc_step_enabled]
+type = "bool"
+
+[parameters.pqc_step_delta_chi2_thresh]
+type = "float"
+low = 10.0
+high = 60.0
+step = 1.0
+depends_on = "pqc_step_enabled"
+enabled_values = [true]
+
+[parameters.pqc_dm_step_enabled]
+type = "bool"
+
+[parameters.pqc_dm_step_delta_chi2_thresh]
+type = "float"
+low = 10.0
+high = 60.0
+step = 1.0
+depends_on = "pqc_dm_step_enabled"
+enabled_values = [true]
+
+[parameters.pqc_gaussian_bump_enabled]
+type = "bool"
+
+[parameters.pqc_gaussian_bump_delta_chi2_thresh]
+type = "float"
+low = 10.0
+high = 60.0
+step = 1.0
+depends_on = "pqc_gaussian_bump_enabled"
+enabled_values = [true]
+
+[parameters.pqc_glitch_enabled]
+type = "bool"
+
+[parameters.pqc_glitch_delta_chi2_thresh]
+type = "float"
+low = 10.0
+high = 60.0
+step = 1.0
+depends_on = "pqc_glitch_enabled"
+enabled_values = [true]

@@ -7,7 +7,7 @@ without creating circular dependencies.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import Callable, List, Optional, Set, Tuple
 import warnings
 
 # Common tempo2 directive words in .tim files.
@@ -200,6 +200,55 @@ def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
             if tok == flag:
                 vals.add(parts[i + 1])
     return vals
+
+
+def extract_flag_value_from_line(line: str, flag: str) -> Optional[str]:
+    """Return the value of one flag from a TOA line, if present."""
+    if not is_toa_line(line):
+        return None
+    parts = line.split()
+    for i, tok in enumerate(parts[:-1]):
+        if tok == flag:
+            return parts[i + 1]
+    return None
+
+
+def filter_timfile(
+    src: Path, dst: Path, keep_toa_line: Callable[[str, int], bool]
+) -> Tuple[int, int]:
+    """Copy a tim file while filtering TOA rows.
+
+    Parameters
+    ----------
+    src : pathlib.Path
+        Source tim file.
+    dst : pathlib.Path
+        Destination tim file.
+    keep_toa_line : callable
+        Predicate called as ``keep_toa_line(line, toa_index)`` for each TOA row.
+
+    Returns
+    -------
+    tuple of int
+        ``(kept_toas, dropped_toas)``.
+    """
+    kept = 0
+    dropped = 0
+    toa_index = 0
+    out_lines: List[str] = []
+    for raw in src.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not is_toa_line(raw):
+            out_lines.append(raw)
+            continue
+        if keep_toa_line(raw, toa_index):
+            out_lines.append(raw)
+            kept += 1
+        else:
+            dropped += 1
+        toa_index += 1
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    return kept, dropped
 
 
 def mjd_from_toa_line(line: str, time_offset_sec: float = 0.0) -> Optional[float]:

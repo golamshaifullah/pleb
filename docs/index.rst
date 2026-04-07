@@ -23,6 +23,7 @@ pleb - The EPTA Data Combination Pipeline
 
    configuration
    ux_wrapper
+   optimize
 
 .. toctree::
    :maxdepth: 2

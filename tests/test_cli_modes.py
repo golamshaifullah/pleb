@@ -5,6 +5,7 @@ from __future__ import annotations
 from pleb.cli import (
     build_compare_public_parser,
     build_ingest_parser,
+    build_optimize_parser,
     build_qc_report_parser,
     build_workflow_parser,
 )
@@ -32,3 +33,9 @@ def test_compare_public_parser_accepts_required_arguments() -> None:
     p = build_compare_public_parser()
     ns = p.parse_args(["--out-dir", "results/public_compare"])
     assert str(ns.out_dir).endswith("public_compare")
+
+
+def test_optimize_parser_accepts_config_argument() -> None:
+    p = build_optimize_parser()
+    ns = p.parse_args(["--config", "configs/optimize/runs/example_pipeline.toml"])
+    assert ns.config.endswith("example_pipeline.toml")
