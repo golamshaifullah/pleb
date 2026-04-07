@@ -44,6 +44,7 @@ pqc_dm_step_enabled = true
 pqc_gaussian_bump_enabled = true
 pqc_glitch_enabled = true
 pqc_event_instrument = true
+pqc_run_variants = true
 
 [[groups]]
 name = "stage2_apply_outlier_comments"
@@ -62,7 +63,7 @@ run_tempo2 = false
 make_plots = false
 make_reports = false
 make_covmat = false
-qc_report = true
+qc_report = false
 run_fix_dataset = true
 fix_apply = true
 fix_base_branch = "stress_j1713_j1022_features"
@@ -90,3 +91,18 @@ fix_check_duplicate_backend_tims = false
 fix_remove_overlaps_exact = false
 fix_generate_alltim_variants = false
 fix_jump_reference_variants = false
+
+[[groups]]
+name = "stage3_report_from_detect_qc"
+mode = "serial"
+
+[[groups.steps]]
+name = "qc_report"
+run_dir = "results/run_j1713_j1022_stress_features/main"
+
+[groups.steps.overrides]
+qc_report = true
+qc_report_backend_col = "sys"
+qc_report_compact_pdf = true
+qc_report_compact_pdf_name = "J1713_J1022_qc_compact_report_stage2.pdf"
+qc_report_dir = "results/run_j1713_j1022_apply_comments/qc_report_from_stage1"

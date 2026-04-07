@@ -404,6 +404,11 @@ def _run_step(
                 else None
             ),
             no_feature_plots=bool(getattr(cfg, "qc_report_no_feature_plots", False)),
+            compact_pdf=bool(getattr(cfg, "qc_report_compact_pdf", False)),
+            compact_pdf_name=str(
+                getattr(cfg, "qc_report_compact_pdf_name", "qc_compact_report.pdf")
+            ),
+            compact_outlier_cols=getattr(cfg, "qc_report_compact_outlier_cols", None),
         )
         return
 

@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Dict, List
 
 import os
+import shutil
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib.util
@@ -66,6 +67,77 @@ from .whitenoise_integration import (
 )
 
 logger = get_logger("pleb")
+
+
+def _discover_pqc_variants(psr_dir: Path, psr: str) -> List[str]:
+    """Discover available ``_all.<variant>.tim`` names for one pulsar.
+
+    Parameters
+    ----------
+    psr_dir : pathlib.Path
+        Pulsar directory.
+    psr : str
+        Pulsar name.
+
+    Returns
+    -------
+    list of str
+        Sorted variant names (for example ``["legacy", "new"]``). The base
+        include ``<PSR>_all.tim`` is not returned.
+    """
+    out: List[str] = []
+    for p in sorted(psr_dir.glob(f"{psr}_all.*.tim")):
+        name = p.name
+        pref = f"{psr}_all."
+        if not name.startswith(pref) or not name.endswith(".tim"):
+            continue
+        v = name[len(pref) : -len(".tim")]
+        if v:
+            out.append(v)
+    return out
+
+
+def _prepare_variant_pqc_workspace(
+    psr_dir: Path,
+    psr: str,
+    variant: str,
+    workspace: Path,
+) -> Path:
+    """Prepare a temporary per-variant workspace for PQC input discovery.
+
+    The PQC runner expects ``<PSR>.par`` and sibling ``<PSR>_all.tim``. This
+    workspace provides those names while reusing the pulsar ``tims/`` folder.
+    """
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    variant_par = psr_dir / f"{psr}.{variant}.par"
+    base_par = psr_dir / f"{psr}.par"
+    src_par = variant_par if variant_par.exists() else base_par
+    if not src_par.exists():
+        raise FileNotFoundError(str(src_par))
+
+    target_par = workspace / f"{psr}.par"
+    shutil.copy2(src_par, target_par)
+
+    src_all = psr_dir / f"{psr}_all.{variant}.tim"
+    if not src_all.exists():
+        raise FileNotFoundError(str(src_all))
+    target_all = workspace / f"{psr}_all.tim"
+    shutil.copy2(src_all, target_all)
+
+    link_tims = workspace / "tims"
+    if link_tims.exists() or link_tims.is_symlink():
+        if link_tims.is_symlink() or link_tims.is_file():
+            link_tims.unlink(missing_ok=True)
+        else:
+            shutil.rmtree(link_tims, ignore_errors=True)
+    try:
+        link_tims.symlink_to(psr_dir / "tims", target_is_directory=True)
+    except Exception:
+        # Fallback for filesystems without symlink support.
+        shutil.copytree(psr_dir / "tims", link_tims, dirs_exist_ok=True)
+
+    return target_par
 
 
 def _cfg_get(cfg, name: str, default=None):
@@ -1098,14 +1170,64 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 qc_out_dir.mkdir(parents=True, exist_ok=True)
                 qc_settings_dir = out_paths["tag"] / "run_settings"
                 qc_settings_dir.mkdir(parents=True, exist_ok=True)
+                run_variants = bool(getattr(cfg, "pqc_run_variants", False))
+                keep_variant_tmp = bool(getattr(cfg, "pqc_keep_variant_tmp", False))
+                variant_tmp_root = (
+                    out_paths["qc"] / ".pqc_variant_inputs" / str(branch)
+                    if run_variants
+                    else None
+                )
+                if variant_tmp_root is not None:
+                    variant_tmp_root.mkdir(parents=True, exist_ok=True)
+
+                tasks: List[tuple[str, str, Path, Path, Path]] = []
+                for pulsar in pulsars:
+                    psr_dir = cfg.home_dir / cfg.dataset_name / pulsar
+                    if run_variants:
+                        variants = _discover_pqc_variants(psr_dir, pulsar)
+                        if variants:
+                            for variant in variants:
+                                ws = (
+                                    variant_tmp_root / pulsar / variant
+                                    if variant_tmp_root is not None
+                                    else psr_dir
+                                )
+                                try:
+                                    parfile = _prepare_variant_pqc_workspace(
+                                        psr_dir, pulsar, variant, ws
+                                    )
+                                except Exception as e:
+                                    out_csv = qc_out_dir / f"{pulsar}.{variant}_qc.csv"
+                                    qc_rows.append(
+                                        {
+                                            "pulsar": pulsar,
+                                            "variant": variant,
+                                            "branch": branch,
+                                            "qc_csv": str(out_csv),
+                                            "qc_error": str(e),
+                                        }
+                                    )
+                                    continue
+                                out_csv = qc_out_dir / f"{pulsar}.{variant}_qc.csv"
+                                settings_out = (
+                                    qc_settings_dir
+                                    / f"{pulsar}.{variant}.pqc_settings.toml"
+                                )
+                                tasks.append(
+                                    (pulsar, variant, parfile, out_csv, settings_out)
+                                )
+                            continue
+
+                    parfile = psr_dir / f"{pulsar}.par"
+                    out_csv = qc_out_dir / f"{pulsar}_qc.csv"
+                    settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
+                    tasks.append((pulsar, "base", parfile, out_csv, settings_out))
+
                 n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
                 if n_jobs == 1:
-                    for pulsar in tqdm(pulsars, desc=f"pqc ({branch})"):
-                        parfile = (
-                            cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
-                        )
-                        out_csv = qc_out_dir / f"{pulsar}_qc.csv"
-                        settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
+                    for pulsar, variant, parfile, out_csv, settings_out in tqdm(
+                        tasks, desc=f"pqc ({branch})"
+                    ):
                         try:
                             df = run_pqc_for_parfile_subprocess(
                                 parfile,
@@ -1123,6 +1245,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             qc_rows.append(
                                 {
                                     "pulsar": pulsar,
+                                    "variant": variant,
                                     "branch": branch,
                                     "qc_csv": str(out_csv),
                                     "qc_error": str(e),
@@ -1131,6 +1254,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             continue
                         row = {
                             "pulsar": pulsar,
+                            "variant": variant,
                             "branch": branch,
                             "qc_csv": str(out_csv),
                         }
@@ -1138,10 +1262,8 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         qc_rows.append(row)
                 else:
 
-                    def _run_pqc(p: str) -> Dict[str, object]:
-                        parfile = cfg.home_dir / cfg.dataset_name / p / f"{p}.par"
-                        out_csv = qc_out_dir / f"{p}_qc.csv"
-                        settings_out = qc_settings_dir / f"{p}.pqc_settings.toml"
+                    def _run_pqc(task: tuple[str, str, Path, Path, Path]) -> Dict[str, object]:
+                        p, variant, parfile, out_csv, settings_out = task
                         try:
                             df = run_pqc_for_parfile_subprocess(
                                 parfile,
@@ -1158,24 +1280,32 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             )
                             return {
                                 "pulsar": p,
+                                "variant": variant,
                                 "branch": branch,
                                 "qc_csv": str(out_csv),
                                 "qc_error": str(e),
                             }
-                        row = {"pulsar": p, "branch": branch, "qc_csv": str(out_csv)}
+                        row = {
+                            "pulsar": p,
+                            "variant": variant,
+                            "branch": branch,
+                            "qc_csv": str(out_csv),
+                        }
                         row.update(summarize_pqc(df))
                         return row
 
                     futures = []
                     with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-                        for pulsar in pulsars:
-                            futures.append(ex.submit(_run_pqc, pulsar))
+                        for task in tasks:
+                            futures.append(ex.submit(_run_pqc, task))
                         for fut in tqdm(
                             as_completed(futures),
                             total=len(futures),
                             desc=f"pqc ({branch})",
                         ):
                             qc_rows.append(fut.result())
+                if run_variants and not keep_variant_tmp and variant_tmp_root is not None:
+                    remove_tree_if_exists(variant_tmp_root)
 
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
             if branch in compare_branches:

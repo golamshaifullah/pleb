@@ -191,6 +191,16 @@ def _write_compact_pdf(
     action_root = pdf_path.parent / "action_lists"
     action_root.mkdir(parents=True, exist_ok=True)
 
+    def _parse_psr_variant(csv_path: Path) -> tuple[str, str, str]:
+        stem = csv_path.stem
+        core = stem[: -len("_qc")] if stem.endswith("_qc") else stem
+        if "." in core:
+            psr, variant = core.split(".", 1)
+        else:
+            psr, variant = core, "base"
+        label = psr if variant == "base" else f"{psr} [{variant}]"
+        return psr, variant, label
+
     with PdfPages(pdf_path) as pdf:
         # Cover / aggregate page
         totals = []
@@ -200,9 +210,12 @@ def _write_compact_pdf(
             except Exception:
                 continue
             d = _build_compact_decisions(df, outlier_cols=outlier_cols)
+            psr, variant, label = _parse_psr_variant(p)
             totals.append(
                 {
-                    "pulsar": p.stem.replace("_qc", ""),
+                    "target": label,
+                    "pulsar": psr,
+                    "variant": variant,
                     "n_toa": int(len(d)),
                     "bad_toa": int((d["decision"] == "BAD_TOA").sum()),
                     "review_event": int((d["decision"] == "REVIEW_EVENT").sum()),
@@ -217,7 +230,7 @@ def _write_compact_pdf(
         if tdf.empty:
             ax.text(0.02, 0.90, "No QC CSV files found.", fontsize=11, va="top")
         else:
-            cols = ["pulsar", "n_toa", "bad_toa", "review_event", "event"]
+            cols = ["target", "n_toa", "bad_toa", "review_event", "event"]
             show = tdf[cols].sort_values(["bad_toa", "review_event"], ascending=False)
             table = ax.table(
                 cellText=show.values.tolist(),
@@ -245,7 +258,7 @@ def _write_compact_pdf(
             except Exception:
                 continue
             d = _build_compact_decisions(df, outlier_cols=outlier_cols)
-            psr = p.stem.replace("_qc", "")
+            psr, variant, label = _parse_psr_variant(p)
             mjd = pd.to_numeric(d.get("mjd", pd.Series([])), errors="coerce")
             resid = pd.to_numeric(
                 d.get("resid_us", d.get("resid", pd.Series([]))), errors="coerce"
@@ -288,7 +301,7 @@ def _write_compact_pdf(
                         c=colors[label],
                         label=f"{label} ({int(sel.sum())})",
                     )
-            ax.set_title(f"{psr}: Residuals with compact decisions")
+            ax.set_title(f"{label}: Residuals with compact decisions")
             ax.set_xlabel("MJD")
             ax.set_ylabel("Residual")
             ax.legend(loc="best", fontsize=8, frameon=False)
@@ -390,7 +403,7 @@ def _write_compact_pdf(
                     axb.legend(loc="best", fontsize=6, frameon=False, ncol=2)
                 else:
                     axb.scatter(dd2["_unc"], dd2["_resid"], s=11, alpha=0.75)
-                axb.set_title(f"{psr}: Residual vs TOA uncertainty (by backend)")
+                axb.set_title(f"{label}: Residual vs TOA uncertainty (by backend)")
                 axb.set_xlabel("TOA uncertainty")
                 axb.set_ylabel("Residual")
 
@@ -409,7 +422,7 @@ def _write_compact_pdf(
                         label=str(cls),
                     )
                 axc.legend(loc="best", fontsize=6, frameon=False, ncol=2)
-                axc.set_title(f"{psr}: Residual vs TOA uncertainty (by -pqc class)")
+                axc.set_title(f"{label}: Residual vs TOA uncertainty (by -pqc class)")
                 axc.set_xlabel("TOA uncertainty")
                 axc.set_ylabel("Residual")
 
@@ -420,7 +433,7 @@ def _write_compact_pdf(
             fig = plt.figure(figsize=(11, 8.5))
             ax = fig.add_subplot(111)
             ax.axis("off")
-            ax.set_title(f"{psr}: Per-backend action list", fontsize=14, pad=10)
+            ax.set_title(f"{label}: Per-backend action list", fontsize=14, pad=10)
             bcol2 = bcol
             if bcol2 is None:
                 ax.text(0.02, 0.90, "No backend/system column available.", fontsize=10)
@@ -457,7 +470,8 @@ def _write_compact_pdf(
                 )
                 top_reason = reasons.index[0] if len(reasons) else "n/a"
                 be_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", be_str)
-                out_csv = action_root / f"{psr}__{be_slug}.csv"
+                var_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(variant))
+                out_csv = action_root / f"{psr}.{var_slug}__{be_slug}.csv"
                 cols_keep = [
                     c
                     for c in (
@@ -538,10 +552,18 @@ def _write_compact_pdf(
                     if rr in seen or not rr.exists():
                         continue
                     seen.add(rr)
+                    if variant != "base":
+                        direct_variant = rr / psr / f"{psr}.{variant}.par"
+                        if direct_variant.exists():
+                            return direct_variant
                     direct = rr / psr / f"{psr}.par"
                     if direct.exists():
                         return direct
                     try:
+                        if variant != "base":
+                            cvar = list(rr.glob(f"**/{psr}/{psr}.{variant}.par"))
+                            if cvar:
+                                return sorted(cvar, key=lambda x: len(str(x)))[0]
                         candidates = list(rr.glob(f"**/{psr}/{psr}.par"))
                     except Exception:
                         candidates = []
@@ -584,7 +606,7 @@ def _write_compact_pdf(
             figj = plt.figure(figsize=(11, 8.5))
             axj = figj.add_subplot(111)
             axj.axis("off")
-            axj.set_title(f"{psr}: JUMP summary", fontsize=14, pad=10)
+            axj.set_title(f"{label}: JUMP summary", fontsize=14, pad=10)
             if par_path is None:
                 axj.text(
                     0.02,

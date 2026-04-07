@@ -716,6 +716,8 @@ class PipelineConfig:
     pqc_glitch_mean_window_days: float = 180.0
     pqc_glitch_min_duration_days: float = 1000.0
     pqc_backend_profiles_path: Optional[str] = None
+    pqc_run_variants: bool = False
+    pqc_keep_variant_tmp: bool = False
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -1275,6 +1277,8 @@ class PipelineConfig:
                 d.get("pqc_glitch_min_duration_days", 1000.0)
             ),
             pqc_backend_profiles_path=opt_str("pqc_backend_profiles_path"),
+            pqc_run_variants=bool(d.get("pqc_run_variants", False)),
+            pqc_keep_variant_tmp=bool(d.get("pqc_keep_variant_tmp", False)),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),
