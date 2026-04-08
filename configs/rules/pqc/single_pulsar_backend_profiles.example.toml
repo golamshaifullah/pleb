@@ -1,0 +1,5 @@
+# Example per-backend PQC overrides for a single-pulsar workflow.
+
+[backend_profiles]
+"EFF.P200.1360" = { robust_z_thresh = 6.5, fdr_q = 0.005 }
+"NRT.NUPPI.*" = { robust_z_thresh = 5.5, step_delta_chi2_thresh = 18.0 }

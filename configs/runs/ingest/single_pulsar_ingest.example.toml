@@ -1,0 +1,11 @@
+# Example ingest profile for a single pulsar.
+# Invocation:
+#   pleb ingest --config configs/runs/ingest/single_pulsar_ingest.example.toml
+
+ingest_mapping_file = "configs/catalogs/ingest/single_pulsar_mapping.example.json"
+ingest_output_dir = "/data/canonical/EPTA-DR3/epta-dr3-data"
+
+ingest_verify = true
+ingest_commit_branch_name = "raw_ingest"
+ingest_commit_base_branch = "ingest"
+ingest_commit_message = "Ingest: single-pulsar import"

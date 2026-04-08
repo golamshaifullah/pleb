@@ -1,0 +1,27 @@
+{
+  "sources": [
+    "/data/raw_release"
+  ],
+  "par_roots": [
+    "/data/raw_release/par"
+  ],
+  "template_roots": [
+    "/data/raw_release/templates"
+  ],
+  "pulsar_aliases": {
+    "B1907-3744": "J1909-3744"
+  },
+  "backends": {
+    "EFF.P200.1360": {
+      "root": "/data/raw_release/tim/EFF/P200/1360",
+      "tim_glob": "*.tim",
+      "ignore_suffixes": [
+        "_all.tim"
+      ]
+    },
+    "NRT.NUPPI.1480": {
+      "root": "/data/raw_release/tim/NRT/NUPPI/1480",
+      "tim_glob": "*.tim"
+    }
+  }
+}

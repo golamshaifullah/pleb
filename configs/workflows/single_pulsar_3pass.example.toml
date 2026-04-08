@@ -1,0 +1,30 @@
+# Example three-pass workflow for a single pulsar.
+# Invocation:
+#   pleb workflow --file configs/workflows/single_pulsar_3pass.example.toml
+
+config = "configs/runs/fixdataset/single_pulsar_step1_fix.example.toml"
+mode = "serial"
+
+[[groups]]
+name = "step1_fix_flags_and_jumps"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "configs/runs/fixdataset/single_pulsar_step1_fix.example.toml"
+
+[[groups]]
+name = "step2_detect"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "configs/runs/pqc/single_pulsar_pqc_detect.example.toml"
+
+[[groups]]
+name = "step3_apply"
+mode = "serial"
+
+[[groups.steps]]
+name = "pipeline"
+config = "configs/runs/fixdataset/single_pulsar_pqc_apply.example.toml"
