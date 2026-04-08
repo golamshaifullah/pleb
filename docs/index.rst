@@ -9,6 +9,7 @@ pleb - The EPTA Data Combination Pipeline
    overview
    installation
    quickstart
+   single_pulsar_playbook
 
 .. toctree::
    :maxdepth: 2
