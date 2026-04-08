@@ -162,7 +162,9 @@ def run_tempo2_for_pulsar(
             total_toas += count_toa_lines(psr_dir / rel)
     else:
         total_toas = count_toa_lines(all_tim)
-    nobs = max(1, int(total_toas * 1.01) + 1)
+    # Some tempo2 builds fail with very small -nobs values on large datasets.
+    # Keep the dynamic estimate, but enforce a conservative lower bound.
+    nobs = max(12000, int(total_toas * 1.01) + 1)
 
     work_dir = out_paths.get("work", out_paths["logs"]) / branch / pulsar
     safe_mkdir(work_dir)

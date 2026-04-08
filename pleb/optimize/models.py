@@ -63,6 +63,7 @@ class OptimizationConfig:
     folds_path: Optional[Path] = None
     out_dir: Path = Path("results/optimize")
     study_name: str = "pqc_optimize"
+    baseline_run_dir: Optional[Path] = None
     n_trials: int = 20
     sampler: str = "random"
     seed: int = 12345

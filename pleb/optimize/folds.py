@@ -31,7 +31,9 @@ def load_fold_config(path: Path | None) -> FoldConfig:
     )
 
 
-def make_fold_frames(df: pd.DataFrame, cfg: FoldConfig) -> List[tuple[str, pd.DataFrame]]:
+def make_fold_frames(
+    df: pd.DataFrame, cfg: FoldConfig
+) -> List[tuple[str, pd.DataFrame]]:
     """Split a QC dataframe into evaluation folds."""
     if df.empty or cfg.mode == "none" or cfg.n_splits <= 1:
         return [("all", df.copy())]

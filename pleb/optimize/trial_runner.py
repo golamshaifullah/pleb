@@ -76,7 +76,9 @@ def run_fold_trial(
         existing_set = list(raw.get("set", []) or [])
         raw["set"] = existing_set + parameters_to_set_overrides(params)
         if cfg.fixed_overrides:
-            raw["set"] = list(raw["set"]) + parameters_to_set_overrides(cfg.fixed_overrides)
+            raw["set"] = list(raw["set"]) + parameters_to_set_overrides(
+                cfg.fixed_overrides
+            )
         raw["set"].append(f'home_dir="{str(home_dir)}"')
         raw["set"].append(f'dataset_name="{dataset_name}"')
         raw["set"].append(

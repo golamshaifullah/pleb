@@ -511,7 +511,9 @@ def run_optimize(argv: list[str] | None) -> int:
         Path(result.out_dir),
         argv,
         None,
-        cfg_data={"optimize": {"config": str(Path(args.config).expanduser().resolve())}},
+        cfg_data={
+            "optimize": {"config": str(Path(args.config).expanduser().resolve())}
+        },
     )
     print(str(result.out_dir))
     return 0

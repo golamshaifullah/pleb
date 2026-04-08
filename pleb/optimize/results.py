@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 import json
 
 import pandas as pd
@@ -25,7 +25,8 @@ def write_results(result: OptimizationResult) -> Dict[str, Path]:
     )
     if result.best_trial is not None:
         best_json.write_text(
-            json.dumps(_trial_payload(result.best_trial), indent=2, sort_keys=True) + "\n",
+            json.dumps(_trial_payload(result.best_trial), indent=2, sort_keys=True)
+            + "\n",
             encoding="utf-8",
         )
     return {
@@ -75,6 +76,8 @@ def _summary_payload(result: OptimizationResult) -> Dict[str, Any]:
     return {
         "study_name": result.config.study_name,
         "n_trials": len(result.trials),
-        "best_trial_id": None if result.best_trial is None else result.best_trial.trial_id,
+        "best_trial_id": (
+            None if result.best_trial is None else result.best_trial.trial_id
+        ),
         "best_score": None if result.best_trial is None else result.best_trial.score,
     }

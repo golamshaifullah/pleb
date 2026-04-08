@@ -11,7 +11,6 @@ import pandas as pd
 from .folds import FoldConfig, make_fold_frames, summarize_fold_stability
 from .models import FoldSummary
 
-
 DEFAULT_OUTLIER_COLS = (
     "bad_point",
     "robust_outlier",
@@ -138,14 +137,22 @@ def _event_count(df: pd.DataFrame) -> int:
     for col in _event_id_columns(df.columns):
         values = pd.to_numeric(df[col], errors="coerce").fillna(-1).astype(int)
         total += int(values.loc[values != -1].nunique())
-    if "solar_event_member" in df.columns and df["solar_event_member"].fillna(False).any():
+    if (
+        "solar_event_member" in df.columns
+        and df["solar_event_member"].fillna(False).any()
+    ):
         total += 1
-    if "orbital_phase_bad" in df.columns and df["orbital_phase_bad"].fillna(False).any():
+    if (
+        "orbital_phase_bad" in df.columns
+        and df["orbital_phase_bad"].fillna(False).any()
+    ):
         total += 1
     return total
 
 
-def _event_coherence(df: pd.DataFrame, event_mask: pd.Series, *, backend_col: str) -> float:
+def _event_coherence(
+    df: pd.DataFrame, event_mask: pd.Series, *, backend_col: str
+) -> float:
     if not event_mask.any():
         return 0.0
     if backend_col not in df.columns:

@@ -201,6 +201,90 @@ There are also raw counts such as:
 - ``n_events``
 - ``n_event_members``
 
+Metric definitions
+------------------
+
+The current metrics are simple summary statistics derived from the ``*_qc.csv``
+tables. They are intended to be transparent and easy to inspect, rather than
+hidden model scores.
+
+Counts
+~~~~~~
+
+- ``n_toas``:
+  number of TOA rows in the QC table.
+- ``n_bad``:
+  number of TOAs flagged by the combined bad-point mask.
+- ``n_events``:
+  number of distinct detected events. This is counted from event ID columns
+  such as ``transient_id`` and related event labels, with solar and orbital
+  event flags contributing when present.
+- ``n_event_members``:
+  number of TOAs that belong to any detected event.
+
+Fractions
+~~~~~~~~~
+
+- ``bad_fraction``:
+  ``n_bad / n_toas``.
+- ``event_fraction``:
+  ``n_event_members / n_toas``.
+
+Event-structure metrics
+~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``event_coherence``:
+  among TOAs marked as event members, this is the fraction belonging to the
+  most common backend. A value near 1 means event members are concentrated in
+  one backend; a lower value means they are spread across multiple backends.
+- ``overfragmentation_penalty``:
+  fraction of detected events that contain only one TOA. Large values indicate
+  that event detection is breaking structure into isolated single-point events.
+
+Residual-based metrics
+~~~~~~~~~~~~~~~~~~~~~~
+
+These are computed only after removing TOAs flagged as bad.
+
+- ``residual_cleanliness``:
+  ``1 / (1 + MAD(clean residuals))`` where MAD is the median absolute
+  deviation. Larger values mean the cleaned residuals are more tightly grouped.
+- ``residual_whiteness``:
+  ``1 / (1 + abs(lag-1 autocorrelation))`` for the cleaned residual series.
+  Larger values mean the cleaned residuals are closer to white noise at
+  one-step lag.
+- ``scaled_residual_cleanliness``:
+  ``1 / (1 + median(abs(residual) / sigma))`` for rows with valid
+  uncertainties. Larger values mean smaller residuals relative to the reported
+  TOA uncertainty scale.
+
+Backend-distribution metric
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``backend_inconsistency_penalty``:
+  normalized entropy of the bad-TOA distribution across backends. A value near
+  0 means bad TOAs are concentrated in one backend; a larger value means they
+  are spread more evenly across many backends.
+
+Search-complexity metric
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``parameter_complexity_penalty``:
+  active tuned parameters divided by the total number of parameters in the
+  search space. This penalizes settings that only win by turning on many extra
+  degrees of freedom.
+
+Fold-robustness metrics
+~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``stability``:
+  ``1 / (1 + stddev(bad_fraction across folds))``.
+- ``event_stability``:
+  ``1 / (1 + stddev(event_fraction across folds))``.
+
+For both stability metrics, values near 1 mean the metric changes little when
+the data are perturbed by the fold scheme.
+
 Output files
 ------------
 

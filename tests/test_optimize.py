@@ -9,8 +9,10 @@ import pandas as pd
 from pleb.optimize.cli import load_optimization_config
 from pleb.optimize.fold_datasets import build_fold_dataset
 from pleb.optimize.folds import FoldConfig, load_fold_config
+from pleb.optimize.models import OptimizationConfig, OptimizationResult, TrialResult
 from pleb.optimize.objectives import compute_score, load_objective_config
 from pleb.optimize.optimizer import run_optimization
+from pleb.optimize.report import write_pdf_report
 from pleb.optimize.scorers import score_run_dir
 from pleb.optimize.search_space import (
     active_parameter_count,
@@ -33,8 +35,7 @@ low = 10.0
 high = 20.0
 depends_on = "pqc_step_enabled"
 enabled_values = [true]
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     space = load_search_space(path)
@@ -59,14 +60,14 @@ def test_objective_and_fold_loaders(tmp_path: Path) -> None:
 [weights]
 bad_fraction = -1.0
 residual_cleanliness = 2.0
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     objective = load_objective_config(objective_path)
-    assert compute_score(
-        {"bad_fraction": 0.1, "residual_cleanliness": 0.5}, objective
-    ) == 0.9
+    assert (
+        compute_score({"bad_fraction": 0.1, "residual_cleanliness": 0.5}, objective)
+        == 0.9
+    )
 
     folds_path = tmp_path / "folds.toml"
     folds_path.write_text(
@@ -74,12 +75,13 @@ residual_cleanliness = 2.0
 [folds]
 mode = "time_blocks"
 n_splits = 3
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     folds = load_fold_config(folds_path)
-    assert folds == FoldConfig(mode="time_blocks", n_splits=3, time_col="mjd", backend_col="sys")
+    assert folds == FoldConfig(
+        mode="time_blocks", n_splits=3, time_col="mjd", backend_col="sys"
+    )
 
 
 def test_score_run_dir_reads_qc_outputs(tmp_path: Path) -> None:
@@ -166,8 +168,7 @@ reference_branch = "main"
 pulsars = ["J0000+0000"]
 run_tempo2 = true
 run_pqc = true
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     search_space = tmp_path / "space.toml"
@@ -177,8 +178,7 @@ run_pqc = true
 type = "float"
 low = 0.001
 high = 0.01
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     objective = tmp_path / "objective.toml"
@@ -187,8 +187,7 @@ high = 0.01
 [weights]
 residual_cleanliness = 1.0
 bad_fraction = -1.0
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     optimize_cfg = tmp_path / "optimize.toml"
@@ -205,8 +204,7 @@ n_trials = 2
 sampler = "random"
 seed = 7
 jobs = 1
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
@@ -239,10 +237,62 @@ jobs = 1
 def test_parameter_override_helpers() -> None:
     params = {"pqc_fdr_q": 0.01, "pqc_step_enabled": True, "pulsars": ["J1713+0747"]}
     overrides = parameters_to_set_overrides(params)
-    assert 'pqc_fdr_q=0.01' in overrides
-    assert 'pqc_step_enabled=true' in overrides
+    assert "pqc_fdr_q=0.01" in overrides
+    assert "pqc_step_enabled=true" in overrides
     assert 'pulsars=["J1713+0747"]' in overrides
     space = load_search_space(
-        Path("/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml")
+        Path(
+            "/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml"
+        )
     )
     assert active_parameter_count(space, {"pqc_step_enabled": False}) >= 1
+
+
+def test_write_pdf_report_with_baseline_and_trials(tmp_path: Path) -> None:
+    baseline_root = tmp_path / "baseline" / "main"
+    trial_root = tmp_path / "trial_0001" / "main"
+    baseline_run = baseline_root / "qc" / "main"
+    trial_run = trial_root / "qc" / "main"
+    baseline_run.mkdir(parents=True)
+    trial_run.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "mjd": [1.0, 2.0, 3.0],
+            "resid_us": [0.1, 2.0, 0.3],
+            "sigma_us": [1.0, 1.0, 1.0],
+            "bad_point": [False, True, False],
+            "event_type": [None, "step", None],
+        }
+    ).to_csv(baseline_run / "J0000+0000_qc.csv", index=False)
+    pd.DataFrame(
+        {
+            "mjd": [1.0, 2.0, 3.0],
+            "resid_us": [0.1, 0.2, 0.15],
+            "sigma_us": [1.0, 1.0, 1.0],
+            "bad_point": [False, False, False],
+            "event_type": [None, None, None],
+        }
+    ).to_csv(trial_run / "J0000+0000_qc.csv", index=False)
+    cfg = OptimizationConfig(
+        base_config_path=tmp_path / "base.toml",
+        out_dir=tmp_path / "out",
+        study_name="unit",
+        baseline_run_dir=baseline_root,
+    )
+    trial = TrialResult(
+        trial_id=1,
+        status="ok",
+        params={"pqc_fdr_q": 0.01},
+        score=1.2,
+        metrics={},
+        run_dir=trial_root,
+    )
+    result = OptimizationResult(
+        config=cfg,
+        trials=[trial],
+        best_trial=trial,
+        out_dir=cfg.out_dir,
+    )
+    pdf_path = write_pdf_report(result)
+    assert pdf_path is not None
+    assert pdf_path.exists()

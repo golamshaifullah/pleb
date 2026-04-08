@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from random import Random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..config import PipelineConfig
 from ..config_io import _load_config_dict, _set_dotted_key
@@ -13,7 +13,7 @@ from .fold_datasets import build_fold_dataset
 from .models import OptimizationConfig, OptimizationResult, TrialResult
 from .objectives import compute_score, load_objective_config
 from .results import write_results
-from .report import write_markdown_report
+from .report import write_markdown_report, write_pdf_report
 from .models import FoldSummary
 from .scorers import score_run_dir
 from .search_space import (
@@ -42,16 +42,23 @@ def run_optimization(cfg: OptimizationConfig) -> OptimizationResult:
         trials = _run_optuna_trials(cfg, space, objective, fold_cfg)
     else:
         raise ValueError(f"Unsupported optimization sampler: {cfg.sampler!r}")
-    successful = [trial for trial in trials if trial.status == "ok" and trial.score is not None]
-    best = None if not successful else max(successful, key=lambda item: float(item.score))
+    successful = [
+        trial for trial in trials if trial.status == "ok" and trial.score is not None
+    ]
+    best = (
+        None if not successful else max(successful, key=lambda item: float(item.score))
+    )
     if not cfg.keep_trial_runs:
         best_run_dir = None if best is None else best.run_dir
         for trial in trials:
             if trial.run_dir is not None and trial.run_dir != best_run_dir:
                 remove_tree_if_exists(Path(trial.run_dir))
-    result = OptimizationResult(config=cfg, trials=trials, best_trial=best, out_dir=cfg.out_dir)
+    result = OptimizationResult(
+        config=cfg, trials=trials, best_trial=best, out_dir=cfg.out_dir
+    )
     write_results(result)
     write_markdown_report(result)
+    write_pdf_report(result)
     if cfg.write_best_config and best is not None:
         write_best_overrides(result.out_dir / "best_overrides.toml", best.params)
     return result
@@ -69,7 +76,12 @@ def _run_random_trials(cfg, space, objective, fold_cfg) -> List[TrialResult]:
     for trial_id in range(1, int(cfg.n_trials) + 1):
         params = sample_parameters(space, rng)
         trial = run_trial(cfg, trial_id, params)
-        _score_trial(cfg, trial, fold_cfg, objective, space)
+        try:
+            _score_trial(cfg, trial, fold_cfg, objective, space)
+        except Exception as exc:
+            trial.status = "failed"
+            trial.error = str(exc)
+            trial.score = None
         trials.append(trial)
         if cfg.fail_fast and trial.status != "ok":
             break
@@ -90,7 +102,12 @@ def _run_optuna_trials(cfg, space, objective, fold_cfg) -> List[TrialResult]:
         params = _suggest_with_optuna(space, study_trial)
         trial_id = len(trials) + 1
         trial = run_trial(cfg, trial_id, params)
-        _score_trial(cfg, trial, fold_cfg, objective, space)
+        try:
+            _score_trial(cfg, trial, fold_cfg, objective, space)
+        except Exception as exc:
+            trial.status = "failed"
+            trial.error = str(exc)
+            trial.score = None
         trials.append(trial)
         if trial.status != "ok" or trial.score is None:
             raise optuna.TrialPruned()
@@ -110,9 +127,13 @@ def _suggest_with_optuna(space, trial) -> Dict[str, Any]:
         if not is_parameter_active(spec, params):
             continue
         if spec.kind == "bool":
-            params[spec.name] = bool(trial.suggest_categorical(spec.name, [False, True]))
+            params[spec.name] = bool(
+                trial.suggest_categorical(spec.name, [False, True])
+            )
         elif spec.kind == "categorical":
-            params[spec.name] = trial.suggest_categorical(spec.name, list(spec.choices or []))
+            params[spec.name] = trial.suggest_categorical(
+                spec.name, list(spec.choices or [])
+            )
         elif spec.kind == "float":
             params[spec.name] = trial.suggest_float(
                 spec.name,
@@ -124,7 +145,9 @@ def _suggest_with_optuna(space, trial) -> Dict[str, Any]:
         elif spec.kind == "int":
             step = None if spec.step is None else int(spec.step)
             params[spec.name] = int(
-                trial.suggest_int(spec.name, int(spec.low), int(spec.high), step=step or 1)
+                trial.suggest_int(
+                    spec.name, int(spec.low), int(spec.high), step=step or 1
+                )
             )
         elif spec.kind == "fixed":
             params[spec.name] = spec.fixed

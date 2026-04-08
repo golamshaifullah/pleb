@@ -14,7 +14,6 @@ except Exception:  # pragma: no cover
 
 from .models import ParameterSpec, SearchSpace
 
-
 _VALID_KINDS = {"float", "int", "bool", "categorical", "fixed"}
 
 
@@ -46,9 +45,7 @@ def load_search_space(path: Path) -> SearchSpace:
                 else str(raw.get("depends_on"))
             ),
             enabled_values=(
-                list(raw.get("enabled_values", []))
-                if "enabled_values" in raw
-                else None
+                list(raw.get("enabled_values", [])) if "enabled_values" in raw else None
             ),
         )
         _validate_parameter(spec)

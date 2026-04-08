@@ -1262,7 +1262,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         qc_rows.append(row)
                 else:
 
-                    def _run_pqc(task: tuple[str, str, Path, Path, Path]) -> Dict[str, object]:
+                    def _run_pqc(
+                        task: tuple[str, str, Path, Path, Path],
+                    ) -> Dict[str, object]:
                         p, variant, parfile, out_csv, settings_out = task
                         try:
                             df = run_pqc_for_parfile_subprocess(
@@ -1304,7 +1306,11 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             desc=f"pqc ({branch})",
                         ):
                             qc_rows.append(fut.result())
-                if run_variants and not keep_variant_tmp and variant_tmp_root is not None:
+                if (
+                    run_variants
+                    and not keep_variant_tmp
+                    and variant_tmp_root is not None
+                ):
                     remove_tree_if_exists(variant_tmp_root)
 
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)

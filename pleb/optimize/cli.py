@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
 import json
 
 try:
@@ -52,6 +51,11 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
         ),
         out_dir=Path(str(data.get("out_dir", "results/optimize"))),
         study_name=str(data.get("study_name", "pqc_optimize")),
+        baseline_run_dir=(
+            None
+            if data.get("baseline_run_dir") in (None, "")
+            else Path(str(data["baseline_run_dir"]))
+        ),
         n_trials=int(data.get("n_trials", 20)),
         sampler=str(data.get("sampler", "random")),
         seed=int(data.get("seed", 12345)),

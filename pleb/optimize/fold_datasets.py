@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List
 import shutil
 
 import pandas as pd
@@ -56,7 +56,11 @@ def build_fold_dataset(
 
 def _selected_pulsars(cfg: PipelineConfig, dataset_root: Path) -> List[str]:
     if cfg.pulsars == "ALL":
-        return sorted(p.name for p in dataset_root.iterdir() if p.is_dir() and p.name.startswith("J"))
+        return sorted(
+            p.name
+            for p in dataset_root.iterdir()
+            if p.is_dir() and p.name.startswith("J")
+        )
     return [str(p) for p in cfg.pulsars]
 
 
@@ -109,20 +113,31 @@ def _compute_fold_membership(
             int(x) for x in work["_fold_id"].dropna().astype(int).unique().tolist()
         )
         if not available:
-            return "all", {(row["timfile"], int(row["toa_index"])): True for _, row in work.iterrows()}
+            return "all", {
+                (row["timfile"], int(row["toa_index"])): True
+                for _, row in work.iterrows()
+            }
         held_out = int(available[int(fold_index) % len(available)])
     elif mode == "backend_holdout":
         backends = sorted(str(x) for x in work["backend"].fillna("").unique() if str(x))
         if not backends:
-            return "all", {(row["timfile"], int(row["toa_index"])): True for _, row in work.iterrows()}
+            return "all", {
+                (row["timfile"], int(row["toa_index"])): True
+                for _, row in work.iterrows()
+            }
         held_out = backends[int(fold_index) % len(backends)]
-        work["_fold_id"] = work["backend"].astype(str).map(lambda val: 1 if val == held_out else 0)
+        work["_is_held_out"] = (
+            work["backend"].astype(str).map(lambda val: val == held_out)
+        )
     else:
         raise ValueError(f"Unsupported fold mode for reruns: {mode!r}")
     membership: Dict[tuple[str, int], bool] = {}
     for _, row in work.iterrows():
         key = (str(row["timfile"]), int(row["toa_index"]))
-        membership[key] = int(row["_fold_id"]) != int(held_out)
+        if mode == "backend_holdout":
+            membership[key] = not bool(row["_is_held_out"])
+        else:
+            membership[key] = int(row["_fold_id"]) != int(held_out)
     return held_out, membership
 
 
