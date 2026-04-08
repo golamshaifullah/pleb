@@ -18,9 +18,8 @@ Why This Stage Comes Before PQC
 PQC grouping and interpretation depend on the data layout and metadata being
 reasonably coherent.
 
-If the student runs PQC before system flags and jumps are in order, they may
-get diagnostics that are technically correct but operationally hard to
-interpret.
+If PQC is run before system flags and jumps are in order, the output may be
+technically correct but operationally hard to interpret.
 
 So the first serious branch-building pass should usually be:
 
@@ -114,7 +113,7 @@ Mutation keys:
   Infer or normalize system labels used later by jump logic and PQC grouping.
 
 ``fix_system_flag_overwrite_existing``
-  Overwrite existing inconsistent values. Use carefully, but for a first
+  Overwrite existing inconsistent values. Use carefully, but for an initial
   harmonization pass it is often the right choice.
 
 ``fix_insert_missing_jumps``

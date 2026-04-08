@@ -1,20 +1,21 @@
 Single-Pulsar Playbook
 ======================
 
-This guide is a step-by-step manual for learning the full workflow.
+This guide is a step-by-step manual for running the full single-pulsar
+workflow.
 
-The intended outcome is not just "they can run a command." The intended
-outcome is:
+The goal is practical understanding. After working through these pages, a user
+should be able to:
 
-- they know what files exist,
-- they know which config keys belong in which file,
-- they know what each stage is trying to achieve,
-- they can build a basic single-pulsar branch with system flags and jumps,
-- they can run PQC in a controlled way,
-- they can explain why a given PQC configuration was chosen,
-- they can separate detection from data mutation.
+- identify the files involved in each stage,
+- place configuration keys in the correct file type,
+- understand what each stage is intended to produce,
+- build a usable single-pulsar branch with consistent system flags and jumps,
+- run PQC in a controlled and reproducible way,
+- explain the rationale behind a PQC configuration,
+- keep detection and mutation conceptually separate.
 
-The pages below are ordered in the recommended learning sequence.
+The pages below are ordered in the recommended progression.
 
 .. toctree::
    :maxdepth: 2
@@ -37,19 +38,19 @@ Do not skip directly to PQC.
 
 The order matters:
 
-1. learn the filesystem layout and config roles,
-2. learn ingest and the canonical data tree,
-3. learn the first FixDataset pass that creates a usable branch with
+1. start with the filesystem layout and config roles,
+2. then ingest and the canonical data tree,
+3. then the first FixDataset pass that creates a usable branch with
    consistent flags and jumps,
-4. learn pure detection with PQC,
-5. learn non-destructive QC application,
+4. then pure detection with PQC,
+5. then non-destructive QC application,
 6. only then discuss tuning, backend-specific overrides, and workflows.
 
 Core principle:
 
-``pleb`` coordinates stages and file movement. ``pqc`` is a detector layer
-inside that process. It is usually easier to understand the data tree and
-branch structure first, then QC.
+``pleb`` coordinates stages and file movement. ``pqc`` is the detector layer
+used within that process. In practice, it is easier to understand the data
+tree and branch structure first, then QC.
 
 Further reading:
 

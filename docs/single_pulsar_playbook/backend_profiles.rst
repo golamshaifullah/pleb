@@ -135,8 +135,8 @@ The first tunable keys should usually be:
 ``step_delta_chi2_thresh`` and ``dm_step_delta_chi2_thresh``
   Useful when a backend is producing too many or too few step detections.
 
-Only after those are understood should the student start tuning broader event
-detectors such as bump or glitch thresholds.
+Only after those are understood should broader event detectors such as bump or
+glitch thresholds be tuned.
 
 
 What Usually Signals The Need For An Override
@@ -221,7 +221,8 @@ For every override, it should be possible to answer four questions:
 3. what output symptom motivated the change,
 4. what changed after rerunning.
 
-If they cannot answer those questions, the override is not yet justified.
+If those questions cannot be answered clearly, the override is not yet
+justified.
 
 
 Related Documentation

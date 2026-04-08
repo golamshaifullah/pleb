@@ -32,7 +32,7 @@ Typical contents:
 - optional template files,
 - inconsistent backend naming.
 
-This tree should usually not be edited during normal training runs.
+This tree should usually not be edited during normal runs.
 
 
 Canonical Ingested Dataset Tree
@@ -140,8 +140,8 @@ For a single-pulsar setup, create a small dedicated set of files.
      workflows/
        single_pulsar_3pass.toml
 
-This is not required by the code, but it is a clean layout for learning and
-maintenance.
+This layout is not required by the code, but it is clean, explicit, and easy
+to maintain.
 
 
 How Paths Resolve Across These Files
@@ -207,8 +207,8 @@ These are the first keys to understand.
 
 ``dataset_name``
   Dataset directory or dataset identifier resolved under ``home_dir``.
-  In most single-pulsar setups this is a relative path under ``home_dir``, not an
-  independent root.
+  In most single-pulsar setups this is a relative path under ``home_dir``, not
+  an independent root.
 
 ``results_dir``
   Where output run directories are written.
@@ -216,7 +216,7 @@ These are the first keys to understand.
 
 ``branches``
   Which data-repo git branches to process.
-  For a single-pulsar training run, this should usually be a one-element list.
+  For a single-pulsar run, this should usually be a one-element list.
 
 ``reference_branch``
   The branch used as reference for comparisons and often the branch the run is
@@ -265,7 +265,7 @@ Use names that expose stage and purpose:
 - ``single_pulsar_backend_profiles.toml``
 - ``single_pulsar_3pass.toml``
 
-That makes later debugging much easier than ambiguous names like
+That makes later debugging much easier than ambiguous names such as
 ``test.toml`` or ``config2.toml``.
 
 

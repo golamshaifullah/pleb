@@ -1,14 +1,13 @@
-Overview And Learning Goal
-==========================
+Overview And Scope
+==================
 
-This section defines the learning target precisely.
+This section defines the scope of the manual and the stage boundaries it uses.
 
 
 What This Manual Covers
 -----------------------
 
-By the end of the exercise, the reader should understand five separate
-things:
+By the end of the exercise, a user should understand five separate things:
 
 1. the data tree,
 2. the config tree,
@@ -16,14 +15,14 @@ things:
 4. the difference between detection and mutation,
 5. the meaning of backend grouping for PQC.
 
-If any of these are missing, it is possible to repeat commands
-mechanically but will not be able to debug or extend the workflow.
+If any of these are missing, it is still possible to repeat commands
+mechanically, but not to debug or extend the workflow with confidence.
 
 
 The Stages In Plain Terms
 -------------------------
 
-The pipeline is easiest to learn as four distinct operations.
+The pipeline is easiest to understand as four distinct operations.
 
 Stage 1: ingest
   Build a canonical pulsar directory tree from whatever raw layout the source
@@ -55,7 +54,7 @@ For one pulsar, the simplest robust story is:
 6. rerun if needed.
 
 This is slower than a one-line workflow, but it keeps the stage boundaries
-clear.
+clear and auditable.
 
 
 Stage Output Matrix
@@ -145,7 +144,7 @@ Why PQC Exists
 PQC is often misunderstood as "a tool that removes bad TOAs." That is not the
 right mental model.
 
-PQC is used because single-pulsar timing data often contains behavior that
+PQC is useful because single-pulsar timing data often contains behavior that
 should be reviewed explicitly:
 
 - isolated bad measurements,
@@ -180,14 +179,14 @@ PQC flags things. FixDataset changes things.
 Non-Destructive First Rule
 --------------------------
 
-For a first workflow:
+For an initial workflow:
 
 - do not delete TOAs immediately,
 - use new branches for each mutation pass,
 - use ``fix_qc_action = "comment"`` first,
 - preserve the previous branch so outputs can be diffed across stages.
 
-This is the safest way to teach cause and effect.
+This is the safest way to preserve cause and effect across stages.
 
 
 The End State
@@ -202,8 +201,8 @@ For one pulsar, a good final target is:
 - one QC-apply profile,
 - optionally one workflow file that chains those steps.
 
-That gives the student a reproducible, inspectable path from raw inputs to a
-reviewable cleaned branch.
+That produces a reproducible, inspectable path from raw inputs to a reviewable
+cleaned branch.
 
 
 Related Documentation

@@ -77,8 +77,8 @@ How To Read The Mapping Keys
 ----------------------------
 
 ``sources``
-  Informational root list. This helps the student document where material came
-  from, but does not define backend identity.
+  Informational root list. This records where material came from, but does not
+  define backend identity.
 
 ``par_roots``
   Directories where ingest looks for parfiles.
@@ -108,7 +108,7 @@ Why The Backend Key Matters
 The backend key is not just a label. It becomes part of the later dataset
 structure and later QC grouping logic.
 
-If the mapping uses inconsistent backend names, the student will later get:
+If the mapping uses inconsistent backend names, later stages will inherit:
 
 - broken or misleading jump logic,
 - bad system grouping,
@@ -254,8 +254,7 @@ Why This Stage Matters
 Do not treat ingest as a clerical stage.
 
 Ingest is the stage where raw source structure is translated into the naming
-and grouping model that later
-operations depend on.
+and grouping model that later operations depend on.
 
 
 Detailed Mapping Guidance

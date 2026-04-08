@@ -5,7 +5,7 @@ Once the separate stages are understood, the next step is to chain them into
 one reproducible workflow file.
 
 Workflow mode should not be the first introduction to the pipeline. It is most
-useful after the individual stages are already clear.
+useful after the individual stages are already understood.
 
 
 The Three Passes
@@ -234,7 +234,7 @@ Run:
 
    pleb workflow --file configs/workflows/single_pulsar_3pass.toml
 
-This is useful after the student has already run the stages manually at least
+This is most useful after the stages have already been run manually at least
 once.
 
 

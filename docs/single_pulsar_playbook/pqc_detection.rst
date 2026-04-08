@@ -140,8 +140,8 @@ pattern from ``configs/workflows/steps/step2_pqc_balanced_detect.toml``.
 Why This Profile Still Has FixDataset Enabled
 ---------------------------------------------
 
-One common question is why ``run_fix_dataset = true`` appears in a detect
-profile.
+One point that often needs clarification is why ``run_fix_dataset = true``
+appears in a detect profile.
 
 In this pattern, Step 2 still creates a branch boundary and can still
 regenerate variant products, but the QC-apply action itself is disabled.
@@ -235,10 +235,10 @@ For an initial run, start with a balanced profile:
 - comment-only downstream action,
 - compact report enabled.
 
-Avoid two extremes in the first pass:
+Avoid two extremes in the initial pass:
 
 - too conservative, where almost nothing is flagged,
-- too aggressive, which floods the student with unstructured alerts.
+- too aggressive, where the output is dominated by low-value alerts.
 
 
 How To Decide Whether A Detector Family Belongs In The First Run
@@ -250,7 +250,7 @@ question.
 Use them selectively:
 
 - robust outlier detection:
-  useful in almost every first pass because isolated outliers are common and
+  useful in almost every initial pass because isolated outliers are common and
   easy to interpret,
 - structure testing:
   useful early because it helps reveal residual dependence on frequency, solar
@@ -358,7 +358,7 @@ Then add:
   behavior worth testing explicitly.
 
 The reason to expand gradually is interpretability. When many detector
-families fire in the first run, it is harder to learn which family is driving
+families fire in the first run, it is harder to tell which family is driving
 the output.
 
 
