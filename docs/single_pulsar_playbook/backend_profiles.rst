@@ -171,8 +171,7 @@ Pattern: one backend is noisy but not obviously pathological
 Pattern: a backend has known structured behavior around instrument changes
   Consider a lower step threshold for that backend only.
 
-Pattern: one backend dominates bad-measurement flags because uncertainties are
-poorly calibrated
+Pattern: one backend dominates bad-measurement flags because uncertainties are poorly calibrated
   Review that backend's error model and only then consider changing ``fdr_q``
   or related sensitivity settings.
 

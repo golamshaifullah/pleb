@@ -1089,6 +1089,12 @@ policy.pqc
   Modes: ``pipeline, workflow``
   Level: ``full``
 
+``pqc_keep_variant_tmp``
+  Type: ``bool``
+  Default: ``False``
+  Modes: ``pipeline, workflow``
+  Level: ``full``
+
 ``pqc_mark_only_worst_per_day``
   Type: ``bool``
   Default: ``True``
@@ -1189,6 +1195,12 @@ policy.pqc
 ``pqc_robust_z_thresh``
   Type: ``float``
   Default: ``5.0``
+  Modes: ``pipeline, workflow``
+  Level: ``full``
+
+``pqc_run_variants``
+  Type: ``bool``
+  Default: ``False``
   Modes: ``pipeline, workflow``
   Level: ``full``
 
