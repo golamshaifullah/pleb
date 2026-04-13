@@ -18,12 +18,12 @@ Statistical operations in this module are lightweight and mostly descriptive:
 
 Worked example
 --------------
-For a variant ``J1713+0747_all.new.tim``, reference-system generation:
+For a variant ``J1713+0747_new_all.tim``, reference-system generation:
 
 1. Split included backend timfiles by ``-sys``.
 2. Count TOAs per system and compute median TOA error (microseconds).
 3. Choose system with smallest median error; tie-break by largest TOA count.
-4. Write ``J1713+0747.new.par`` with ``JUMP -sys <system> 0 <fitflag>`` lines.
+4. Write ``J1713+0747_new.par`` with ``JUMP -sys <system> 0 <fitflag>`` lines.
 
 References
 ----------
@@ -571,6 +571,10 @@ def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
     base = alltim.name
     if base == f"{psr}_all.tim":
         return "base"
+    pref_us = f"{psr}_"
+    suff_us = "_all.tim"
+    if base.startswith(pref_us) and base.endswith(suff_us):
+        return base[len(pref_us) : -len(suff_us)]
     pref = f"{psr}_all."
     if base.startswith(pref) and base.endswith(".tim"):
         return base[len(pref) : -len(".tim")]
@@ -639,7 +643,7 @@ def build_variant_reference_jump_pars(
     ----------
     psr_dir : pathlib.Path
         Pulsar directory containing ``<PSR>.par`` and variant include files
-        ``<PSR>_all.<variant>.tim``.
+        ``<PSR>_<variant>_all.tim``.
     cfg : FixDatasetConfig
         FixDataset configuration. Requires Tempo2 container context via
         ``tempo2_home_dir``, ``tempo2_dataset_name``, and
@@ -649,7 +653,7 @@ def build_variant_reference_jump_pars(
     -------
     dict
         Per-variant report including selected reference system, system metrics,
-        CSV path, and output ``<PSR>.<variant>.par`` path.
+        CSV path, and output ``<PSR>_<variant>.par`` path.
 
     Notes
     -----
@@ -679,12 +683,17 @@ def build_variant_reference_jump_pars(
             "error": "tempo2 context missing; set tempo2_home_dir/tempo2_dataset_name/tempo2_singularity_image",
         }
 
-    all_variants = sorted(psr_dir.glob(f"{psr}_all.*.tim"))
+    all_variants = sorted(
+        {
+            *psr_dir.glob(f"{psr}_*_all.tim"),
+            *psr_dir.glob(f"{psr}_all.*.tim"),
+        }
+    )
     if not all_variants:
         return {
             "psr": psr,
             "variants": [],
-            "message": "No _all.variant.tim files found",
+            "message": "No variant all.tim files found",
         }
 
     dataset_root = psr_dir.parent
@@ -759,7 +768,7 @@ def build_variant_reference_jump_pars(
 
         # Evaluate each system with no-JUMP par.
         for sysv, files in temp_sys_files.items():
-            sys_all = tmp_root / f"{psr}_all.{vname}.{sysv}.tim"
+            sys_all = tmp_root / f"{psr}_{vname}_{sysv}_all.tim"
             lines = ["FORMAT 1"]
             for f in files:
                 lines.append(f"INCLUDE {f.name}")
@@ -770,7 +779,7 @@ def build_variant_reference_jump_pars(
             # and the dataset root is bound to /data inside the container.
             par_container = f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
             tim_container = f"/data/results/jump_reference_tmp/{psr}/{sys_all.name}"
-            log_path = tmp_root / f"{psr}.{vname}.{sysv}.tempo2.log"
+            log_path = tmp_root / f"{psr}_{vname}_{sysv}.tempo2.log"
             rc = run_subprocess(
                 prefix + ["tempo2", "-f", par_container, tim_container], log_path
             )
@@ -808,7 +817,7 @@ def build_variant_reference_jump_pars(
         )
         ref_system = str(rows_sorted[0]["system"])
 
-        csv_path = csv_base / f"{psr}_jump_reference.{vname}.csv"
+        csv_path = csv_base / f"{psr}_jump_reference_{vname}.csv"
         with open(csv_path, "w", encoding="utf-8") as f:
             f.write(
                 "variant,system,n_toa,median_toa_err_us,reduced_chisq,source_timfiles,reference_system\n"
@@ -820,7 +829,7 @@ def build_variant_reference_jump_pars(
 
         # Build variant par with jumps for all systems in this variant:
         # reference fixed at 0 0, others start at 0 with fit flag 1.
-        par_out = psr_dir / f"{psr}.{vname}.par"
+        par_out = psr_dir / f"{psr}_{vname}.par"
         out_lines = []
         for ln in no_jump_lines:
             out_lines.append(ln)
@@ -852,7 +861,7 @@ def build_variant_reference_jump_pars(
 
 
 def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object]:
-    """Generate ``_all.<variant>.tim`` include files from class catalogs.
+    """Generate ``<PSR>_<variant>_all.tim`` include files from class catalogs.
 
     Parameters
     ----------
@@ -928,7 +937,7 @@ def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, 
             if ok:
                 selected.append(f"tims/{t.name}")
 
-        target = psr_dir / f"{psr}_all.{vname}.tim"
+        target = psr_dir / f"{psr}_{vname}_all.tim"
         content = list(header_lines)
         for rel in sorted(selected):
             content.append(f"INCLUDE {rel}")

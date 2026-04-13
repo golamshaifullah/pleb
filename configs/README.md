@@ -29,7 +29,7 @@ Subfolders are mode-oriented:
 - `ingest/`: ingest-mode and ingest-like profiles.
 - `fixdataset/`: fix-focused profiles, including jump discovery and variants.
 - `pqc/`: PQC-driven profiles (detection and apply variants).
-- `pipeline/`: general end-to-end or legacy mixed profiles.
+- `pipeline/`: general end-to-end profiles.
 
 Use these as templates and copy into your project-specific profile files.
 
@@ -93,11 +93,8 @@ Treat this as runtime/reproducibility state, not as primary authoring inputs.
 
 ### `configs/settings/`
 
-Legacy location from older layout revisions.
-
-Current code prefers `configs/runs`, `configs/catalogs`, `configs/rules`, and `configs/state`.
-
-Do not add new config assets to `configs/settings`.
+Reserved. Use `configs/runs`, `configs/workflows`, `configs/catalogs`,
+`configs/rules`, and `configs/state` for current configuration assets.
 
 ## Naming conventions
 

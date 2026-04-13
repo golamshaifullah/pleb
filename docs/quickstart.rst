@@ -16,7 +16,6 @@ Use this map when choosing where to put files:
 - ``configs/catalogs/``: reusable mapping/lookup data.
 - ``configs/rules/``: rule-based behavior policies (relabel/overlap/PQC profiles).
 - ``configs/state/lockfiles/``: generated ingest lock snapshots/validation.
-- ``configs/settings/``: legacy location; do not add new files.
 
 For full layout guidance, see :doc:`config_layout`.
 

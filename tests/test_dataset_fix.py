@@ -8,10 +8,13 @@ import warnings
 from pleb.tim_utils import is_toa_line
 from pleb.dataset_fix import (
     FixDatasetConfig,
+    _variant_name_from_alltim,
     apply_pqc_outliers,
+    build_variant_reference_jump_pars,
     count_toa_lines,
     extract_flag_values,
     ensure_timfile_flags,
+    generate_alltim_variants,
     parse_include_lines,
     remove_patterns_from_par_tim,
     update_alltim_includes,
@@ -231,3 +234,101 @@ def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     assert len(toa_comments) == 1
     assert toa_comments[0].startswith("C QC_OUTLIER ")
     assert "\tf 1400" not in toa_comments[0]
+
+
+def test_variant_name_parser_accepts_underscore_and_legacy_dot_forms() -> None:
+    psr = "J0000+0000"
+    assert _variant_name_from_alltim(psr, Path(f"{psr}_legacy_all.tim")) == "legacy"
+    assert _variant_name_from_alltim(psr, Path(f"{psr}_all.legacy.tim")) == "legacy"
+    assert _variant_name_from_alltim(psr, Path(f"{psr}_all.tim")) == "base"
+
+
+def test_generate_alltim_variants_uses_underscore_naming(tmp_path: Path) -> None:
+    psr = "J0000+0000"
+    psr_dir = tmp_path / psr
+    tims_dir = psr_dir / "tims"
+    tims_dir.mkdir(parents=True)
+
+    _write(
+        psr_dir / f"{psr}_all.tim",
+        "FORMAT 1\nINCLUDE tims/LEGACY.tim\nINCLUDE tims/NEW.tim\n",
+    )
+    _write(tims_dir / "LEGACY.tim", "f 1400 55000 1 1 -sys LEGACY\n")
+    _write(tims_dir / "NEW.tim", "f 1400 55001 1 1 -sys NEW\n")
+
+    cls = tmp_path / "backend_classifications.toml"
+    cls.write_text(
+        """
+[classes.legacy]
+systems = ["LEGACY"]
+
+[classes.new]
+systems = ["NEW"]
+""",
+        encoding="utf-8",
+    )
+    variants = tmp_path / "alltim_variants.toml"
+    variants.write_text(
+        """
+[variants.legacy]
+include_classes = ["legacy"]
+
+[variants.new]
+include_classes = ["new"]
+""",
+        encoding="utf-8",
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        dry_run=False,
+        backup=False,
+        backend_classifications_path=str(cls),
+        alltim_variants_path=str(variants),
+    )
+    rep = generate_alltim_variants(psr_dir, cfg)
+
+    assert (psr_dir / f"{psr}_legacy_all.tim").exists()
+    assert (psr_dir / f"{psr}_new_all.tim").exists()
+    assert "legacy" in rep["variants"]
+    assert "new" in rep["variants"]
+
+
+def test_build_variant_reference_jump_pars_uses_underscore_outputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    psr = "J0000+0000"
+    psr_dir = tmp_path / psr
+    psr_dir.mkdir(parents=True)
+    _write(psr_dir / f"{psr}.par", "PSRJ J0000+0000\n")
+    _write(
+        psr_dir / f"{psr}_legacy_all.tim",
+        "FORMAT 1\nINCLUDE tims/BACKEND.tim\n",
+    )
+    _write(
+        psr_dir / "tims" / "BACKEND.tim",
+        "toa 1400 55000 1 1 -sys SYSA\n"
+        "toa 1400 55001 2 1 -sys SYSB\n",
+    )
+
+    monkeypatch.setattr("pleb.dataset_fix.build_singularity_prefix", lambda *a, **k: [])
+    monkeypatch.setattr("pleb.dataset_fix.run_subprocess", lambda *a, **k: 0)
+    monkeypatch.setattr("pleb.dataset_fix._parse_tempo2_redchisq", lambda *a, **k: 1.0)
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        dry_run=False,
+        backup=False,
+        tempo2_home_dir=tmp_path,
+        tempo2_dataset_name=".",
+        tempo2_singularity_image=tmp_path / "tempo2.sif",
+    )
+    (tmp_path / "tempo2.sif").write_text("", encoding="utf-8")
+
+    rep = build_variant_reference_jump_pars(psr_dir, cfg)
+    variant = rep["variants"]["legacy"]
+    par_out = psr_dir / f"{psr}_legacy.par"
+
+    assert par_out.exists()
+    assert variant["par_out"] == str(par_out)
+    assert Path(str(variant["csv"])).name == f"{psr}_jump_reference_legacy.csv"

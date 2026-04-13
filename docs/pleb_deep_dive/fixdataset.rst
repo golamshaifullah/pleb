@@ -12,7 +12,8 @@ A practical order for understanding behavior:
 2. overlap/relabel policy application,
 3. jump insertion/pruning,
 4. par default enforcement,
-5. variant generation (tim + optional variant par),
+5. variant generation (``<PSR>_<variant>_all.tim`` plus optional
+   ``<PSR>_<variant>.par``),
 6. optional QC-based apply actions,
 7. optional per-TOA ``-pqc`` class tagging.
 
@@ -54,8 +55,8 @@ Variant generation
 
 FixDataset can generate:
 
-- multiple include files: ``J*_all.<variant>.tim``
-- variant par products (when configured)
+- multiple include files: ``<PSR>_<variant>_all.tim``
+- variant par products: ``<PSR>_<variant>.par`` when enabled
 
 Ensure classification + variant catalogs are both set and compatible.
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pleb.config import PipelineConfig
+from pleb.config import IngestConfig, PipelineConfig
 
 
 def test_config_json_roundtrip(tmp_path: Path) -> None:
@@ -103,3 +103,28 @@ whitenoise_timfile_name = "{pulsar}_all.new.tim"
     assert cfg.whitenoise_single_toa_mode == "equad0"
     assert cfg.whitenoise_fit_timing_model_first is False
     assert cfg.whitenoise_timfile_name == "{pulsar}_all.new.tim"
+
+
+def test_ingest_config_roundtrip_preserves_timing_defaults(tmp_path: Path) -> None:
+    cfg = IngestConfig(
+        ingest_mapping_file=tmp_path / "mapping.json",
+        ingest_output_dir=tmp_path / "dataset",
+        home_dir=tmp_path / "home",
+        dataset_name="DR3single",
+        ingest_verify=True,
+        ingest_commit_branch_name="ingest/demo",
+        ingest_commit_base_branch="main",
+        ingest_commit_message="demo ingest",
+        fix_ensure_ephem="DE440",
+        fix_ensure_clk="TT(BIPM2023)",
+        fix_ensure_ne_sw="USE_DEFAULT",
+    )
+
+    loaded = IngestConfig.from_dict(cfg.to_dict())
+    assert loaded.ingest_mapping_file == cfg.ingest_mapping_file
+    assert loaded.ingest_output_dir == cfg.ingest_output_dir
+    assert loaded.ingest_commit_branch_name == "ingest/demo"
+    assert loaded.ingest_commit_base_branch == "main"
+    assert loaded.fix_ensure_ephem == "DE440"
+    assert loaded.fix_ensure_clk == "TT(BIPM2023)"
+    assert loaded.fix_ensure_ne_sw == "USE_DEFAULT"

@@ -102,7 +102,8 @@ Subfolders:
   system/telescope/backend inference.
 - ``system_tables/``: lookup tables used by fix/legacy behaviors
   (bandwidths, jump maps, overlaps, PTA labels).
-- ``variants/``: backend classification and ``_all.variant.tim`` definitions.
+- ``variants/``: backend classification and ``<PSR>_<variant>_all.tim``
+  definitions.
 
 ``configs/rules/``
 ~~~~~~~~~~~~~~~~~~
@@ -130,9 +131,9 @@ Treat this as generated reproducibility metadata, not authored policy.
 ``configs/settings/``
 ~~~~~~~~~~~~~~~~~~~~~
 
-Legacy location from older layouts.
-
-Do not place new config assets here.
+Reserved. Current code and documentation use ``configs/runs/``,
+``configs/workflows/``, ``configs/catalogs/``, ``configs/rules/``, and
+``configs/state/``.
 
 
 What Goes Where

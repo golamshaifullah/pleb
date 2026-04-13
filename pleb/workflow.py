@@ -289,6 +289,17 @@ def _run_step(
             Path(cfg.ingest_mapping_file),
             Path(cfg.ingest_output_dir),
             verify=bool(getattr(cfg, "ingest_verify", False)),
+            report_metadata={
+                "fix_ensure_ephem": getattr(cfg, "fix_ensure_ephem", None),
+                "fix_ensure_clk": getattr(cfg, "fix_ensure_clk", None),
+                "fix_ensure_ne_sw": getattr(cfg, "fix_ensure_ne_sw", None),
+                "ingest_commit_branch_name": getattr(
+                    cfg, "ingest_commit_branch_name", None
+                ),
+                "ingest_commit_base_branch": getattr(
+                    cfg, "ingest_commit_base_branch", None
+                ),
+            },
         )
         from .ingest import commit_ingest_changes
 

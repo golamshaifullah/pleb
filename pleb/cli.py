@@ -554,7 +554,19 @@ def run_ingest(argv: list[str] | None) -> int:
         verify = bool(args.ingest_verify or cfg.ingest_verify)
         pulsars = _parse_csv_list(args.ingest_pulsars) if args.ingest_pulsars else None
         report = ingest_dataset(
-            Path(mapping_file), Path(output_root), verify=verify, pulsars=pulsars
+            Path(mapping_file),
+            Path(output_root),
+            verify=verify,
+            pulsars=pulsars,
+            report_metadata={
+                "fix_ensure_ephem": cfg.fix_ensure_ephem,
+                "fix_ensure_clk": cfg.fix_ensure_clk,
+                "fix_ensure_ne_sw": cfg.fix_ensure_ne_sw,
+                "ingest_commit_branch_name": args.ingest_commit_branch_name
+                or cfg.ingest_commit_branch_name,
+                "ingest_commit_base_branch": args.ingest_commit_base_branch
+                or cfg.ingest_commit_base_branch,
+            },
         )
     except IngestError as e:
         raise SystemExit(str(e)) from e

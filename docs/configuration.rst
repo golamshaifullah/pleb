@@ -149,7 +149,6 @@ The standard layout is:
      schemas/
      state/
        lockfiles/
-     settings/  # legacy
 
 Interpretation by intent
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -160,7 +159,6 @@ Interpretation by intent
 - ``rules/``: reusable behavior policy.
 - ``schemas/``: validation/tooling files.
 - ``state/``: generated snapshots.
-- ``settings/``: legacy area; avoid for new config.
 
 
 Run Profiles

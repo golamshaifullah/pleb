@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple, Set
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Set
 from collections import Counter
 from datetime import datetime
 import os
@@ -24,6 +24,7 @@ import json
 import warnings
 import re
 import shutil
+from textwrap import wrap
 
 from .logging_utils import get_logger
 from .git_tools import checkout, require_clean_repo
@@ -578,6 +579,270 @@ def _find_clockfiles(roots: Iterable[Path]) -> Dict[str, Path]:
     return best
 
 
+def _parse_parfile_summary(par_path: Path) -> Dict[str, Any]:
+    """Summarize selected parfile metadata for ingest reporting."""
+    summary: Dict[str, Any] = {
+        "jump_count": 0,
+        "jump_lines": [],
+        "ephem": None,
+        "clk": None,
+        "ne_sw": None,
+    }
+    if not par_path.exists():
+        return summary
+    try:
+        lines = par_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return summary
+    jump_lines: List[str] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("C "):
+            continue
+        parts = line.split()
+        key = parts[0].upper()
+        if key == "JUMP":
+            jump_lines.append(line)
+        elif key == "EPHEM" and len(parts) >= 2:
+            summary["ephem"] = parts[1]
+        elif key == "CLK" and len(parts) >= 2:
+            summary["clk"] = parts[1]
+        elif key == "NE_SW" and len(parts) >= 2:
+            summary["ne_sw"] = parts[1]
+    summary["jump_count"] = len(jump_lines)
+    summary["jump_lines"] = jump_lines
+    return summary
+
+
+def _write_ingest_breakdown_csv(report: Dict[str, Any], out_dir: Path) -> Path:
+    """Write a per-pulsar ingest breakdown CSV."""
+    rows = report.get("per_pulsar", []) or []
+    path = out_dir / "ingest_pulsar_breakdown.csv"
+    headers = [
+        "pulsar",
+        "parfile_present",
+        "all_tim_present",
+        "n_timfiles_added",
+        "timfiles_added",
+        "n_templates_added",
+        "templates_added",
+        "n_jump_lines",
+        "ephem",
+        "clk",
+        "ne_sw",
+        "missing_parfile",
+        "missing_timfiles",
+        "missing_templates",
+    ]
+    lines = [",".join(headers)]
+    for row in rows:
+        vals = []
+        for key in headers:
+            val = row.get(key, "")
+            if isinstance(val, list):
+                val = ";".join(str(x) for x in val)
+            text = str(val)
+            if any(ch in text for ch in [",", '"', "\n"]):
+                text = '"' + text.replace('"', '""') + '"'
+            vals.append(text)
+        lines.append(",".join(vals))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _draw_text_page(pdf, title: str, sections: List[Tuple[str, List[str]]]) -> None:
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(11, 8.5))
+    ax = fig.add_subplot(111)
+    ax.axis("off")
+    ax.set_title(title, fontsize=16, loc="left")
+    y = 0.96
+    for heading, lines in sections:
+        ax.text(0.03, y, heading, fontsize=12, fontweight="bold", va="top")
+        y -= 0.035
+        for line in lines:
+            for wrapped in wrap(line, width=110) or [""]:
+                ax.text(
+                    0.05,
+                    y,
+                    wrapped,
+                    fontsize=9,
+                    family="monospace",
+                    va="top",
+                )
+                y -= 0.022
+                if y < 0.06:
+                    pdf.savefig(fig, bbox_inches="tight")
+                    plt.close(fig)
+                    fig = plt.figure(figsize=(11, 8.5))
+                    ax = fig.add_subplot(111)
+                    ax.axis("off")
+                    ax.set_title(title, fontsize=16, loc="left")
+                    y = 0.96
+        y -= 0.02
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optional[Path]:
+    """Write a PDF ingest report when plotting dependencies are available."""
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.image as mpimg
+        import pandas as pd
+        from matplotlib.backends.backend_pdf import PdfPages
+    except Exception:
+        return None
+
+    out_dir = output_root / "ingest_reports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = out_dir / "ingest_report.pdf"
+
+    summary = report.get("summary", {}) or {}
+    metadata = report.get("metadata", {}) or {}
+    per_pulsar = report.get("per_pulsar", []) or []
+    upset_plots = [Path(p) for p in (report.get("upset_plots", []) or []) if Path(p).exists()]
+
+    with PdfPages(pdf_path) as pdf:
+        _draw_text_page(
+            pdf,
+            "Ingest Report",
+            [
+                (
+                    "Summary",
+                    [
+                        f"Generated at: {report.get('generated_at', '')}",
+                        f"Output root: {report.get('output_root', '')}",
+                        f"Mapping file: {report.get('mapping_file', '')}",
+                        f"Pulsars discovered: {summary.get('n_pulsars_total', 0)}",
+                        f"Valid parfiles: {summary.get('n_valid_parfiles', 0)}",
+                        f"Missing parfiles: {summary.get('n_missing_parfiles', 0)}",
+                        f"Pulsars with timfiles: {summary.get('n_pulsars_with_timfiles', 0)}",
+                        f"Total timfiles added: {summary.get('n_timfiles_added_total', 0)}",
+                        f"Pulsars with templates: {summary.get('n_pulsars_with_templates', 0)}",
+                        f"Total templates added: {summary.get('n_templates_added_total', 0)}",
+                        f"all.tim files written: {summary.get('n_all_tim_present', 0)}",
+                        f"Clockfiles copied: {summary.get('n_clockfiles', 0)}",
+                        f"Used lockfile: {summary.get('used_lockfile', False)}",
+                        f"Verify requested: {summary.get('verify_requested', False)}",
+                    ],
+                ),
+                (
+                    "Missing Sources",
+                    [
+                        "Missing parfiles: "
+                        + ", ".join(report.get("missing_parfiles", []) or ["none"]),
+                        "Missing timfiles: "
+                        + ", ".join(report.get("missing_timfiles", []) or ["none"]),
+                        "Missing templates: "
+                        + ", ".join(report.get("missing_templates", []) or ["none"]),
+                    ],
+                ),
+            ],
+        )
+
+        _draw_text_page(
+            pdf,
+            "Configured Timing Defaults And Clockfiles",
+            [
+                (
+                    "Configured Defaults",
+                    [
+                        f"EPHEM / SSE target: {metadata.get('fix_ensure_ephem') or 'not provided'}",
+                        f"CLK / BIPM target: {metadata.get('fix_ensure_clk') or 'not provided'}",
+                        f"NE_SW target: {metadata.get('fix_ensure_ne_sw') or 'not provided'}",
+                        f"Ingest commit base branch: {metadata.get('ingest_commit_base_branch') or 'not provided'}",
+                        f"Ingest commit branch: {metadata.get('ingest_commit_branch_name') or 'not provided'}",
+                    ],
+                ),
+                (
+                    "Clockfiles Copied",
+                    (report.get("clockfiles", []) or ["none"]),
+                ),
+            ],
+        )
+
+        if per_pulsar:
+            fig = plt.figure(figsize=(11, 8.5))
+            ax = fig.add_subplot(111)
+            ax.axis("off")
+            ax.set_title("Per-Pulsar Summary", fontsize=16, loc="left")
+            df = pd.DataFrame(per_pulsar)[
+                [
+                    "pulsar",
+                    "parfile_present",
+                    "all_tim_present",
+                    "n_timfiles_added",
+                    "n_templates_added",
+                    "n_jump_lines",
+                    "ephem",
+                    "clk",
+                    "ne_sw",
+                ]
+            ].copy()
+            table = ax.table(
+                cellText=df.values.tolist(),
+                colLabels=list(df.columns),
+                loc="upper left",
+                cellLoc="left",
+                colLoc="left",
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(8)
+            table.scale(1, 1.2)
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
+            for row in per_pulsar:
+                _draw_text_page(
+                    pdf,
+                    f"Pulsar Breakdown: {row.get('pulsar', '')}",
+                    [
+                        (
+                            "Counts",
+                            [
+                                f"Parfile present: {row.get('parfile_present', False)}",
+                                f"all.tim present: {row.get('all_tim_present', False)}",
+                                f"Timfiles added: {row.get('n_timfiles_added', 0)}",
+                                f"Templates added: {row.get('n_templates_added', 0)}",
+                                f"JUMP lines present in parfile: {row.get('n_jump_lines', 0)}",
+                                f"EPHEM in parfile: {row.get('ephem') or 'missing'}",
+                                f"CLK in parfile: {row.get('clk') or 'missing'}",
+                                f"NE_SW in parfile: {row.get('ne_sw') or 'missing'}",
+                            ],
+                        ),
+                        (
+                            "Timfiles Added",
+                            row.get("timfiles_added", []) or ["none"],
+                        ),
+                        (
+                            "Templates Added",
+                            row.get("templates_added", []) or ["none"],
+                        ),
+                        (
+                            "JUMP Lines Present",
+                            row.get("jump_lines", []) or ["none"],
+                        ),
+                    ],
+                )
+
+        for plot_path in upset_plots:
+            try:
+                img = mpimg.imread(plot_path)
+            except Exception:
+                continue
+            fig = plt.figure(figsize=(11, 8.5))
+            ax = fig.add_subplot(111)
+            ax.axis("off")
+            ax.set_title(plot_path.name, fontsize=16, loc="left")
+            ax.imshow(img)
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
+    return pdf_path
+
+
 def _priority_rank(
     path: Path, order: Tuple[str, ...], roots: Dict[str, Path]
 ) -> Optional[int]:
@@ -856,13 +1121,13 @@ def _plot_upset(df: pd.DataFrame, out_prefix: Path, title: str) -> None:
     plt.close(fig)
 
 
-def _write_ingest_upset_plots(output_root: Path) -> None:
+def _write_ingest_upset_plots(output_root: Path) -> List[Path]:
     global plt, LineCollection
     if matplotlib is None or np is None or pd is None:
         logger.warning(
             "matplotlib/numpy/pandas unavailable; skipping ingest upset plots."
         )
-        return
+        return []
     if os.environ.get("DISPLAY", "") == "" and os.environ.get("MPLBACKEND") is None:
         matplotlib.use("Agg")
     if plt is None or LineCollection is None:
@@ -874,6 +1139,7 @@ def _write_ingest_upset_plots(output_root: Path) -> None:
 
     out_dir = output_root / "ingest_reports"
     out_dir.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
 
     telescopes: Dict[str, set[str]] = {}
     backends: Dict[str, set[str]] = {}
@@ -904,14 +1170,15 @@ def _write_ingest_upset_plots(output_root: Path) -> None:
 
     if telescopes:
         df_tel = _build_df(telescopes)
-        _plot_upset(
-            df_tel, out_dir / "ingest_upset_telescopes", "Ingest: telescope membership"
-        )
+        out_prefix = out_dir / "ingest_upset_telescopes"
+        _plot_upset(df_tel, out_prefix, "Ingest: telescope membership")
+        written.append(out_prefix.with_suffix(".png"))
     if backends:
         df_be = _build_df(backends)
-        _plot_upset(
-            df_be, out_dir / "ingest_upset_backends", "Ingest: backend membership"
-        )
+        out_prefix = out_dir / "ingest_upset_backends"
+        _plot_upset(df_be, out_prefix, "Ingest: backend membership")
+        written.append(out_prefix.with_suffix(".png"))
+    return written
 
 
 def ingest_dataset(
@@ -920,6 +1187,7 @@ def ingest_dataset(
     *,
     verify: bool = False,
     pulsars: Optional[Iterable[str]] = None,
+    report_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, object]:
     """Ingest pulsar data into canonical per-pulsar layout.
 
@@ -991,12 +1259,17 @@ def ingest_dataset(
         raise IngestError("No pulsars found from mapping sources.")
 
     report = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "mapping_file": str(Path(mapping_file).expanduser().resolve()),
         "output_root": str(output_root),
         "pulsars": [],
         "missing_parfiles": [],
         "missing_timfiles": [],
         "missing_templates": [],
         "clockfiles": [],
+        "per_pulsar": [],
+        "metadata": dict(report_metadata or {}),
+        "upset_plots": [],
     }
     tim_manifest: List[Dict[str, str]] = []
 
@@ -1098,9 +1371,69 @@ def ingest_dataset(
             logger.info("Wrote ingest lockfile: %s", lock_path)
 
     try:
-        _write_ingest_upset_plots(output_root)
+        report["upset_plots"] = [
+            str(p) for p in _write_ingest_upset_plots(output_root)
+        ]
     except Exception as e:  # pragma: no cover
         logger.warning("Failed to generate ingest upset plots: %s", e)
+
+    per_pulsar: List[Dict[str, Any]] = []
+    total_timfiles = 0
+    total_templates = 0
+    total_all_tim = 0
+    for psr in pulsar_set:
+        psr_dir = output_root / psr
+        par_path = psr_dir / f"{psr}.par"
+        all_tim_path = psr_dir / f"{psr}_all.tim"
+        tims_dir = psr_dir / "tims"
+        tmplts_dir = psr_dir / "tmplts"
+        timfiles_added = [p.name for p in sorted(tims_dir.glob("*.tim"))] if tims_dir.exists() else []
+        templates_added = [p.name for p in sorted(tmplts_dir.iterdir()) if p.is_file()] if tmplts_dir.exists() else []
+        par_summary = _parse_parfile_summary(par_path)
+        row = {
+            "pulsar": psr,
+            "parfile_present": par_path.exists(),
+            "all_tim_present": all_tim_path.exists(),
+            "n_timfiles_added": len(timfiles_added),
+            "timfiles_added": timfiles_added,
+            "n_templates_added": len(templates_added),
+            "templates_added": templates_added,
+            "n_jump_lines": int(par_summary.get("jump_count", 0) or 0),
+            "jump_lines": list(par_summary.get("jump_lines", []) or []),
+            "ephem": par_summary.get("ephem"),
+            "clk": par_summary.get("clk"),
+            "ne_sw": par_summary.get("ne_sw"),
+            "missing_parfile": psr in report["missing_parfiles"],
+            "missing_timfiles": psr in report["missing_timfiles"],
+            "missing_templates": psr in report["missing_templates"],
+        }
+        total_timfiles += len(timfiles_added)
+        total_templates += len(templates_added)
+        total_all_tim += int(all_tim_path.exists())
+        per_pulsar.append(row)
+    report["per_pulsar"] = per_pulsar
+    report["summary"] = {
+        "n_pulsars_total": len(pulsar_set),
+        "n_valid_parfiles": len(pulsar_set) - len(report["missing_parfiles"]),
+        "n_missing_parfiles": len(report["missing_parfiles"]),
+        "n_pulsars_with_timfiles": len(pulsar_set) - len(report["missing_timfiles"]),
+        "n_missing_timfiles": len(report["missing_timfiles"]),
+        "n_timfiles_added_total": total_timfiles,
+        "n_pulsars_with_templates": len(pulsar_set) - len(report["missing_templates"]),
+        "n_missing_templates": len(report["missing_templates"]),
+        "n_templates_added_total": total_templates,
+        "n_all_tim_present": total_all_tim,
+        "n_clockfiles": len(report["clockfiles"]),
+        "used_lockfile": used_lockfile,
+        "verify_requested": bool(verify),
+    }
+
+    rep_dir = output_root / "ingest_reports"
+    rep_dir.mkdir(parents=True, exist_ok=True)
+    _write_ingest_breakdown_csv(report, rep_dir)
+    pdf_path = _write_ingest_pdf_report(output_root, report)
+    if pdf_path is not None:
+        report["pdf_report"] = str(pdf_path)
 
     if verify:
         verify_ingest_tims(output_root, mapping)

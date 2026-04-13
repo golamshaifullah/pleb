@@ -49,6 +49,9 @@ class IngestConfig:
     ingest_commit_branch_name: Optional[str] = None
     ingest_commit_base_branch: Optional[str] = None
     ingest_commit_message: Optional[str] = None
+    fix_ensure_ephem: Optional[str] = None
+    fix_ensure_clk: Optional[str] = None
+    fix_ensure_ne_sw: Optional[str] = None
 
     def resolved_output_root(self) -> Path:
         """Resolve ingest output root from explicit or fallback settings."""
@@ -68,6 +71,9 @@ class IngestConfig:
             "ingest_commit_branch_name": self.ingest_commit_branch_name,
             "ingest_commit_base_branch": self.ingest_commit_base_branch,
             "ingest_commit_message": self.ingest_commit_message,
+            "fix_ensure_ephem": self.fix_ensure_ephem,
+            "fix_ensure_clk": self.fix_ensure_clk,
+            "fix_ensure_ne_sw": self.fix_ensure_ne_sw,
         }
         d["ingest_mapping_file"] = (
             str(self.ingest_mapping_file)
@@ -104,6 +110,9 @@ class IngestConfig:
             ingest_commit_branch_name=s_opt(d.get("ingest_commit_branch_name")),
             ingest_commit_base_branch=s_opt(d.get("ingest_commit_base_branch")),
             ingest_commit_message=s_opt(d.get("ingest_commit_message")),
+            fix_ensure_ephem=s_opt(d.get("fix_ensure_ephem")),
+            fix_ensure_clk=s_opt(d.get("fix_ensure_clk")),
+            fix_ensure_ne_sw=s_opt(d.get("fix_ensure_ne_sw")),
         )
 
     @staticmethod

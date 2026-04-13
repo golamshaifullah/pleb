@@ -70,7 +70,7 @@ logger = get_logger("pleb")
 
 
 def _discover_pqc_variants(psr_dir: Path, psr: str) -> List[str]:
-    """Discover available ``_all.<variant>.tim`` names for one pulsar.
+    """Discover available variant include files for one pulsar.
 
     Parameters
     ----------
@@ -86,14 +86,29 @@ def _discover_pqc_variants(psr_dir: Path, psr: str) -> List[str]:
         include ``<PSR>_all.tim`` is not returned.
     """
     out: List[str] = []
-    for p in sorted(psr_dir.glob(f"{psr}_all.*.tim")):
+    seen: set[str] = set()
+    for p in sorted(
+        {
+            *psr_dir.glob(f"{psr}_*_all.tim"),
+            *psr_dir.glob(f"{psr}_all.*.tim"),
+        }
+    ):
         name = p.name
+        pref_us = f"{psr}_"
+        suff_us = "_all.tim"
+        if name.startswith(pref_us) and name.endswith(suff_us):
+            v = name[len(pref_us) : -len(suff_us)]
+            if v and v != "all" and v not in seen:
+                out.append(v)
+                seen.add(v)
+            continue
         pref = f"{psr}_all."
         if not name.startswith(pref) or not name.endswith(".tim"):
             continue
         v = name[len(pref) : -len(".tim")]
-        if v:
+        if v and v not in seen:
             out.append(v)
+            seen.add(v)
     return out
 
 
@@ -110,7 +125,9 @@ def _prepare_variant_pqc_workspace(
     """
     workspace.mkdir(parents=True, exist_ok=True)
 
-    variant_par = psr_dir / f"{psr}.{variant}.par"
+    variant_par = psr_dir / f"{psr}_{variant}.par"
+    if not variant_par.exists():
+        variant_par = psr_dir / f"{psr}.{variant}.par"
     base_par = psr_dir / f"{psr}.par"
     src_par = variant_par if variant_par.exists() else base_par
     if not src_par.exists():
@@ -119,7 +136,9 @@ def _prepare_variant_pqc_workspace(
     target_par = workspace / f"{psr}.par"
     shutil.copy2(src_par, target_par)
 
-    src_all = psr_dir / f"{psr}_all.{variant}.tim"
+    src_all = psr_dir / f"{psr}_{variant}_all.tim"
+    if not src_all.exists():
+        src_all = psr_dir / f"{psr}_all.{variant}.tim"
     if not src_all.exists():
         raise FileNotFoundError(str(src_all))
     target_all = workspace / f"{psr}_all.tim"

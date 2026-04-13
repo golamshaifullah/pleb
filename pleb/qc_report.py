@@ -553,6 +553,9 @@ def _write_compact_pdf(
                         continue
                     seen.add(rr)
                     if variant != "base":
+                        direct_variant = rr / psr / f"{psr}_{variant}.par"
+                        if direct_variant.exists():
+                            return direct_variant
                         direct_variant = rr / psr / f"{psr}.{variant}.par"
                         if direct_variant.exists():
                             return direct_variant
@@ -561,6 +564,9 @@ def _write_compact_pdf(
                         return direct
                     try:
                         if variant != "base":
+                            cvar = list(rr.glob(f"**/{psr}/{psr}_{variant}.par"))
+                            if cvar:
+                                return sorted(cvar, key=lambda x: len(str(x)))[0]
                             cvar = list(rr.glob(f"**/{psr}/{psr}.{variant}.par"))
                             if cvar:
                                 return sorted(cvar, key=lambda x: len(str(x)))[0]

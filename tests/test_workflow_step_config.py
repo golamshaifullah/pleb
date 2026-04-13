@@ -124,3 +124,79 @@ def test_workflow_compare_public_step_dispatches(monkeypatch, tmp_path: Path) ->
 
     assert captured["out_dir"] == str(out_dir.resolve())
     assert captured["providers_path"] == str(providers.resolve())
+
+
+def test_workflow_ingest_step_passes_report_metadata(
+    monkeypatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    image = tmp_path / "tempo2.sif"
+    image.write_text("", encoding="utf-8")
+    mapping = tmp_path / "mapping.json"
+    mapping.write_text("{}", encoding="utf-8")
+    out_dir = tmp_path / "dataset"
+
+    base_cfg = {
+        "home_dir": str(home),
+        "singularity_image": str(image),
+        "dataset_name": ".",
+        "results_dir": str(tmp_path / "results"),
+        "ingest_mapping_file": str(mapping),
+        "ingest_output_dir": str(out_dir),
+        "ingest_verify": True,
+        "ingest_commit_branch_name": "ingest/from-workflow",
+        "ingest_commit_base_branch": "main",
+        "fix_ensure_ephem": "DE440",
+        "fix_ensure_clk": "TT(BIPM2023)",
+        "fix_ensure_ne_sw": "1",
+    }
+    captured = {}
+
+    def _fake_ingest_dataset(
+        mapping_file,
+        output_root,
+        *,
+        verify=False,
+        pulsars=None,
+        report_metadata=None,
+    ):
+        captured["mapping_file"] = str(mapping_file)
+        captured["output_root"] = str(output_root)
+        captured["verify"] = verify
+        captured["pulsars"] = pulsars
+        captured["report_metadata"] = dict(report_metadata or {})
+        return {"output_root": str(output_root)}
+
+    def _fake_commit_ingest_changes(
+        output_root,
+        *,
+        branch_name=None,
+        base_branch=None,
+        commit_message=None,
+    ):
+        captured["commit_output_root"] = str(output_root)
+        captured["commit_branch_name"] = branch_name
+        captured["commit_base_branch"] = base_branch
+        captured["commit_message"] = commit_message
+        return branch_name or "ingest/generated"
+
+    monkeypatch.setattr("pleb.workflow.ingest_dataset", _fake_ingest_dataset)
+    monkeypatch.setattr(
+        "pleb.ingest.commit_ingest_changes", _fake_commit_ingest_changes
+    )
+
+    step = {"name": "ingest", "set": [], "overrides": {}}
+    ctx = WorkflowContext()
+    _run_step(step, base_cfg, ctx)
+
+    assert captured["mapping_file"] == str(mapping.resolve())
+    assert captured["output_root"] == str(out_dir.resolve())
+    assert captured["verify"] is True
+    assert captured["report_metadata"] == {
+        "fix_ensure_ephem": "DE440",
+        "fix_ensure_clk": "TT(BIPM2023)",
+        "fix_ensure_ne_sw": "1",
+        "ingest_commit_branch_name": "ingest/from-workflow",
+        "ingest_commit_base_branch": "main",
+    }
