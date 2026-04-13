@@ -700,9 +700,38 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
     pdf_path = out_dir / "ingest_report.pdf"
 
     summary = report.get("summary", {}) or {}
-    metadata = report.get("metadata", {}) or {}
     per_pulsar = report.get("per_pulsar", []) or []
     upset_plots = [Path(p) for p in (report.get("upset_plots", []) or []) if Path(p).exists()]
+    ephem_counts = Counter(
+        str(row.get("ephem"))
+        for row in per_pulsar
+        if row.get("parfile_present") and row.get("ephem")
+    )
+    clk_counts = Counter(
+        str(row.get("clk"))
+        for row in per_pulsar
+        if row.get("parfile_present") and row.get("clk")
+    )
+    ne_sw_counts = Counter(
+        str(row.get("ne_sw"))
+        for row in per_pulsar
+        if row.get("parfile_present") and row.get("ne_sw")
+    )
+    missing_ephem = sum(
+        1
+        for row in per_pulsar
+        if row.get("parfile_present") and not row.get("ephem")
+    )
+    missing_clk = sum(
+        1
+        for row in per_pulsar
+        if row.get("parfile_present") and not row.get("clk")
+    )
+    missing_ne_sw = sum(
+        1
+        for row in per_pulsar
+        if row.get("parfile_present") and not row.get("ne_sw")
+    )
 
     with PdfPages(pdf_path) as pdf:
         _draw_text_page(
@@ -744,16 +773,41 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
 
         _draw_text_page(
             pdf,
-            "Configured Timing Defaults And Clockfiles",
+            "Ingested Parfile Defaults And Clockfiles",
             [
                 (
-                    "Configured Defaults",
+                    "Observed Parfile Values",
                     [
-                        f"EPHEM / SSE target: {metadata.get('fix_ensure_ephem') or 'not provided'}",
-                        f"CLK / BIPM target: {metadata.get('fix_ensure_clk') or 'not provided'}",
-                        f"NE_SW target: {metadata.get('fix_ensure_ne_sw') or 'not provided'}",
-                        f"Ingest commit base branch: {metadata.get('ingest_commit_base_branch') or 'not provided'}",
-                        f"Ingest commit branch: {metadata.get('ingest_commit_branch_name') or 'not provided'}",
+                        "EPHEM values: "
+                        + (
+                            ", ".join(
+                                f"{name} ({count})"
+                                for name, count in sorted(ephem_counts.items())
+                            )
+                            if ephem_counts
+                            else "none present"
+                        ),
+                        f"Parfiles missing EPHEM: {missing_ephem}",
+                        "CLK values: "
+                        + (
+                            ", ".join(
+                                f"{name} ({count})"
+                                for name, count in sorted(clk_counts.items())
+                            )
+                            if clk_counts
+                            else "none present"
+                        ),
+                        f"Parfiles missing CLK: {missing_clk}",
+                        "NE_SW values: "
+                        + (
+                            ", ".join(
+                                f"{name} ({count})"
+                                for name, count in sorted(ne_sw_counts.items())
+                            )
+                            if ne_sw_counts
+                            else "none present"
+                        ),
+                        f"Parfiles missing NE_SW: {missing_ne_sw}",
                     ],
                 ),
                 (

@@ -56,13 +56,6 @@ def test_ingest_writes_summary_breakdown_and_optional_pdf(tmp_path: Path) -> Non
     report = ingest_dataset(
         mapping_path,
         output_root,
-        report_metadata={
-            "fix_ensure_ephem": "DE440",
-            "fix_ensure_clk": "TT(BIPM2023)",
-            "fix_ensure_ne_sw": "1",
-            "ingest_commit_branch_name": "ingest/test",
-            "ingest_commit_base_branch": "main",
-        },
     )
 
     ingest_reports = output_root / "ingest_reports"
