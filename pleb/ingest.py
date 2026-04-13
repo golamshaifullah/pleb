@@ -24,6 +24,7 @@ import json
 import warnings
 import re
 import shutil
+import math
 from textwrap import wrap
 
 from .logging_utils import get_logger
@@ -44,6 +45,8 @@ LineCollection = None  # type: ignore
 _PULSAR_RE = re.compile(r"([BJ]\d{4}[+\-]\d{2,4})", re.IGNORECASE)
 
 logger = get_logger("pleb.ingest")
+
+_A4_FIGSIZE = (8.27, 11.69)
 
 
 @dataclass(frozen=True)
@@ -653,7 +656,7 @@ def _write_ingest_breakdown_csv(report: Dict[str, Any], out_dir: Path) -> Path:
 def _draw_text_page(pdf, title: str, sections: List[Tuple[str, List[str]]]) -> None:
     import matplotlib.pyplot as plt
 
-    fig = plt.figure(figsize=(11, 8.5))
+    fig = plt.figure(figsize=_A4_FIGSIZE)
     ax = fig.add_subplot(111)
     ax.axis("off")
     ax.set_title(title, fontsize=16, loc="left")
@@ -675,7 +678,7 @@ def _draw_text_page(pdf, title: str, sections: List[Tuple[str, List[str]]]) -> N
                 if y < 0.06:
                     pdf.savefig(fig, bbox_inches="tight")
                     plt.close(fig)
-                    fig = plt.figure(figsize=(11, 8.5))
+                    fig = plt.figure(figsize=_A4_FIGSIZE)
                     ax = fig.add_subplot(111)
                     ax.axis("off")
                     ax.set_title(title, fontsize=16, loc="left")
@@ -683,6 +686,109 @@ def _draw_text_page(pdf, title: str, sections: List[Tuple[str, List[str]]]) -> N
         y -= 0.02
     pdf.savefig(fig, bbox_inches="tight")
     plt.close(fig)
+
+
+def _draw_text_block(ax, title: str, lines: List[str], *, wrap_width: int = 60) -> None:
+    """Draw a titled text block into an existing axes."""
+    ax.axis("off")
+    ax.text(0.0, 1.0, title, fontsize=12, fontweight="bold", va="top")
+    y = 0.92
+    for line in lines:
+        wrapped_lines = wrap(line, width=wrap_width) or [""]
+        for wrapped in wrapped_lines:
+            ax.text(
+                0.0,
+                y,
+                wrapped,
+                fontsize=8.5,
+                family="monospace",
+                va="top",
+            )
+            y -= 0.075
+            if y < 0.03:
+                return
+        y -= 0.02
+
+
+def _format_pdf_table_value(value: Any) -> str:
+    """Format table values for compact PDF rendering."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return str(value)
+        abs_val = abs(value)
+        if (abs_val != 0.0 and abs_val < 1e-3) or abs_val >= 1e4:
+            return f"{value:.3e}"
+        return f"{value:.6g}"
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return ""
+        try:
+            parsed = float(text)
+        except Exception:
+            return text
+        if not math.isfinite(parsed):
+            return text
+        abs_val = abs(parsed)
+        if (abs_val != 0.0 and abs_val < 1e-3) or abs_val >= 1e4:
+            return f"{parsed:.3e}"
+        return f"{parsed:.6g}"
+    return str(value)
+
+
+def _write_per_pulsar_summary_tables(pdf, per_pulsar: List[Dict[str, Any]]) -> None:
+    """Write paginated per-pulsar summary tables."""
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    if not per_pulsar:
+        return
+
+    df = pd.DataFrame(per_pulsar)[
+        [
+            "pulsar",
+            "parfile_present",
+            "all_tim_present",
+            "n_timfiles_added",
+            "n_templates_added",
+            "n_jump_lines",
+            "ephem",
+            "clk",
+            "ne_sw",
+        ]
+    ].copy()
+
+    rows_per_page = 34
+    total_pages = max(1, (len(df) + rows_per_page - 1) // rows_per_page)
+    for page_idx in range(total_pages):
+        start = page_idx * rows_per_page
+        stop = start + rows_per_page
+        chunk = df.iloc[start:stop].copy()
+        chunk = chunk.applymap(_format_pdf_table_value)
+
+        fig = plt.figure(figsize=_A4_FIGSIZE)
+        ax = fig.add_subplot(111)
+        ax.axis("off")
+        title = "Per-Pulsar Summary"
+        if total_pages > 1:
+            title += f" ({page_idx + 1}/{total_pages})"
+        ax.set_title(title, fontsize=16, loc="left")
+        table = ax.table(
+            cellText=chunk.values.tolist(),
+            colLabels=list(chunk.columns),
+            bbox=[0.0, 0.0, 1.0, 0.94],
+            cellLoc="left",
+            colLoc="left",
+            colWidths=[0.18, 0.09, 0.09, 0.11, 0.11, 0.09, 0.10, 0.13, 0.10],
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(6.6)
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
 
 
 def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optional[Path]:
@@ -734,120 +840,144 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
     )
 
     with PdfPages(pdf_path) as pdf:
-        _draw_text_page(
-            pdf,
-            "Ingest Report",
+        fig = plt.figure(figsize=_A4_FIGSIZE)
+        gs = fig.add_gridspec(2, 1, height_ratios=[1.0, 1.5], hspace=0.22)
+        fig.suptitle("Ingest Report", fontsize=16, x=0.02, ha="left", y=0.98)
+
+        ax_summary = fig.add_subplot(gs[0, 0])
+        _draw_text_block(
+            ax_summary,
+            "1. Summary",
             [
-                (
-                    "Summary",
-                    [
-                        f"Generated at: {report.get('generated_at', '')}",
-                        f"Output root: {report.get('output_root', '')}",
-                        f"Mapping file: {report.get('mapping_file', '')}",
-                        f"Pulsars discovered: {summary.get('n_pulsars_total', 0)}",
-                        f"Valid parfiles: {summary.get('n_valid_parfiles', 0)}",
-                        f"Missing parfiles: {summary.get('n_missing_parfiles', 0)}",
-                        f"Pulsars with timfiles: {summary.get('n_pulsars_with_timfiles', 0)}",
-                        f"Total timfiles added: {summary.get('n_timfiles_added_total', 0)}",
-                        f"Pulsars with templates: {summary.get('n_pulsars_with_templates', 0)}",
-                        f"Total templates added: {summary.get('n_templates_added_total', 0)}",
-                        f"all.tim files written: {summary.get('n_all_tim_present', 0)}",
-                        f"Clockfiles copied: {summary.get('n_clockfiles', 0)}",
-                        f"Used lockfile: {summary.get('used_lockfile', False)}",
-                        f"Verify requested: {summary.get('verify_requested', False)}",
-                    ],
-                ),
-                (
-                    "Missing Sources",
-                    [
-                        "Missing parfiles: "
-                        + ", ".join(report.get("missing_parfiles", []) or ["none"]),
-                        "Missing timfiles: "
-                        + ", ".join(report.get("missing_timfiles", []) or ["none"]),
-                        "Missing templates: "
-                        + ", ".join(report.get("missing_templates", []) or ["none"]),
-                    ],
-                ),
+                f"Generated at: {report.get('generated_at', '')}",
+                f"Output root: {report.get('output_root', '')}",
+                f"Mapping file: {report.get('mapping_file', '')}",
+                f"Pulsars discovered: {summary.get('n_pulsars_total', 0)}",
+                f"Valid parfiles: {summary.get('n_valid_parfiles', 0)}",
+                f"Missing parfiles: {summary.get('n_missing_parfiles', 0)}",
+                f"Pulsars with timfiles: {summary.get('n_pulsars_with_timfiles', 0)}",
+                f"Total timfiles added: {summary.get('n_timfiles_added_total', 0)}",
+                f"Pulsars with templates: {summary.get('n_pulsars_with_templates', 0)}",
+                f"Total templates added: {summary.get('n_templates_added_total', 0)}",
+                f"all.tim files written: {summary.get('n_all_tim_present', 0)}",
+                f"Clockfiles copied: {summary.get('n_clockfiles', 0)}",
+                f"Used lockfile: {summary.get('used_lockfile', False)}",
+                f"Verify requested: {summary.get('verify_requested', False)}",
             ],
+            wrap_width=110,
         )
 
-        _draw_text_page(
-            pdf,
-            "Ingested Parfile Defaults And Clockfiles",
-            [
-                (
-                    "Observed Parfile Values",
-                    [
-                        "EPHEM values: "
-                        + (
-                            ", ".join(
-                                f"{name} ({count})"
-                                for name, count in sorted(ephem_counts.items())
-                            )
-                            if ephem_counts
-                            else "none present"
-                        ),
-                        f"Parfiles missing EPHEM: {missing_ephem}",
-                        "CLK values: "
-                        + (
-                            ", ".join(
-                                f"{name} ({count})"
-                                for name, count in sorted(clk_counts.items())
-                            )
-                            if clk_counts
-                            else "none present"
-                        ),
-                        f"Parfiles missing CLK: {missing_clk}",
-                        "NE_SW values: "
-                        + (
-                            ", ".join(
-                                f"{name} ({count})"
-                                for name, count in sorted(ne_sw_counts.items())
-                            )
-                            if ne_sw_counts
-                            else "none present"
-                        ),
-                        f"Parfiles missing NE_SW: {missing_ne_sw}",
-                    ],
-                ),
-                (
-                    "Clockfiles Copied",
-                    (report.get("clockfiles", []) or ["none"]),
-                ),
-            ],
-        )
+        ax_plot = fig.add_subplot(gs[1, 0])
+        ax_plot.axis("off")
+        ax_plot.set_title("2. Upset plots", fontsize=12, loc="left")
+        if upset_plots:
+            try:
+                img = mpimg.imread(upset_plots[0])
+                ax_plot.imshow(img)
+                ax_plot.set_title(
+                    f"2. Upset plots: {upset_plots[0].name}",
+                    fontsize=11,
+                    loc="left",
+                )
+            except Exception:
+                ax_plot.text(0.0, 0.9, upset_plots[0].name, fontsize=10, va="top")
+                ax_plot.text(0.0, 0.75, "Failed to render plot", fontsize=9, va="top")
+        else:
+            ax_plot.text(0.0, 0.9, "No upset plot generated", fontsize=9, va="top")
 
-        if per_pulsar:
-            fig = plt.figure(figsize=(11, 8.5))
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+
+        if len(upset_plots) > 1:
+            fig = plt.figure(figsize=_A4_FIGSIZE)
             ax = fig.add_subplot(111)
             ax.axis("off")
-            ax.set_title("Per-Pulsar Summary", fontsize=16, loc="left")
-            df = pd.DataFrame(per_pulsar)[
-                [
-                    "pulsar",
-                    "parfile_present",
-                    "all_tim_present",
-                    "n_timfiles_added",
-                    "n_templates_added",
-                    "n_jump_lines",
-                    "ephem",
-                    "clk",
-                    "ne_sw",
-                ]
-            ].copy()
-            table = ax.table(
-                cellText=df.values.tolist(),
-                colLabels=list(df.columns),
-                loc="upper left",
-                cellLoc="left",
-                colLoc="left",
-            )
-            table.auto_set_font_size(False)
-            table.set_fontsize(8)
-            table.scale(1, 1.2)
+            ax.set_title(f"2. Upset plots: {upset_plots[1].name}", fontsize=12, loc="left")
+            try:
+                img = mpimg.imread(upset_plots[1])
+                ax.imshow(img)
+            except Exception:
+                ax.text(0.0, 0.9, upset_plots[1].name, fontsize=10, va="top")
+                ax.text(0.0, 0.75, "Failed to render plot", fontsize=9, va="top")
             pdf.savefig(fig, bbox_inches="tight")
             plt.close(fig)
 
+        fig = plt.figure(figsize=_A4_FIGSIZE)
+        gs = fig.add_gridspec(
+            2,
+            2,
+            height_ratios=[1.15, 0.95],
+            hspace=0.3,
+            wspace=0.18,
+        )
+        fig.suptitle("Ingest Report", fontsize=16, x=0.02, ha="left", y=0.98)
+
+        ax_missing = fig.add_subplot(gs[0, 0])
+        _draw_text_block(
+            ax_missing,
+            "3. Missing Sources",
+            [
+                "Missing parfiles: "
+                + ", ".join(report.get("missing_parfiles", []) or ["none"]),
+                "Missing timfiles: "
+                + ", ".join(report.get("missing_timfiles", []) or ["none"]),
+                "Missing templates: "
+                + ", ".join(report.get("missing_templates", []) or ["none"]),
+            ],
+            wrap_width=52,
+        )
+
+        ax_par = fig.add_subplot(gs[0, 1])
+        _draw_text_block(
+            ax_par,
+            "4. Observed Parfile Values",
+            [
+                "EPHEM values: "
+                + (
+                    ", ".join(
+                        f"{name} ({count})"
+                        for name, count in sorted(ephem_counts.items())
+                    )
+                    if ephem_counts
+                    else "none present"
+                ),
+                f"Parfiles missing EPHEM: {missing_ephem}",
+                "CLK values: "
+                + (
+                    ", ".join(
+                        f"{name} ({count})"
+                        for name, count in sorted(clk_counts.items())
+                    )
+                    if clk_counts
+                    else "none present"
+                ),
+                f"Parfiles missing CLK: {missing_clk}",
+                "NE_SW values: "
+                + (
+                    ", ".join(
+                        f"{name} ({count})"
+                        for name, count in sorted(ne_sw_counts.items())
+                    )
+                    if ne_sw_counts
+                    else "none present"
+                ),
+                f"Parfiles missing NE_SW: {missing_ne_sw}",
+            ],
+            wrap_width=52,
+        )
+
+        ax_clk = fig.add_subplot(gs[1, :])
+        _draw_text_block(
+            ax_clk,
+            "5. Clockfiles copied",
+            list(report.get("clockfiles", []) or ["none"]),
+            wrap_width=110,
+        )
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+
+        if per_pulsar:
+            _write_per_pulsar_summary_tables(pdf, per_pulsar)
             for row in per_pulsar:
                 _draw_text_page(
                     pdf,
@@ -880,19 +1010,6 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
                         ),
                     ],
                 )
-
-        for plot_path in upset_plots:
-            try:
-                img = mpimg.imread(plot_path)
-            except Exception:
-                continue
-            fig = plt.figure(figsize=(11, 8.5))
-            ax = fig.add_subplot(111)
-            ax.axis("off")
-            ax.set_title(plot_path.name, fontsize=16, loc="left")
-            ax.imshow(img)
-            pdf.savefig(fig, bbox_inches="tight")
-            plt.close(fig)
 
     return pdf_path
 
