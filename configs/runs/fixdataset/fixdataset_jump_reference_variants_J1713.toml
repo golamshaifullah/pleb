@@ -2,7 +2,7 @@
 # FixDataset variant generation + jump-reference builder + broad PQC feature scans.
 
 home_dir = "/tmp/epta_1713_new"
-dataset_name = ""
+dataset_name = "."
 results_dir = "results"
 singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 

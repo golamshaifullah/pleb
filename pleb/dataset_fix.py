@@ -43,12 +43,13 @@ from __future__ import annotations
 from dataclasses import field
 from .compat import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from fnmatch import fnmatch
 import shutil
 import json
 import hashlib
 import re
+from textwrap import wrap
 import numpy as np
 import pandas as pd
 
@@ -74,6 +75,8 @@ from .tim_utils import (
 from .tempo2 import build_singularity_prefix, run_subprocess
 
 logger = get_logger("pleb.dataset_fix")
+
+_A4_FIGSIZE = (8.27, 11.69)
 
 _BACKEND_BW_TABLE: Dict[str, float] = load_table("backend_bw", {})
 
@@ -2731,7 +2734,161 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
         encoding="utf-8",
     )
 
+    pdf_path = _write_fix_report_pdf(reports, out_dir)
+    if pdf_path is not None:
+        logger.info("Wrote FixDataset PDF report: %s", pdf_path)
+
     return detail_path
+
+
+def _draw_fix_text_page(
+    pdf, title: str, sections: List[Tuple[str, List[str]]]
+) -> None:
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=_A4_FIGSIZE)
+    ax = fig.add_subplot(111)
+    ax.axis("off")
+    ax.set_title(title, fontsize=16, loc="left")
+    y = 0.97
+    for heading, lines in sections:
+        ax.text(0.03, y, heading, fontsize=12, fontweight="bold", va="top")
+        y -= 0.035
+        for line in lines:
+            for wrapped in wrap(line, width=110) or [""]:
+                ax.text(
+                    0.05,
+                    y,
+                    wrapped,
+                    fontsize=8.5,
+                    family="monospace",
+                    va="top",
+                )
+                y -= 0.022
+                if y < 0.05:
+                    pdf.savefig(fig, bbox_inches="tight")
+                    plt.close(fig)
+                    fig = plt.figure(figsize=_A4_FIGSIZE)
+                    ax = fig.add_subplot(111)
+                    ax.axis("off")
+                    ax.set_title(title, fontsize=16, loc="left")
+                    y = 0.97
+        y -= 0.02
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _write_fix_report_pdf(
+    reports: List[Dict[str, object]], out_dir: Path
+) -> Optional[Path]:
+    """Write a stage-level FixDataset PDF report."""
+    try:
+        from matplotlib.backends.backend_pdf import PdfPages
+    except Exception:
+        return None
+
+    pdf_path = out_dir / "fix_dataset_report.pdf"
+    n_errors = sum(1 for r in reports if r.get("error"))
+    step_counter: Dict[str, int] = {}
+    for report in reports:
+        for step in report.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            for name in step.keys():
+                step_counter[name] = step_counter.get(name, 0) + 1
+
+    stage_lines = [
+        f"Pulsars processed: {len(reports)}",
+        f"Pulsars with top-level errors: {n_errors}",
+        "Step occurrence counts: "
+        + (
+            ", ".join(f"{k}={v}" for k, v in sorted(step_counter.items()))
+            if step_counter
+            else "none"
+        ),
+    ]
+
+    dry_run_values = sorted(
+        {
+            str(
+                next(
+                    (
+                        rep.get("dry_run")
+                        for step in r.get("steps", []) or []
+                        for rep in (step.values() if isinstance(step, dict) else [])
+                        if isinstance(rep, dict) and "dry_run" in rep
+                    ),
+                    "",
+                )
+            )
+            for r in reports
+        }
+        - {""}
+    )
+    if dry_run_values:
+        stage_lines.append("Observed dry_run values: " + ", ".join(dry_run_values))
+
+    with PdfPages(pdf_path) as pdf:
+        _draw_fix_text_page(
+            pdf,
+            "FixDataset Stage Report",
+            [
+                ("Summary", stage_lines),
+                (
+                    "Pulsars With Errors",
+                    [
+                        f"{r.get('psr')}: {r.get('error')}"
+                        for r in reports
+                        if r.get("error")
+                    ]
+                    or ["none"],
+                ),
+            ],
+        )
+
+        for report in reports:
+            psr = str(report.get("psr", ""))
+            step_lines: List[str] = []
+            for step in report.get("steps", []) or []:
+                if not isinstance(step, dict):
+                    continue
+                for step_name, payload in step.items():
+                    if isinstance(payload, dict):
+                        keys = ", ".join(sorted(payload.keys()))
+                        step_lines.append(f"{step_name}: keys=[{keys}]")
+                        for key in (
+                            "added",
+                            "changed",
+                            "removed",
+                            "pqc_flagged",
+                            "written",
+                            "error",
+                            "reference_system",
+                        ):
+                            if key in payload:
+                                step_lines.append(f"{step_name}.{key} = {payload.get(key)}")
+                    elif isinstance(payload, list):
+                        step_lines.append(f"{step_name}: {len(payload)} item(s)")
+                    else:
+                        step_lines.append(f"{step_name}: {payload}")
+
+            _draw_fix_text_page(
+                pdf,
+                f"Pulsar Report: {psr}",
+                [
+                    (
+                        "Summary",
+                        [
+                            f"Branch: {report.get('branch', '')}",
+                            f"Top-level error: {report.get('error') or 'none'}",
+                            f"Recorded steps: {len(report.get('steps', []) or [])}",
+                        ],
+                    ),
+                    ("Steps", step_lines or ["none"]),
+                ],
+            )
+
+    return pdf_path
 
 
 def _infer_freq_tol(freqs: np.ndarray, bw: Optional[float]) -> Optional[float]:

@@ -7,6 +7,12 @@ from pathlib import Path
 from pleb.config import IngestConfig, PipelineConfig
 
 
+def _make_git_root(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / ".git").mkdir(exist_ok=True)
+    return path
+
+
 def test_config_json_roundtrip(tmp_path: Path) -> None:
     cfg = PipelineConfig(
         home_dir=tmp_path / "repo",
@@ -128,3 +134,100 @@ def test_ingest_config_roundtrip_preserves_timing_defaults(tmp_path: Path) -> No
     assert loaded.fix_ensure_ephem == "DE440"
     assert loaded.fix_ensure_clk == "TT(BIPM2023)"
     assert loaded.fix_ensure_ne_sw == "USE_DEFAULT"
+
+
+def test_pipeline_resolved_uses_repo_relative_dataset_path(tmp_path: Path) -> None:
+    repo_root = _make_git_root(tmp_path / "repo")
+    cfg = PipelineConfig(
+        home_dir=repo_root,
+        singularity_image=tmp_path / "tempo2.sif",
+        dataset_name="EPTA-DR3/epta-dr3-data-v0",
+        results_dir=Path("results"),
+    )
+
+    resolved = cfg.resolved()
+    assert resolved.home_dir == repo_root.resolve()
+    assert resolved.dataset_name == (repo_root / "EPTA-DR3/epta-dr3-data-v0").resolve()
+    assert resolved.results_dir == (repo_root / "results").resolve()
+
+
+def test_pipeline_resolved_rejects_absolute_dataset_path(tmp_path: Path) -> None:
+    repo_root = _make_git_root(tmp_path / "repo")
+    cfg = PipelineConfig(
+        home_dir=repo_root,
+        singularity_image=tmp_path / "tempo2.sif",
+        dataset_name=str(tmp_path / "outside"),
+        results_dir=Path("results"),
+    )
+
+    try:
+        cfg.resolved()
+    except ValueError as exc:
+        assert "dataset_name must be a path relative to home_dir" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError for absolute dataset_name")
+
+
+def test_pipeline_resolved_rejects_dataset_path_outside_repo(tmp_path: Path) -> None:
+    repo_root = _make_git_root(tmp_path / "repo")
+    cfg = PipelineConfig(
+        home_dir=repo_root,
+        singularity_image=tmp_path / "tempo2.sif",
+        dataset_name="../outside",
+        results_dir=Path("results"),
+    )
+
+    try:
+        cfg.resolved()
+    except ValueError as exc:
+        assert "must resolve inside home_dir" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError for escaping dataset_name")
+
+
+def test_pipeline_resolved_rejects_non_repo_home_dir(tmp_path: Path) -> None:
+    home_dir = tmp_path / "not_a_repo"
+    home_dir.mkdir()
+    cfg = PipelineConfig(
+        home_dir=home_dir,
+        singularity_image=tmp_path / "tempo2.sif",
+        dataset_name="EPTA-DR3/epta-dr3-data-v0",
+        results_dir=Path("results"),
+    )
+
+    try:
+        cfg.resolved()
+    except ValueError as exc:
+        assert "home_dir must be the git repo root" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError for non-repo home_dir")
+
+
+def test_ingest_resolved_output_root_uses_repo_relative_dataset_path(tmp_path: Path) -> None:
+    repo_root = _make_git_root(tmp_path / "repo")
+    cfg = IngestConfig(
+        home_dir=repo_root,
+        dataset_name="EPTA-DR3/epta-dr3-data-v0",
+    )
+
+    assert cfg.resolved_output_root() == (
+        repo_root / "EPTA-DR3/epta-dr3-data-v0"
+    ).resolve()
+
+
+def test_ingest_resolved_output_root_rejects_mismatched_explicit_output(
+    tmp_path: Path,
+) -> None:
+    repo_root = _make_git_root(tmp_path / "repo")
+    cfg = IngestConfig(
+        home_dir=repo_root,
+        dataset_name="EPTA-DR3/epta-dr3-data-v0",
+        ingest_output_dir=tmp_path / "different-output",
+    )
+
+    try:
+        cfg.resolved_output_root()
+    except ValueError as exc:
+        assert "ingest_output_dir disagrees with home_dir + dataset_name" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError for mismatched ingest_output_dir")

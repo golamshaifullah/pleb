@@ -35,7 +35,7 @@ rerun_mode = ``held_in``
 Create /tmp/pleb_opt_j1713/j1713_pipeline_test.toml:
 
 home_dir = "/work/git_projects/epta-dr3-in2p3"
-dataset_name = "/work/git_projects/epta-dr3-in2p3/EPTA-DR3/epta-dr3-data"
+dataset_name = "EPTA-DR3/epta-dr3-data"
 results_dir = "/tmp/pleb_opt_j1713/pipeline_results"
 singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 
@@ -125,7 +125,7 @@ write_best_config = true
 
 [optimize.fixed_overrides]
 home_dir = "/work/git_projects/epta-dr3-in2p3"
-dataset_name = "/work/git_projects/epta-dr3-in2p3/EPTA-DR3/epta-dr3-data"
+dataset_name = "EPTA-DR3/epta-dr3-data"
 results_dir = "/tmp/pleb_opt_j1713/pipeline_results"
 singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 

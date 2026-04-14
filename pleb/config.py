@@ -31,6 +31,55 @@ except Exception:  # pragma: no cover
 PulsarSelection = Union[str, List[str]]  # "ALL" or explicit list
 
 
+def _resolve_repo_root(home_dir: Path | str) -> Path:
+    """Resolve and validate the repository root.
+
+    The contract is intentionally strict: ``home_dir`` must point to the Git
+    repository root, i.e. the directory that contains ``.git``.
+    """
+    repo_root = Path(home_dir).expanduser().resolve()
+    if not repo_root.exists():
+        raise ValueError(f"home_dir does not exist: {repo_root}")
+    if not repo_root.is_dir():
+        raise ValueError(f"home_dir is not a directory: {repo_root}")
+    if not (repo_root / ".git").exists():
+        raise ValueError(
+            "home_dir must be the git repo root (directory containing .git): "
+            f"{repo_root}"
+        )
+    return repo_root
+
+
+def _resolve_dataset_root(repo_root: Path, dataset_name: Path | str) -> Path:
+    """Resolve ``dataset_name`` as a repo-relative dataset path under ``repo_root``.
+
+    The contract is:
+    - ``home_dir`` is the Git repo root
+    - ``dataset_name`` is a path relative to that repo root
+
+    Absolute dataset paths are rejected so configuration stays unambiguous.
+    Paths that escape the repository root via ``..`` are also rejected.
+    """
+    ds = Path(dataset_name).expanduser()
+    ds_raw = str(ds).strip()
+    if not ds_raw:
+        raise ValueError("dataset_name must be a non-empty path relative to home_dir")
+    if ds.is_absolute():
+        raise ValueError(
+            "dataset_name must be a path relative to home_dir, not an absolute path: "
+            f"{ds}"
+        )
+    dataset_root = (repo_root / ds).resolve()
+    try:
+        dataset_root.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError(
+            "dataset_name must resolve inside home_dir; refusing path outside repo "
+            f"root: {ds}"
+        ) from exc
+    return dataset_root
+
+
 @dataclass(slots=True)
 class IngestConfig:
     """Configuration model for ingest-only CLI mode.
@@ -55,11 +104,30 @@ class IngestConfig:
 
     def resolved_output_root(self) -> Path:
         """Resolve ingest output root from explicit or fallback settings."""
-        if self.ingest_output_dir is not None and str(self.ingest_output_dir).strip():
-            return Path(self.ingest_output_dir).expanduser().resolve()
+        repo_root = None
+        dataset_root = None
         if self.home_dir is not None:
+            repo_root = _resolve_repo_root(self.home_dir)
             ds = self.dataset_name if self.dataset_name not in (None, "") else "."
-            return (Path(self.home_dir).expanduser() / Path(ds)).resolve()
+            dataset_root = _resolve_dataset_root(repo_root, ds)
+        if self.ingest_output_dir is not None and str(self.ingest_output_dir).strip():
+            explicit_root = Path(self.ingest_output_dir).expanduser().resolve()
+            if dataset_root is not None and explicit_root != dataset_root:
+                raise ValueError(
+                    "ingest_output_dir disagrees with home_dir + dataset_name: "
+                    f"{explicit_root} != {dataset_root}"
+                )
+            if repo_root is not None:
+                try:
+                    explicit_root.relative_to(repo_root)
+                except ValueError as exc:
+                    raise ValueError(
+                        "ingest_output_dir must resolve inside home_dir: "
+                        f"{explicit_root}"
+                    ) from exc
+            return explicit_root
+        if dataset_root is not None:
+            return dataset_root
         raise ValueError(
             "Ingest output root is undefined. Set ingest_output_dir (or home_dir+dataset_name)."
         )
@@ -344,10 +412,14 @@ class PipelineConfig:
     fields correspond directly to CLI options and pipeline stages.
 
     Notes:
-        The ``dataset_name`` field is interpreted by :meth:`resolved` as a
-        filesystem path when it contains a path separator (``/`` or ``\\``) or
-        starts with ``.``; otherwise it is treated as a directory name under
-        ``home_dir``.
+        The path contract is intentionally simple:
+
+        - ``home_dir`` is the Git repository root
+        - ``dataset_name`` is a path relative to ``home_dir``
+
+        For example, with ``home_dir = "/repo"`` and
+        ``dataset_name = "EPTA-DR3/epta-dr3-data-v0"``, the resolved dataset
+        root is ``/repo/EPTA-DR3/epta-dr3-data-v0``.
 
     Examples:
         Basic construction and JSON save::
@@ -360,9 +432,9 @@ class PipelineConfig:
             cfg.save_json(Path("pipeline.json"))
 
     Attributes:
-        home_dir: Root of the data repository containing pulsar folders.
+        home_dir: Git repository root containing ``.git``.
         singularity_image: Singularity/Apptainer image with tempo2.
-        dataset_name: Dataset name or path (see :meth:`resolved`).
+        dataset_name: Dataset path relative to ``home_dir``.
         results_dir: Output directory for pipeline reports.
         branches: Git branches to run/compare.
         reference_branch: Branch used as change-report reference.
@@ -869,11 +941,11 @@ class PipelineConfig:
     def resolved(self) -> "PipelineConfig":
         """Return a copy with paths expanded and resolved.
 
-        The ``dataset_name`` field is interpreted as:
+        Contract:
 
-        1) absolute path -> use as-is
-        2) looks like a path (contains "/" or starts with ".") -> resolve relative to cwd
-        3) plain name -> treat as a directory inside ``home_dir``
+        1) ``home_dir`` must be the Git repository root
+        2) ``dataset_name`` must be a path relative to ``home_dir``
+        3) ``dataset_name`` may not be absolute or escape outside ``home_dir``
 
         Returns:
             A new :class:`PipelineConfig` with resolved paths.
@@ -881,6 +953,8 @@ class PipelineConfig:
         Raises:
             TypeError: If ``dataset_name`` is ``None`` (it must be a string or
                 path-like value when resolving).
+            ValueError: If ``home_dir`` is not a Git repo root, or
+                ``dataset_name`` is not a valid repo-relative path.
 
         Examples:
             Resolve a dataset by name relative to ``home_dir``::
@@ -902,20 +976,8 @@ class PipelineConfig:
                 "results_dir": Path(self.results_dir),
             }
         )
-        c.home_dir = c.home_dir.expanduser().resolve()
-        ds_raw = str(c.dataset_name)
-        ds_path = Path(ds_raw).expanduser()
-
-        # Interpret dataset_name as:
-        # 1) absolute path -> use as-is
-        # 2) looks like a path (contains / or starts with .) -> resolve relative to config/cwd (legacy behavior)
-        # 3) plain name -> treat as a directory inside home_dir (what you expect)
-        if ds_path.is_absolute():
-            c.dataset_name = ds_path
-        elif ("/" in ds_raw) or ("\\" in ds_raw) or ds_raw.startswith("."):
-            c.dataset_name = ds_path.resolve()
-        else:
-            c.dataset_name = (Path(c.home_dir).expanduser() / ds_raw).resolve()
+        c.home_dir = _resolve_repo_root(c.home_dir)
+        c.dataset_name = _resolve_dataset_root(c.home_dir, c.dataset_name)
 
         c.singularity_image = c.singularity_image.expanduser().resolve()
         # Keep results under home_dir when results_dir is relative.

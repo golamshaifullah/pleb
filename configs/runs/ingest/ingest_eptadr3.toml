@@ -2,7 +2,7 @@
 # home_dir: path to data repository root. allowed: string path. default: (required)
 home_dir = "/work/git_projects/epta_delme/"
 # dataset_name: dataset name or path. allowed: string path or name. default: "." (resolved under home_dir if not path)
-dataset_name = ""
+dataset_name = "."
 # results_dir: output base directory. allowed: string path. default: "."
 results_dir = "results"
 # singularity_image: tempo2 container image path. allowed: string path. default: (required)

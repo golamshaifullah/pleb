@@ -532,18 +532,19 @@ def _apply_fixdataset_and_commit(
         cfg, apply=True, qc_results_dir=qc_results_dir, qc_branch=qc_branch
     )
 
+    dataset_root = Path(cfg.dataset_name)
     reports = []
     n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
     if n_jobs == 1:
         for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
-            rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / pulsar, fcfg)
+            rep = fix_pulsar_dataset(dataset_root / pulsar, fcfg)
             rep["branch"] = new_branch
             reports.append(rep)
     else:
 
         def _run_fix(p: str) -> Dict[str, object]:
             try:
-                rep = fix_pulsar_dataset(cfg.home_dir / cfg.dataset_name / p, fcfg)
+                rep = fix_pulsar_dataset(dataset_root / p, fcfg)
                 rep["branch"] = new_branch
                 return rep
             except Exception as e:
@@ -562,15 +563,14 @@ def _apply_fixdataset_and_commit(
 
     write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
 
-    dataset_prefix = str(cfg.dataset_name).strip("/")
-    if dataset_prefix in (".", "./"):
-        dataset_prefix = ""
-    elif dataset_prefix:
-        dataset_path = cfg.home_dir / dataset_prefix
-        if not dataset_path.exists():
+    dataset_prefix = ""
+    try:
+        dataset_prefix = dataset_root.relative_to(cfg.home_dir).as_posix().strip("/")
+    except Exception:
+        if not dataset_root.exists():
             logger.warning(
                 "Dataset path %s does not exist; staging changes from repo root.",
-                dataset_path,
+                dataset_root,
             )
             dataset_prefix = ""
 
@@ -648,6 +648,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     """
     cfg = config.resolved()
     set_log_dir(Path(cfg.home_dir) / "logs")
+    dataset_root = Path(cfg.dataset_name)
 
     # Convenience toggles for older CLI usage.
     if cfg.make_plots is not None and not bool(cfg.make_plots):
@@ -712,7 +713,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     # Pulsar selection
     if cfg.pulsars == "ALL":
-        pulsars = discover_pulsars(cfg.home_dir / cfg.dataset_name)
+        pulsars = discover_pulsars(dataset_root)
     else:
         pulsars = list(cfg.pulsars)  # type: ignore[arg-type]
     if not pulsars:
@@ -808,18 +809,14 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
                 if n_jobs == 1:
                     for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                        rep = fix_pulsar_dataset(
-                            cfg.home_dir / cfg.dataset_name / pulsar, fcfg
-                        )
+                        rep = fix_pulsar_dataset(dataset_root / pulsar, fcfg)
                         rep["branch"] = branch
                         reports.append(rep)
                 else:
 
                     def _run_fix(p: str) -> Dict[str, object]:
                         try:
-                            rep = fix_pulsar_dataset(
-                                cfg.home_dir / cfg.dataset_name / p, fcfg
-                            )
+                            rep = fix_pulsar_dataset(dataset_root / p, fcfg)
                             rep["branch"] = branch
                             return rep
                         except Exception as e:
@@ -914,7 +911,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
 
                 def _run_whitenoise(p: str) -> Dict[str, object]:
-                    psr_dir = cfg.home_dir / cfg.dataset_name / p
+                    psr_dir = dataset_root / p
                     parfile = psr_dir / f"{p}.par"
                     timfile = resolve_timfile_for_pulsar(
                         psr_dir, p, wn_cfg.timfile_name
@@ -1201,7 +1198,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
                 tasks: List[tuple[str, str, Path, Path, Path]] = []
                 for pulsar in pulsars:
-                    psr_dir = cfg.home_dir / cfg.dataset_name / pulsar
+                    psr_dir = dataset_root / pulsar
                     if run_variants:
                         variants = _discover_pqc_variants(psr_dir, pulsar)
                         if variants:
@@ -1337,7 +1334,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 if cfg.make_toa_coverage_plots:
                     plot_systems_per_pulsar(
                         cfg.home_dir,
-                        cfg.dataset_name,
+                        dataset_root,
                         out_paths,
                         pulsars,
                         branch,
@@ -1345,7 +1342,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     )
                     plot_pulsars_per_system(
                         cfg.home_dir,
-                        cfg.dataset_name,
+                        dataset_root,
                         out_paths,
                         pulsars,
                         branch,
@@ -1354,14 +1351,14 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
                 if cfg.make_outlier_reports:
                     write_outlier_tables(
-                        cfg.home_dir, cfg.dataset_name, out_paths, pulsars, [branch]
+                        cfg.home_dir, dataset_root, out_paths, pulsars, [branch]
                     )
 
             # Binary analysis per branch
             if cfg.make_binary_analysis:
                 bcfg = BinaryAnalysisConfig(only_models=cfg.binary_only_models)
                 for pulsar in pulsars:
-                    parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
+                    parfile = dataset_root / pulsar / f"{pulsar}.par"
                     row = analyse_binary_from_par(parfile)
                     if bcfg.only_models and row.get("BINARY") not in set(
                         bcfg.only_models

@@ -2,10 +2,11 @@
 # FixDataset variant generation + jump-reference builder + broad PQC feature scans.
 #
 # Note: keep dataset_name aligned with home_dir. If you override home_dir on CLI,
-# also override dataset_name to the same absolute path.
+# the dataset root is the repo root, so dataset_name is "." under the current
+# path contract.
 
 home_dir = "/tmp/epta_2psr_new"
-dataset_name = "/tmp/epta_2psr_new"
+dataset_name = "."
 results_dir = "results"
 singularity_image = "/work/git_projects/PSR_Singularity/psrpta.sif"
 
