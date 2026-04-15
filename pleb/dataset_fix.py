@@ -169,6 +169,8 @@ class FixDatasetConfig:
         qc_merge_tol_days: MJD tolerance for QC matching.
         qc_results_dir: Directory containing QC CSV outputs.
         qc_branch: Subdirectory for QC results (optional).
+        qc_require_csv: Treat missing QC inputs as configuration errors when
+            QC application is enabled.
 
     Examples:
         Run a report-only pass for a pulsar::
@@ -271,6 +273,7 @@ class FixDatasetConfig:
     qc_merge_tol_days: float = 2.0 / 86400.0
     qc_results_dir: Optional[Path] = None
     qc_branch: Optional[str] = None
+    qc_require_csv: bool = True
 
 
 # -----------------------------
@@ -1710,18 +1713,68 @@ def update_parfile_jumps(
 # -----------------------------
 
 
-def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
+def _find_qc_csvs(psr: str, cfg: FixDatasetConfig) -> List[Path]:
     if cfg.qc_results_dir is None:
-        return None
+        if cfg.qc_require_csv:
+            raise ValueError(
+                f"QC application for {psr} requires qc_results_dir, but none was set."
+            )
+        return []
     base = Path(cfg.qc_results_dir)
+    if not base.exists():
+        if cfg.qc_require_csv:
+            raise FileNotFoundError(
+                f"QC results directory does not exist for {psr}: {base}"
+            )
+        return []
+    searched: List[Path] = []
+    found: List[Path] = []
     if cfg.qc_branch:
-        cand = base / str(cfg.qc_branch) / f"{psr}_qc.csv"
-        if cand.exists():
-            return cand
-    matches = sorted(base.rglob(f"{psr}_qc.csv"))
-    if not matches:
-        return None
-    return matches[0]
+        branch_root = base / str(cfg.qc_branch)
+        base_cand = branch_root / f"{psr}_qc.csv"
+        searched.append(base_cand)
+        if base_cand.exists():
+            found.append(base_cand)
+        variant_matches = sorted(branch_root.glob(f"{psr}.*_qc.csv"))
+        searched.extend(variant_matches)
+        found.extend(variant_matches)
+    if not found:
+        matches = sorted(base.rglob(f"{psr}_qc.csv"))
+        variant_matches = sorted(base.rglob(f"{psr}.*_qc.csv"))
+        found = sorted({*matches, *variant_matches})
+    if not found:
+        if cfg.qc_require_csv:
+            locations = ", ".join(str(p) for p in searched) if searched else str(base)
+            raise FileNotFoundError(
+                f"No QC CSV found for {psr}. Searched: {locations}; recursive base: {base}"
+            )
+        return []
+    return sorted(dict.fromkeys(found))
+
+
+def _load_qc_manifest_rows(psr: str, cfg: FixDatasetConfig) -> List[Dict[str, object]]:
+    if cfg.qc_results_dir is None:
+        return []
+    base = Path(cfg.qc_results_dir)
+    candidates = [base / "qc_summary.tsv", base.parent / "qc_summary.tsv"]
+    for summary_path in candidates:
+        if not summary_path.exists():
+            continue
+        try:
+            df = pd.read_csv(summary_path, sep="\t", low_memory=False)
+        except Exception:
+            continue
+        if "pulsar" in df.columns:
+            df = df[df["pulsar"].astype(str) == psr]
+        if "branch" in df.columns and cfg.qc_branch:
+            df = df[df["branch"].astype(str) == str(cfg.qc_branch)]
+        return df.to_dict(orient="records")
+    return []
+
+
+def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
+    matches = _find_qc_csvs(psr, cfg)
+    return matches[0] if matches else None
 
 
 def _collect_qc_mjds(
@@ -1920,14 +1973,44 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     - PQC docs: https://golamshaifullah.github.io/pqc/index.html
     """
     psr = psr_dir.name
-    qc_csv = _find_qc_csv(psr, cfg)
-    if qc_csv is None:
+    manifest_rows = _load_qc_manifest_rows(psr, cfg)
+    if manifest_rows:
+        statuses = {
+            str(r.get("qc_status", "")).strip() or (
+                "pqc_failed" if str(r.get("qc_error", "")).strip() else "success"
+            )
+            for r in manifest_rows
+        }
+        if statuses == {"empty_variant"}:
+            return {
+                "pulsar": psr,
+                "qc_csv": None,
+                "qc_csvs": [],
+                "qc_statuses": sorted(statuses),
+                "matched": 0,
+                "changed": False,
+            }
+    qc_csvs = _find_qc_csvs(psr, cfg)
+    if not qc_csvs:
         return {"pulsar": psr, "qc_csv": None, "matched": 0, "changed": False}
 
     try:
-        df = pd.read_csv(qc_csv)
+        frames = [pd.read_csv(qc_csv, low_memory=False) for qc_csv in qc_csvs]
+        df = frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)
     except Exception as e:
-        return {"pulsar": psr, "qc_csv": str(qc_csv), "error": str(e)}
+        return {
+            "pulsar": psr,
+            "qc_csv": str(qc_csvs[0]),
+            "qc_csvs": [str(p) for p in qc_csvs],
+            "qc_statuses": sorted(
+                {
+                    str(r.get("qc_status", "")).strip()
+                    for r in manifest_rows
+                    if str(r.get("qc_status", "")).strip()
+                }
+            ),
+            "error": str(e),
+        }
 
     mjd_maps = _collect_qc_mjds(df, cfg)
     pqc_label_map = (
@@ -1939,27 +2022,64 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         and not mjd_maps.get("orbital")
         and not pqc_label_map
     ):
-        return {"pulsar": psr, "qc_csv": str(qc_csv), "matched": 0, "changed": False}
+        return {
+            "pulsar": psr,
+            "qc_csv": str(qc_csvs[0]),
+            "qc_csvs": [str(p) for p in qc_csvs],
+            "qc_statuses": sorted(
+                {
+                    str(r.get("qc_status", "")).strip()
+                    for r in manifest_rows
+                    if str(r.get("qc_status", "")).strip()
+                }
+            ),
+            "matched": 0,
+            "changed": False,
+        }
 
     action = str(cfg.qc_action or "comment").strip().lower()
     if action not in {"comment", "delete"}:
         return {
             "pulsar": psr,
-            "qc_csv": str(qc_csv),
+            "qc_csv": str(qc_csvs[0]),
+            "qc_csvs": [str(p) for p in qc_csvs],
+            "qc_statuses": sorted(
+                {
+                    str(r.get("qc_status", "")).strip()
+                    for r in manifest_rows
+                    if str(r.get("qc_status", "")).strip()
+                }
+            ),
             "error": f"Unsupported qc_action: {cfg.qc_action}",
         }
     solar_action = str(cfg.qc_solar_action or "comment").strip().lower()
     if solar_action not in {"comment", "delete"}:
         return {
             "pulsar": psr,
-            "qc_csv": str(qc_csv),
+            "qc_csv": str(qc_csvs[0]),
+            "qc_csvs": [str(p) for p in qc_csvs],
+            "qc_statuses": sorted(
+                {
+                    str(r.get("qc_status", "")).strip()
+                    for r in manifest_rows
+                    if str(r.get("qc_status", "")).strip()
+                }
+            ),
             "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}",
         }
     orbital_action = str(cfg.qc_orbital_phase_action or "comment").strip().lower()
     if orbital_action not in {"comment", "delete"}:
         return {
             "pulsar": psr,
-            "qc_csv": str(qc_csv),
+            "qc_csv": str(qc_csvs[0]),
+            "qc_csvs": [str(p) for p in qc_csvs],
+            "qc_statuses": sorted(
+                {
+                    str(r.get("qc_status", "")).strip()
+                    for r in manifest_rows
+                    if str(r.get("qc_status", "")).strip()
+                }
+            ),
             "error": f"Unsupported qc_orbital_phase_action: {cfg.qc_orbital_phase_action}",
         }
 
@@ -2144,7 +2264,15 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
 
     return {
         "pulsar": psr,
-        "qc_csv": str(qc_csv),
+        "qc_csv": str(qc_csvs[0]),
+        "qc_csvs": [str(p) for p in qc_csvs],
+        "qc_statuses": sorted(
+            {
+                str(r.get("qc_status", "")).strip()
+                for r in manifest_rows
+                if str(r.get("qc_status", "")).strip()
+            }
+        ),
         "matched": int(total_matched),
         "pqc_flagged": int(total_pqc_flagged),
         "changed_files": int(changed_files),
@@ -2671,10 +2799,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         report["steps"].append({"coord_convert": rep})
 
     if cfg.qc_remove_outliers or cfg.qc_write_pqc_flag:
-        try:
-            rep = apply_pqc_outliers(psr_dir, cfg)
-        except Exception as e:
-            rep = {"error": str(e)}
+        rep = apply_pqc_outliers(psr_dir, cfg)
         report["steps"].append({"qc_outliers": rep})
 
     return report

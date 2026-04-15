@@ -47,6 +47,7 @@ from .reports import (
     write_outlier_tables,
 )
 from .tempo2 import run_tempo2_for_pulsar
+from .tim_utils import count_toa_lines, parse_include_lines
 from .utils import (
     discover_pulsars,
     make_output_tree,
@@ -56,7 +57,12 @@ from .utils import (
 )
 
 # Add-ons from FixDataset.ipynb / AnalysePulsars.ipynb
-from .dataset_fix import FixDatasetConfig, fix_pulsar_dataset, write_fix_report
+from .dataset_fix import (
+    FixDatasetConfig,
+    _find_qc_csv,
+    fix_pulsar_dataset,
+    write_fix_report,
+)
 from .outlier_qc import PTAQCConfig, run_pqc_for_parfile_subprocess, summarize_pqc
 from .pulsar_analysis import analyse_binary_from_par, BinaryAnalysisConfig
 from .qc_report import generate_cross_pulsar_coincidence_report, generate_qc_report
@@ -157,6 +163,19 @@ def _prepare_variant_pqc_workspace(
         shutil.copytree(psr_dir / "tims", link_tims, dirs_exist_ok=True)
 
     return target_par
+
+
+def _variant_alltim_toa_count(alltim: Path) -> int:
+    """Return the total TOA count referenced by one variant ``*_all.tim``."""
+    total = 0
+    base_dir = alltim.parent
+    for rel in sorted(parse_include_lines(alltim)):
+        try:
+            inc = (base_dir / rel).resolve()
+        except Exception:
+            inc = base_dir / rel
+        total += count_toa_lines(inc)
+    return total
 
 
 def _cfg_get(cfg, name: str, default=None):
@@ -459,6 +478,7 @@ def _build_fixdataset_config(
                 if qc_branch is not None
                 else _cfg_get(cfg, "fix_qc_branch", None)
             ),
+            qc_require_csv=bool(_cfg_get(cfg, "fix_qc_require_csv", True)),
         )
     )
 
@@ -473,6 +493,80 @@ def _pqc_available() -> bool:
         return importlib.util.find_spec("pqc") is not None
     except Exception:
         return False
+
+
+def _raise_if_fixdataset_failed(
+    reports: List[Dict[str, object]], *, stage: str, branch: str
+) -> None:
+    errors = []
+    for rep in reports:
+        err = rep.get("error")
+        if not err:
+            continue
+        psr = str(rep.get("psr") or rep.get("pulsar") or "<unknown>")
+        errors.append(f"{psr}: {err}")
+    if not errors:
+        return
+    preview = "; ".join(errors[:5])
+    if len(errors) > 5:
+        preview += f"; ... ({len(errors)} pulsars failed)"
+    raise RuntimeError(
+        f"FixDataset {stage} failed on branch {branch}. {preview}"
+    )
+
+
+def _validate_fixdataset_qc_inputs(
+    pulsars: List[str], cfg: FixDatasetConfig, *, branch: str
+) -> None:
+    if not (cfg.qc_remove_outliers or cfg.qc_write_pqc_flag):
+        return
+    errors = []
+    for psr in pulsars:
+        try:
+            manifest_rows: List[Dict[str, object]] = []
+            if cfg.qc_results_dir is not None:
+                summary_path = Path(cfg.qc_results_dir) / "qc_summary.tsv"
+                if not summary_path.exists():
+                    summary_path = Path(cfg.qc_results_dir).parent / "qc_summary.tsv"
+                if summary_path.exists():
+                    try:
+                        df = pd.read_csv(summary_path, sep="\t")
+                        if "pulsar" in df.columns:
+                            df = df[df["pulsar"].astype(str) == psr]
+                        if "branch" in df.columns:
+                            df = df[df["branch"].astype(str) == str(cfg.qc_branch or "")]
+                        manifest_rows = df.to_dict(orient="records")
+                    except Exception:
+                        manifest_rows = []
+            if manifest_rows:
+                statuses = {
+                    str(r.get("qc_status", "")).strip() or (
+                        "pqc_failed" if str(r.get("qc_error", "")).strip() else "success"
+                    )
+                    for r in manifest_rows
+                }
+                if "success" in statuses:
+                    continue
+                if "pqc_failed" in statuses or "prepare_failed" in statuses:
+                    errors.append(
+                        f"{psr}: unresolved QC status in manifest: {sorted(statuses)}"
+                    )
+                    continue
+                if statuses == {"empty_variant"}:
+                    continue
+                errors.append(f"{psr}: no successful QC status in manifest: {sorted(statuses)}")
+                continue
+            _find_qc_csv(psr, cfg)
+        except Exception as e:
+            errors.append(f"{psr}: {e}")
+    if not errors:
+        return
+    preview = "; ".join(errors[:5])
+    if len(errors) > 5:
+        preview += f"; ... ({len(errors)} pulsars failed)"
+    raise RuntimeError(
+        f"FixDataset QC input validation failed for branch {branch}. {preview}"
+    )
 
 
 def _apply_fixdataset_and_commit(
@@ -531,6 +625,7 @@ def _apply_fixdataset_and_commit(
     fcfg = _build_fixdataset_config(
         cfg, apply=True, qc_results_dir=qc_results_dir, qc_branch=qc_branch
     )
+    _validate_fixdataset_qc_inputs(pulsars, fcfg, branch=new_branch)
 
     dataset_root = Path(cfg.dataset_name)
     reports = []
@@ -562,6 +657,7 @@ def _apply_fixdataset_and_commit(
                 reports.append(fut.result())
 
     write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
+    _raise_if_fixdataset_failed(reports, stage="apply", branch=new_branch)
 
     dataset_prefix = ""
     try:
@@ -852,6 +948,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         ):
                             reports.append(fut.result())
                 write_fix_report(reports, out_paths["fix_dataset"] / branch)
+                _raise_if_fixdataset_failed(
+                    reports, stage="report-only", branch=branch
+                )
             elif not run_fix_dataset:
                 logger.info(
                     "FixDataset report-only stage skipped (run_fix_dataset=false)."
@@ -1239,8 +1338,29 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                                             "variant": variant,
                                             "branch": branch,
                                             "qc_csv": str(out_csv),
+                                            "qc_status": "prepare_failed",
                                             "qc_error": str(e),
                                         }
+                                    )
+                                    continue
+                                variant_all = ws / f"{pulsar}_all.tim"
+                                if _variant_alltim_toa_count(variant_all) <= 0:
+                                    out_csv = qc_out_dir / f"{pulsar}.{variant}_qc.csv"
+                                    qc_rows.append(
+                                        {
+                                            "pulsar": pulsar,
+                                            "variant": variant,
+                                            "branch": branch,
+                                            "qc_csv": str(out_csv),
+                                            "qc_status": "empty_variant",
+                                            "qc_error": "",
+                                        }
+                                    )
+                                    logger.info(
+                                        "Skipping PQC for %s.%s (%s): variant has no TOAs.",
+                                        pulsar,
+                                        variant,
+                                        branch,
                                     )
                                     continue
                                 out_csv = qc_out_dir / f"{pulsar}.{variant}_qc.csv"
@@ -1283,6 +1403,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                                     "variant": variant,
                                     "branch": branch,
                                     "qc_csv": str(out_csv),
+                                    "qc_status": "pqc_failed",
                                     "qc_error": str(e),
                                 }
                             )
@@ -1292,6 +1413,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             "variant": variant,
                             "branch": branch,
                             "qc_csv": str(out_csv),
+                            "qc_status": "success",
                         }
                         row.update(summarize_pqc(df))
                         qc_rows.append(row)
@@ -1320,6 +1442,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                                 "variant": variant,
                                 "branch": branch,
                                 "qc_csv": str(out_csv),
+                                "qc_status": "pqc_failed",
                                 "qc_error": str(e),
                             }
                         row = {
@@ -1327,6 +1450,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             "variant": variant,
                             "branch": branch,
                             "qc_csv": str(out_csv),
+                            "qc_status": "success",
                         }
                         row.update(summarize_pqc(df))
                         return row

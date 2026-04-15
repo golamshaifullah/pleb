@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import warnings
+import pytest
 
 from pleb.tim_utils import is_toa_line
 from pleb.dataset_fix import (
     FixDatasetConfig,
+    _find_qc_csvs,
     _variant_name_from_alltim,
     apply_pqc_outliers,
     build_variant_reference_jump_pars,
@@ -234,6 +237,148 @@ def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     assert len(toa_comments) == 1
     assert toa_comments[0].startswith("C QC_OUTLIER ")
     assert "\tf 1400" not in toa_comments[0]
+
+
+def test_apply_pqc_outliers_raises_when_qc_csv_missing_by_default(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0002"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=tmp_path / "qc",
+        qc_branch="main",
+        qc_remove_outliers=True,
+    )
+    cfg.qc_results_dir.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(FileNotFoundError, match=re.escape(f"{psr}_qc.csv")):
+        apply_pqc_outliers(psr_dir, cfg)
+
+
+def test_apply_pqc_outliers_can_opt_out_of_missing_qc_csv_failure(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0003"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=tmp_path / "qc",
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_require_csv=False,
+    )
+
+    rep = apply_pqc_outliers(psr_dir, cfg)
+    assert rep["qc_csv"] is None
+    assert rep["matched"] == 0
+    assert rep["changed"] is False
+
+
+def test_find_qc_csvs_discovers_variant_specific_files(tmp_path: Path) -> None:
+    psr = "J0000+0004"
+    qc_root = tmp_path / "qc"
+    _write(qc_root / "main" / f"{psr}.legacy_qc.csv", "_timfile,mjd,bad_point\n")
+    _write(qc_root / "main" / f"{psr}.new_qc.csv", "_timfile,mjd,bad_point\n")
+
+    cfg = FixDatasetConfig(
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+    )
+
+    found = _find_qc_csvs(psr, cfg)
+    assert [p.name for p in found] == [f"{psr}.legacy_qc.csv", f"{psr}.new_qc.csv"]
+
+
+def test_apply_pqc_outliers_can_merge_variant_specific_qc_csvs(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0005"
+    psr_dir = tmp_path / psr
+    tims = psr_dir / "tims"
+    legacy_tim = tims / "LEGACY.tim"
+    new_tim = tims / "NEW.tim"
+    _write(
+        legacy_tim,
+        "FORMAT 1\nf 1400 56000 1 1\n",
+    )
+    _write(
+        new_tim,
+        "FORMAT 1\nf 1400 56001 1 1\n",
+    )
+
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "main" / f"{psr}.legacy_qc.csv",
+        "_timfile,mjd,bad_point\nLEGACY.tim,56000,True\n",
+    )
+    _write(
+        qc_root / "main" / f"{psr}.new_qc.csv",
+        "_timfile,mjd,bad_point\nNEW.tim,56001,True\n",
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_action="comment",
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 2
+    assert sorted(Path(p).name for p in rep["qc_csvs"]) == [
+        f"{psr}.legacy_qc.csv",
+        f"{psr}.new_qc.csv",
+    ]
+    assert legacy_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
+        "C QC_OUTLIER "
+    )
+    assert new_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
+        "C QC_OUTLIER "
+    )
+
+
+def test_apply_pqc_outliers_treats_empty_variant_manifest_as_skip(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0006"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "qc_summary.tsv",
+        (
+            "pulsar\tvariant\tbranch\tqc_status\tqc_csv\tqc_error\n"
+            f"{psr}\tlegacy\tmain\tempty_variant\t/path/{psr}.legacy_qc.csv\t\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_require_csv=True,
+    )
+
+    rep = apply_pqc_outliers(psr_dir, cfg)
+    assert rep["qc_csv"] is None
+    assert rep["qc_statuses"] == ["empty_variant"]
+    assert rep["changed"] is False
 
 
 def test_variant_name_parser_accepts_underscore_and_legacy_dot_forms() -> None:

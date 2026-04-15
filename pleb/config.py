@@ -614,6 +614,8 @@ class PipelineConfig:
             fix_apply is true, defaults to ``<results>/qc/<fix_branch_name>``.
         fix_qc_branch: Branch subdir for pqc CSV outputs. If unset and
             fix_qc_results_dir is set, defaults to ``fix_branch_name``.
+        fix_qc_require_csv: Fail if QC application is enabled but a pulsar's
+            expected PQC CSV cannot be found.
         binary_only_models: Limit binary analysis to model names.
         dpi: Plot resolution.
         max_covmat_params: Max params in covariance heatmaps.
@@ -919,6 +921,7 @@ class PipelineConfig:
     fix_qc_merge_tol_days: float = 2.0 / 86400.0
     fix_qc_results_dir: Optional[Path] = None
     fix_qc_branch: Optional[str] = None
+    fix_qc_require_csv: bool = True
 
     # ---- Binary analysis settings ----
     binary_only_models: Optional[List[str]] = None
@@ -1512,6 +1515,7 @@ class PipelineConfig:
                 Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None
             ),
             fix_qc_branch=opt_str("fix_qc_branch"),
+            fix_qc_require_csv=bool(d.get("fix_qc_require_csv", True)),
             binary_only_models=opt_list_str("binary_only_models"),
             dpi=int(d.get("dpi", 120)),
             max_covmat_params=(
