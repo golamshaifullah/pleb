@@ -46,6 +46,7 @@ from .reports import (
     write_new_param_significance,
     write_outlier_tables,
 )
+from .run_report import generate_run_report
 from .tempo2 import run_tempo2_for_pulsar
 from .tim_utils import count_toa_lines, parse_include_lines
 from .utils import (
@@ -1624,6 +1625,17 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 logger.info("QC report written to: %s", report_dir)
             except Exception as e:
                 logger.warning("QC report generation failed: %s", e)
+
+        try:
+            report_path = generate_run_report(
+                out_paths["tag"],
+                title="PLEB Pipeline Run Report",
+                output_name="run_report.pdf",
+            )
+            if report_path is not None:
+                logger.info("Run report written to: %s", report_path)
+        except Exception as e:
+            logger.warning("Run report generation failed: %s", e)
 
         if getattr(cfg, "cleanup_work_dir", False):
             remove_tree_if_exists(out_paths["work"])

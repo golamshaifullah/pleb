@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -23,6 +23,7 @@ from .qc_report import generate_qc_report
 from .public_release_compare import compare_public_releases
 from .ingest import ingest_dataset
 from .logging_utils import get_logger, set_log_dir
+from .run_report import generate_run_report
 from .config_io import _load_config_dict, _parse_value_as_toml_literal, _set_dotted_key
 
 logger = get_logger("pleb.workflow")
@@ -54,6 +55,7 @@ class WorkflowContext:
     last_pipeline_run_dir: Optional[Path] = None
     last_qc_summary: Optional[Path] = None
     last_fix_summary: Optional[Path] = None
+    step_records: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _load_workflow(path: Path) -> Dict[str, Any]:
@@ -309,6 +311,15 @@ def _run_step(
             base_branch=getattr(cfg, "ingest_commit_base_branch", None),
             commit_message=getattr(cfg, "ingest_commit_message", None),
         )
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(Path(cfg.ingest_output_dir)),
+                "fix_summary": "",
+                "qc_summary": "",
+            }
+        )
         return
 
     if name == "pipeline":
@@ -317,6 +328,15 @@ def _run_step(
         ctx.last_pipeline_run_dir = out_paths.get("tag")
         ctx.last_fix_summary = _find_latest_fix_summary(out_paths)
         ctx.last_qc_summary = _find_qc_summary(out_paths)
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(out_paths.get("tag") or ""),
+                "fix_summary": str(ctx.last_fix_summary or ""),
+                "qc_summary": str(ctx.last_qc_summary or ""),
+            }
+        )
         return
 
     if name == "fix_dataset":
@@ -328,6 +348,15 @@ def _run_step(
         ctx.last_pipeline_run_dir = out_paths.get("tag")
         ctx.last_fix_summary = _find_latest_fix_summary(out_paths)
         ctx.last_qc_summary = _find_qc_summary(out_paths)
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(out_paths.get("tag") or ""),
+                "fix_summary": str(ctx.last_fix_summary or ""),
+                "qc_summary": str(ctx.last_qc_summary or ""),
+            }
+        )
         return
 
     if name == "fix_apply":
@@ -338,6 +367,15 @@ def _run_step(
         ctx.last_pipeline_run_dir = out_paths.get("tag")
         ctx.last_fix_summary = _find_latest_fix_summary(out_paths)
         ctx.last_qc_summary = _find_qc_summary(out_paths)
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(out_paths.get("tag") or ""),
+                "fix_summary": str(ctx.last_fix_summary or ""),
+                "qc_summary": str(ctx.last_qc_summary or ""),
+            }
+        )
         return
 
     if name == "param_scan":
@@ -351,6 +389,15 @@ def _run_step(
             btx_max_fb=getattr(cfg, "param_scan_btx_max_fb", None),
         )
         ctx.last_run_dir = out_paths.get("tag")
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(out_paths.get("tag") or ""),
+                "fix_summary": "",
+                "qc_summary": "",
+            }
+        )
         return
 
     if name == "whitenoise":
@@ -366,6 +413,15 @@ def _run_step(
         out_paths = run_pipeline(cfg)
         ctx.last_run_dir = out_paths.get("tag")
         ctx.last_pipeline_run_dir = out_paths.get("tag")
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(out_paths.get("tag") or ""),
+                "fix_summary": "",
+                "qc_summary": "",
+            }
+        )
         return
 
     if name == "compare_public":
@@ -381,6 +437,15 @@ def _run_step(
             providers_path=(Path(providers_path) if providers_path else None),
         )
         ctx.last_run_dir = Path(out["out_dir"])
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(ctx.last_run_dir or ""),
+                "fix_summary": "",
+                "qc_summary": "",
+            }
+        )
         return
 
     if name == "qc_report":
@@ -435,6 +500,8 @@ def _merge_context(dst: WorkflowContext, src: WorkflowContext) -> None:
         dst.last_qc_summary = src.last_qc_summary
     if src.last_fix_summary is not None:
         dst.last_fix_summary = src.last_fix_summary
+    if src.step_records:
+        dst.step_records.extend(src.step_records)
 
 
 def _run_steps_serial(
@@ -646,5 +713,18 @@ def run_workflow(path: Path) -> WorkflowContext:
             if _should_stop(lp.get("stop_if", []), ctx):
                 logger.info("Loop %s stopping early (stop_if condition met).", lname)
                 break
+
+    if ctx.last_run_dir is not None:
+        try:
+            report_path = generate_run_report(
+                ctx.last_run_dir,
+                title=f"PLEB Workflow Report: {Path(path).name}",
+                output_name="workflow_report.pdf",
+                workflow_steps=ctx.step_records,
+            )
+            if report_path is not None:
+                logger.info("Workflow report written to: %s", report_path)
+        except Exception as e:
+            logger.warning("Workflow report generation failed: %s", e)
 
     return ctx

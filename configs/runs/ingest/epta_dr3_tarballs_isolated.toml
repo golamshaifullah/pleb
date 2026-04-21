@@ -1,0 +1,14 @@
+# Ingest-only profile for importing the EPTA DR3 release data from the
+# extracted DR3 tarballs plus supporting DR2/DR1 folders.
+#
+# Run with:
+#   pleb ingest --config configs/runs/ingest/epta_dr3_tarballs_isolated.toml
+
+ingest_mapping_file = "/work/git_projects/pleb/configs/catalogs/ingest/epta_dr3_tarballs_isolated.json"
+ingest_output_dir = "/work/git_projects/epta-dr3-in2p3/EPTA-DR3/epta-dr3-data"
+
+# Post-ingest checks and commit behavior.
+ingest_verify = true
+ingest_commit_branch_name = "raw_ingest_v0"
+ingest_commit_base_branch = "main"
+ingest_commit_message = "Ingest: EPTA DR3 tarballs and supporting folders"

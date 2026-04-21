@@ -531,6 +531,13 @@ def run_pqc_for_parfile(
             "If you're installing from a local zip/folder: pip install <path-to-pqc>."
         ) from e
 
+    def _opt_float_or_none(v: object) -> Optional[float]:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return float(v)
+
     def _run_once(
         par_in: Path, cfg_in: PTAQCConfig, settings_path: Optional[Path]
     ) -> pd.DataFrame:
@@ -641,11 +648,7 @@ def run_pqc_for_parfile(
         orbital_cfg = OrbitalPhaseCutConfig(
             enabled=bool(cfg_in.orbital_phase_cut_enabled),
             center_phase=float(cfg_in.orbital_phase_cut_center),
-            limit_phase=(
-                float(cfg_in.orbital_phase_cut)
-                if cfg_in.orbital_phase_cut is not None
-                else None
-            ),
+            limit_phase=_opt_float_or_none(cfg_in.orbital_phase_cut),
             sigma_thresh=float(cfg_in.orbital_phase_cut_sigma),
             nbins=int(cfg_in.orbital_phase_cut_nbins),
             min_points=int(cfg_in.orbital_phase_cut_min_points),
