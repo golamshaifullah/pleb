@@ -396,7 +396,10 @@ def verify_ingest_tims(
 
     Notes
     -----
-    This function is diagnostic-only and logs warnings; it does not mutate data.
+    If ``check_all_tim`` is enabled and copied timfiles are not referenced by
+    ``<PSR>_all.tim``, this function will attempt to rewrite ``<PSR>_all.tim``
+    from the ingest manifest. It raises only if the post-rewrite includes still
+    do not match the copied timfiles.
     """
     manifest = output_root / "ingest_reports" / "ingest_manifest_tim.csv"
     manifest_srcs: Set[str] = set()
@@ -421,6 +424,7 @@ def verify_ingest_tims(
         except Exception:
             pass
     missing_total = 0
+    include_failures: List[str] = []
     repo = None
     tracked: Set[str] = set()
     untracked: Set[str] = set()
@@ -439,16 +443,21 @@ def verify_ingest_tims(
         psr = psr_dir.name
         expected_by_root = _collect_expected_tim_paths(psr, mapping)
         all_tim = psr_dir / f"{psr}_all.tim"
-        includes: Set[str] = set()
-        if check_all_tim and all_tim.exists():
-            for line in all_tim.read_text(
-                encoding="utf-8", errors="ignore"
-            ).splitlines():
+
+        def _read_includes(path: Path) -> Set[str]:
+            out: Set[str] = set()
+            if not path.exists():
+                return out
+            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
                 s = line.strip()
-                if s.startswith("INCLUDE"):
-                    parts = s.split(maxsplit=1)
-                    if len(parts) == 2:
-                        includes.add(parts[1].replace("\\", "/"))
+                if not s.startswith("INCLUDE"):
+                    continue
+                parts = s.split(maxsplit=1)
+                if len(parts) == 2:
+                    out.add(parts[1].replace("\\", "/"))
+            return out
+
+        includes = _read_includes(all_tim)
         for root, expected in expected_by_root.items():
             missing: List[Path] = []
             for tim in sorted(expected):
@@ -469,14 +478,20 @@ def verify_ingest_tims(
                     logger.warning("  missing: %s", tim.name)
 
         # Verify each copied destination is in git and in _all.tim.
+        psr_rows: List[Dict[str, str]] = []
+        copied_entries: List[Tuple[str, Path]] = []
         if manifest_rows:
             for row in manifest_rows:
                 m_psr = row.get("pulsar", "")
                 if m_psr != psr:
                     continue
+                psr_rows.append(row)
                 dst = row.get("dst")
                 if not dst:
                     continue
+                backend = row.get("backend", "").strip()
+                if backend:
+                    copied_entries.append((backend, Path(dst).resolve()))
                 dst_path = Path(dst).resolve()
                 try:
                     rel = str(dst_path.relative_to(output_root).as_posix())
@@ -489,24 +504,47 @@ def verify_ingest_tims(
                             logger.warning("Ingest verify: untracked file %s", rel)
                         elif rel not in tracked:
                             logger.warning("Ingest verify: not tracked in git %s", rel)
-                if check_all_tim and includes:
-                    inc = f"tims/{dst_path.name}"
-                    if inc not in includes:
-                        logger.warning(
-                            "Ingest verify: %s missing INCLUDE for %s",
-                            psr,
-                            inc,
-                        )
+
+        if check_all_tim and copied_entries:
+            expected_includes = {f"tims/{dst_path.name}" for _, dst_path in copied_entries}
+            missing_includes = sorted(expected_includes - includes)
+            if missing_includes:
+                logger.warning(
+                    "Ingest verify: %s missing %d INCLUDE lines; rebuilding %s from manifest",
+                    psr,
+                    len(missing_includes),
+                    all_tim.name,
+                )
+                _write_all_tim(psr_dir, copied_entries)
+                includes = _read_includes(all_tim)
+                remaining = sorted(expected_includes - includes)
+                if remaining:
+                    include_failures.append(
+                        f"{psr}: failed to restore INCLUDE lines in {all_tim.name}: {remaining}"
+                    )
+                else:
+                    logger.info(
+                        "Ingest verify: %s repaired %d INCLUDE lines in %s",
+                        psr,
+                        len(missing_includes),
+                        all_tim.name,
+                    )
     if missing_total == 0:
         logger.info("Ingest verify: all expected tim files copied.")
+    if include_failures:
+        preview = "; ".join(include_failures[:5])
+        if len(include_failures) > 5:
+            preview += f"; ... ({len(include_failures)} pulsars failed)"
+        raise RuntimeError(f"Ingest verify failed after INCLUDE auto-fix. {preview}")
 
 
 def _find_parfiles(
     par_roots: Iterable[Path], aliases: Dict[str, str]
 ) -> Dict[str, Path]:
     out: Dict[str, Path] = {}
-    found: Dict[str, List[Path]] = {}
-    for root in par_roots:
+    ordered_roots = [Path(root) for root in par_roots]
+    found: Dict[str, Dict[int, List[Path]]] = {}
+    for idx, root in enumerate(ordered_roots):
         if not root.exists():
             continue
         for par in root.rglob("*.par"):
@@ -515,19 +553,27 @@ def _find_parfiles(
             if not psr_raw:
                 continue
             psr = _canonical_pulsar(psr_raw, aliases)
-            found.setdefault(psr, []).append(par)
-    for psr, paths in found.items():
-        if len(paths) == 1:
-            out[psr] = paths[0]
-            continue
-        # Prefer exact filename match to the pulsar name, then pick deterministically.
+            found.setdefault(psr, {}).setdefault(idx, []).append(par)
+    for psr, by_root in found.items():
+        chosen_idx = min(by_root)
+        paths = by_root[chosen_idx]
         exact = [p for p in paths if p.stem == psr]
         pick_from = exact or paths
         pick = sorted({p.resolve() for p in pick_from})[0]
-        ignored = sorted({str(p.resolve()) for p in paths if p.resolve() != pick})
-        warnings.warn(
-            f"Multiple parfiles found for {psr}; using {pick} and ignoring {ignored}."
+        ignored = sorted(
+            {
+                str(p.resolve())
+                for ridx, root_paths in by_root.items()
+                for p in root_paths
+                if ridx != chosen_idx or p.resolve() != pick
+            }
         )
+        if ignored:
+            warnings.warn(
+                "Multiple parfiles found for "
+                f"{psr}; using {pick} from preferred par_roots entry "
+                f"{ordered_roots[chosen_idx]} and ignoring {ignored}."
+            )
         out[psr] = pick
     return out
 

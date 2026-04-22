@@ -7,6 +7,7 @@ from pleb.cli import (
     build_ingest_parser,
     build_optimize_parser,
     build_qc_report_parser,
+    build_report_parser,
     build_workflow_parser,
 )
 
@@ -27,6 +28,13 @@ def test_qc_report_parser_accepts_run_dir_argument() -> None:
     p = build_qc_report_parser()
     ns = p.parse_args(["--run-dir", "results/run_2026"])
     assert str(ns.run_dir).endswith("run_2026")
+
+
+def test_report_parser_accepts_stage_selection() -> None:
+    p = build_report_parser()
+    ns = p.parse_args(["--run-dir", "results/run_2026", "--stages", "summary,qc"])
+    assert str(ns.run_dir).endswith("run_2026")
+    assert ns.stages == "summary,qc"
 
 
 def test_compare_public_parser_accepts_required_arguments() -> None:

@@ -558,6 +558,12 @@ class PipelineConfig:
         qc_report_no_feature_plots: Skip feature plots in reports.
         qc_report_compact_pdf: Generate compact composite PDF report.
         qc_report_compact_pdf_name: Filename for compact PDF report.
+        consolidated_report: Generate a consolidated run-level PDF report.
+        consolidated_report_stages: Stage sections to include in the
+            consolidated report.
+        consolidated_report_name: Output filename for the consolidated report.
+        consolidated_report_title: Optional title override for the
+            consolidated report.
         run_fix_dataset: Enable FixDataset stage.
         make_binary_analysis: Enable binary analysis table.
         param_scan_typical: Enable typical param-scan profile.
@@ -801,6 +807,12 @@ class PipelineConfig:
     pqc_backend_profiles_path: Optional[str] = None
     pqc_run_variants: bool = False
     pqc_keep_variant_tmp: bool = False
+    pqc_auto_retry_failed: bool = False
+    pqc_auto_retry_jobs: int = 2
+    pqc_auto_retry_max_passes: int = 1
+    pqc_homogenize_outliers_across_variants: bool = False
+    pqc_homogenize_outlier_cols: Optional[List[str]] = None
+    pqc_homogenize_tol_seconds: Optional[float] = None
 
     # Optional reporting for pqc outputs
     qc_report: bool = False
@@ -813,6 +825,20 @@ class PipelineConfig:
     qc_report_compact_pdf: bool = False
     qc_report_compact_pdf_name: str = "qc_compact_report.pdf"
     qc_report_compact_outlier_cols: Optional[List[str]] = None
+    consolidated_report: bool = True
+    consolidated_report_stages: List[str] = field(
+        default_factory=lambda: [
+            "summary",
+            "config",
+            "ingest",
+            "fix",
+            "qc",
+            "workflow",
+            "artifacts",
+        ]
+    )
+    consolidated_report_name: Optional[str] = None
+    consolidated_report_title: Optional[str] = None
     qc_cross_pulsar_enabled: bool = False
     qc_cross_pulsar_time_col: Optional[str] = None
     qc_cross_pulsar_window_days: float = 1.0
@@ -837,6 +863,7 @@ class PipelineConfig:
     fix_apply: bool = False
     fix_branch_name: Optional[str] = None
     fix_base_branch: Optional[str] = None
+    fix_warn_backend_tim_drift_from_branch: Optional[str] = None
     fix_commit_message: Optional[str] = None
     fix_backup: bool = True
     fix_dry_run: bool = False
@@ -1353,6 +1380,18 @@ class PipelineConfig:
             pqc_backend_profiles_path=opt_str("pqc_backend_profiles_path"),
             pqc_run_variants=bool(d.get("pqc_run_variants", False)),
             pqc_keep_variant_tmp=bool(d.get("pqc_keep_variant_tmp", False)),
+            pqc_auto_retry_failed=bool(d.get("pqc_auto_retry_failed", False)),
+            pqc_auto_retry_jobs=int(d.get("pqc_auto_retry_jobs", 2)),
+            pqc_auto_retry_max_passes=int(d.get("pqc_auto_retry_max_passes", 1)),
+            pqc_homogenize_outliers_across_variants=bool(
+                d.get("pqc_homogenize_outliers_across_variants", False)
+            ),
+            pqc_homogenize_outlier_cols=opt_list_str("pqc_homogenize_outlier_cols"),
+            pqc_homogenize_tol_seconds=(
+                float(d["pqc_homogenize_tol_seconds"])
+                if d.get("pqc_homogenize_tol_seconds") not in (None, "")
+                else None
+            ),
             qc_report=bool(d.get("qc_report", False)),
             qc_report_backend_col=opt_str("qc_report_backend_col"),
             qc_report_backend=opt_str("qc_report_backend"),
@@ -1369,6 +1408,21 @@ class PipelineConfig:
             qc_report_compact_outlier_cols=opt_list_str(
                 "qc_report_compact_outlier_cols"
             ),
+            consolidated_report=bool(d.get("consolidated_report", True)),
+            consolidated_report_stages=list_default(
+                "consolidated_report_stages",
+                [
+                    "summary",
+                    "config",
+                    "ingest",
+                    "fix",
+                    "qc",
+                    "workflow",
+                    "artifacts",
+                ],
+            ),
+            consolidated_report_name=opt_str("consolidated_report_name"),
+            consolidated_report_title=opt_str("consolidated_report_title"),
             qc_cross_pulsar_enabled=bool(d.get("qc_cross_pulsar_enabled", False)),
             qc_cross_pulsar_time_col=opt_str("qc_cross_pulsar_time_col"),
             qc_cross_pulsar_window_days=float(
@@ -1397,6 +1451,9 @@ class PipelineConfig:
             fix_apply=bool(d.get("fix_apply", False)),
             fix_branch_name=opt_str("fix_branch_name"),
             fix_base_branch=opt_str("fix_base_branch"),
+            fix_warn_backend_tim_drift_from_branch=opt_str(
+                "fix_warn_backend_tim_drift_from_branch"
+            ),
             fix_commit_message=opt_str("fix_commit_message"),
             fix_backup=bool(d.get("fix_backup", True)),
             fix_dry_run=bool(d.get("fix_dry_run", False)),

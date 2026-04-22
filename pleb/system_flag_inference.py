@@ -1082,13 +1082,12 @@ def update_mapping_table(
         raise ValueError(
             "inferred must have column 'timfile' with the tim filename/key"
         )
+    for tname, sub in inferred.groupby("timfile"):
+        sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
+        if sys_vals:
+            table[tname] = sys_vals
 
-        for tname, sub in inferred.groupby("timfile"):
-            sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
-            if sys_vals:
-                table[tname] = sys_vals
-
-        mapping_path.write_text(
-            json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+    mapping_path.write_text(
+        json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return table

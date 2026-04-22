@@ -67,6 +67,7 @@ import subprocess
 import sys
 import os
 import shutil
+import tempfile
 from fnmatch import fnmatch
 from contextlib import contextmanager
 import re
@@ -82,6 +83,7 @@ from .logging_utils import get_logger
 from .tim_utils import is_toa_line as _tim_is_toa_line
 
 logger = get_logger("pleb.qc")
+_VALIDATED_PQC_ENV_KEYS: set[tuple[str, str]] = set()
 
 
 @dataclass(slots=True)
@@ -271,6 +273,138 @@ def _pushd(path: Path):
         yield
     finally:
         os.chdir(old)
+
+
+def _sanitize_tempo2_bug_par_workspace(
+    parfile: Path, out_csv: Path
+) -> tuple[Path, Path | None]:
+    """Return a sanitized parfile path for PQC when known tempo2 bugs are present.
+
+    Tempo2 can occasionally write malformed ``START``/``FINISH`` lines with an
+    extra trailing numeric token (for example an absurd underflow exponent). PQC
+    then hands that parfile to libstempo, which can crash while loading it.
+
+    This helper detects those lines, removes the extra trailing tokens, and
+    prepares a temporary workspace with sibling ``<PSR>_all.tim`` and ``tims/``
+    so PQC can run without modifying the source dataset files.
+    """
+    parfile = Path(parfile)
+    alltim = parfile.with_name(f"{parfile.stem}_all.tim")
+    if not parfile.exists() or not alltim.exists():
+        return parfile, None
+
+    changed = False
+    out_lines: list[str] = []
+    for raw in parfile.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.rstrip("\n")
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "C ", "c ")):
+            out_lines.append(line)
+            continue
+        main, *comment = line.split("#", 1)
+        suffix = f"#{comment[0]}" if comment else ""
+        parts = main.split()
+        if parts and parts[0].upper() in {"START", "FINISH"} and len(parts) > 2:
+            logger.warning(
+                "Sanitizing malformed %s line in %s: %s",
+                parts[0].upper(),
+                parfile,
+                stripped,
+            )
+            main = " ".join(parts[:2])
+            changed = True
+            out_lines.append(main + (f" {suffix}" if suffix else ""))
+            continue
+        out_lines.append(line)
+
+    if not changed:
+        return parfile, None
+
+    # Keep per-variant/base sanitized workspaces separate. Using only the pulsar
+    # stem here causes `new` and `combined` variant runs to overwrite each
+    # other, which makes debugging and reproducibility harder.
+    parent_tag = re.sub(r"[^A-Za-z0-9._-]+", "_", parfile.parent.name) or "base"
+    work_dir = Path(
+        tempfile.mkdtemp(prefix=f"pleb_pqc_sanitized_{parfile.stem}_{parent_tag}_")
+    )
+
+    tmp_par = work_dir / parfile.name
+    tmp_all = work_dir / alltim.name
+    tmp_par.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    shutil.copy2(alltim, tmp_all)
+
+    src_tims = parfile.parent / "tims"
+    dst_tims = work_dir / "tims"
+    if src_tims.exists():
+        # Copy instead of symlinking. The sanitized workspace is used to work
+        # around libstempo/tempo2 edge cases, and we have observed crashes on
+        # some pulsars when the variant `tims/` directory is presented via a
+        # symlink from the sanitized directory.
+        shutil.copytree(src_tims, dst_tims, dirs_exist_ok=True)
+
+    return tmp_par, work_dir
+
+
+def _validate_pqc_runtime_environment() -> None:
+    """Warn and fail early when the PQC/libstempo runtime is misconfigured."""
+    tempo2_root = os.environ.get("TEMPO2", "").strip()
+    tempo2_bin = shutil.which("tempo2") or ""
+    cache_key = (tempo2_root, tempo2_bin)
+    if cache_key in _VALIDATED_PQC_ENV_KEYS:
+        return
+
+    problems: list[str] = []
+
+    if not tempo2_root:
+        problems.append("TEMPO2 is not set")
+    else:
+        tempo2_path = Path(tempo2_root)
+        if not tempo2_path.exists():
+            problems.append(f"TEMPO2 path does not exist: {tempo2_path}")
+        elif not tempo2_path.is_dir():
+            problems.append(f"TEMPO2 path is not a directory: {tempo2_path}")
+        else:
+            missing = [
+                name
+                for name in ("clock", "ephemeris", "observatory")
+                if not (tempo2_path / name).exists()
+            ]
+            if missing:
+                problems.append(
+                    f"TEMPO2 runtime is incomplete at {tempo2_path} (missing: {', '.join(missing)})"
+                )
+
+    try:
+        import libstempo  # type: ignore  # noqa: F401
+    except Exception as exc:
+        problems.append(f"libstempo failed to import: {exc}")
+
+    if not tempo2_bin:
+        logger.warning(
+            "PQC runtime check: tempo2 executable is not on PATH. "
+            "This may be acceptable if libstempo is configured correctly via TEMPO2."
+        )
+
+    if problems:
+        for msg in problems:
+            logger.warning("PQC runtime check failed: %s", msg)
+        raise RuntimeError(
+            "PQC runtime environment invalid. Fix the environment/container, then rerun: "
+            + "; ".join(problems)
+            + "\n\nExamples:\n"
+            + "  Host shell:\n"
+            + "    export TEMPO2=/path/to/T2runtime\n"
+            + "    export MPLCONFIGDIR=/tmp/matplotlib\n"
+            + "    pleb pipeline --config <config.toml>\n"
+            + "  Container launch:\n"
+            + "    singularity exec --env TEMPO2=/path/in/container/T2runtime <image.sif> ...\n"
+            + "  What must exist:\n"
+            + "    $TEMPO2/clock\n"
+            + "    $TEMPO2/ephemeris\n"
+            + "    $TEMPO2/observatory"
+        )
+
+    _VALIDATED_PQC_ENV_KEYS.add(cache_key)
 
 
 def _load_backend_profiles(path: Path) -> list[tuple[str, Dict[str, Any]]]:
@@ -487,6 +621,7 @@ def run_pqc_for_parfile(
     parfile = Path(parfile)
     out_csv = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
+    _validate_pqc_runtime_environment()
 
     try:
         from pqc.pipeline import run_pipeline as qc_run  # type: ignore
@@ -721,104 +856,110 @@ def run_pqc_for_parfile(
                 settings_out=settings_path,
             )
 
-    df = _run_once(parfile, cfg, settings_out)
+    parfile, cleanup_dir = _sanitize_tempo2_bug_par_workspace(
+        Path(parfile), Path(out_csv)
+    )
+    try:
+        df = _run_once(parfile, cfg, settings_out)
 
-    if cfg.backend_profiles_path:
-        prof_path = Path(str(cfg.backend_profiles_path))
-        profiles = _load_backend_profiles(prof_path)
-        if profiles:
-            if str(cfg.backend_col) not in df.columns:
-                logger.warning(
-                    "pqc backend profiles requested, but backend column '%s' is missing.",
-                    cfg.backend_col,
-                )
-            else:
-                key_base = _row_key_series(df, str(cfg.backend_col))
-                idx_by_key = {k: i for i, k in enumerate(key_base.astype(str))}
-                backends = sorted(
-                    {str(x) for x in df[str(cfg.backend_col)].dropna().unique()}
-                )
-                for be in backends:
-                    overrides = _match_backend_overrides(be, profiles)
-                    if not overrides:
-                        continue
-                    payload = asdict(cfg)
-                    payload.update(overrides)
-                    payload["backend_profiles_path"] = None
-                    cfg_be = PTAQCConfig(**payload)
-                    tmp = (
-                        out_csv.parent
-                        / ".pqc_backend_profiles"
-                        / parfile.stem
-                        / re.sub(r"[^A-Za-z0-9._-]+", "_", be)
+        if cfg.backend_profiles_path:
+            prof_path = Path(str(cfg.backend_profiles_path))
+            profiles = _load_backend_profiles(prof_path)
+            if profiles:
+                if str(cfg.backend_col) not in df.columns:
+                    logger.warning(
+                        "pqc backend profiles requested, but backend column '%s' is missing.",
+                        cfg.backend_col,
                     )
-                    tmp_par = _prepare_backend_filtered_par(
-                        parfile, str(cfg.backend_col), be, tmp
+                else:
+                    key_base = _row_key_series(df, str(cfg.backend_col))
+                    idx_by_key = {k: i for i, k in enumerate(key_base.astype(str))}
+                    backends = sorted(
+                        {str(x) for x in df[str(cfg.backend_col)].dropna().unique()}
                     )
-                    if tmp_par is None:
-                        continue
-                    be_settings = (
-                        out_csv.parent
-                        / "run_settings"
-                        / f"{parfile.stem}.{be}.pqc_settings.toml"
-                    )
-                    try:
-                        df_be = _run_once(tmp_par, cfg_be, be_settings)
-                    except Exception as e:
-                        logger.warning(
-                            "pqc backend profile run failed for %s: %s", be, e
-                        )
-                        # Backend-profile workspaces are temporary scratch inputs.
-                        logger.info("Cleaned backend-profile temp dir: %s", tmp)
-                        shutil.rmtree(tmp, ignore_errors=True)
-                        continue
-                    key_be = _row_key_series(df_be, str(cfg.backend_col)).astype(str)
-                    shared_cols = [c for c in df_be.columns if c in df.columns]
-                    matched = 0
-                    for j, k in enumerate(key_be):
-                        i = idx_by_key.get(k)
-                        if i is None:
+                    for be in backends:
+                        overrides = _match_backend_overrides(be, profiles)
+                        if not overrides:
                             continue
-                        matched += 1
-                        for c in shared_cols:
-                            df.iat[i, df.columns.get_loc(c)] = df_be.iat[
-                                j, df_be.columns.get_loc(c)
-                            ]
-                    logger.info(
-                        "Applied pqc backend profile for %s: overrides=%s matched_rows=%d",
-                        be,
-                        ",".join(sorted(overrides.keys())),
-                        matched,
-                    )
-                    # Backend-profile workspaces are temporary scratch inputs.
-                    shutil.rmtree(tmp, ignore_errors=True)
-                    logger.info("Cleaned backend-profile temp dir: %s", tmp)
-                # Best-effort cleanup of now-empty profile root.
-                try:
-                    profile_root = (
-                        out_csv.parent / ".pqc_backend_profiles" / parfile.stem
-                    )
-                    if profile_root.exists():
-                        for d in sorted(profile_root.rglob("*"), reverse=True):
-                            if d.is_dir():
-                                try:
-                                    d.rmdir()
-                                except OSError:
-                                    pass
+                        payload = asdict(cfg)
+                        payload.update(overrides)
+                        payload["backend_profiles_path"] = None
+                        cfg_be = PTAQCConfig(**payload)
+                        tmp = (
+                            out_csv.parent
+                            / ".pqc_backend_profiles"
+                            / parfile.stem
+                            / re.sub(r"[^A-Za-z0-9._-]+", "_", be)
+                        )
+                        tmp_par = _prepare_backend_filtered_par(
+                            parfile, str(cfg.backend_col), be, tmp
+                        )
+                        if tmp_par is None:
+                            continue
+                        be_settings = (
+                            out_csv.parent
+                            / "run_settings"
+                            / f"{parfile.stem}.{be}.pqc_settings.toml"
+                        )
                         try:
-                            profile_root.rmdir()
-                        except OSError:
-                            pass
-                        try:
-                            (out_csv.parent / ".pqc_backend_profiles").rmdir()
-                        except OSError:
-                            pass
-                except Exception:
-                    pass
+                            df_be = _run_once(tmp_par, cfg_be, be_settings)
+                        except Exception as e:
+                            logger.warning(
+                                "pqc backend profile run failed for %s: %s", be, e
+                            )
+                            logger.info("Cleaned backend-profile temp dir: %s", tmp)
+                            shutil.rmtree(tmp, ignore_errors=True)
+                            continue
+                        key_be = _row_key_series(df_be, str(cfg.backend_col)).astype(
+                            str
+                        )
+                        shared_cols = [c for c in df_be.columns if c in df.columns]
+                        matched = 0
+                        for j, k in enumerate(key_be):
+                            i = idx_by_key.get(k)
+                            if i is None:
+                                continue
+                            matched += 1
+                            for c in shared_cols:
+                                df.iat[i, df.columns.get_loc(c)] = df_be.iat[
+                                    j, df_be.columns.get_loc(c)
+                                ]
+                        logger.info(
+                            "Applied pqc backend profile for %s: overrides=%s matched_rows=%d",
+                            be,
+                            ",".join(sorted(overrides.keys())),
+                            matched,
+                        )
+                        shutil.rmtree(tmp, ignore_errors=True)
+                        logger.info("Cleaned backend-profile temp dir: %s", tmp)
+                    try:
+                        profile_root = (
+                            out_csv.parent / ".pqc_backend_profiles" / parfile.stem
+                        )
+                        if profile_root.exists():
+                            for d in sorted(profile_root.rglob("*"), reverse=True):
+                                if d.is_dir():
+                                    try:
+                                        d.rmdir()
+                                    except OSError:
+                                        pass
+                            try:
+                                profile_root.rmdir()
+                            except OSError:
+                                pass
+                            try:
+                                (out_csv.parent / ".pqc_backend_profiles").rmdir()
+                            except OSError:
+                                pass
+                    except Exception:
+                        pass
 
-    _assert_timfile_metadata(df, source=str(parfile))
-    df.to_csv(out_csv, index=False)
-    return df
+        _assert_timfile_metadata(df, source=str(parfile))
+        df.to_csv(out_csv, index=False)
+        return df
+    finally:
+        if cleanup_dir is not None:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
 
 
 def run_pqc_for_parfile_subprocess(
@@ -862,6 +1003,7 @@ def run_pqc_for_parfile_subprocess(
     parfile = Path(parfile)
     out_csv = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
+    _validate_pqc_runtime_environment()
 
     payload = {
         "parfile": str(parfile),

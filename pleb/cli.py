@@ -47,6 +47,7 @@ from .logging_utils import set_log_dir
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
+from .run_report import generate_run_report
 from .public_release_compare import compare_public_releases
 from .optimize.cli import load_optimization_config
 from .optimize.optimizer import run_optimization
@@ -339,6 +340,39 @@ def build_workflow_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_report_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for consolidated report generation."""
+    p = argparse.ArgumentParser(
+        description="Generate a consolidated PDF report from an existing run directory."
+    )
+    p.add_argument("report", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Run directory containing stage outputs.",
+    )
+    p.add_argument(
+        "--stages",
+        default=None,
+        help=(
+            "Comma-separated consolidated report stages. "
+            "Valid: summary,config,ingest,fix,qc,workflow,artifacts."
+        ),
+    )
+    p.add_argument(
+        "--output-name",
+        default="run_report.pdf",
+        help="Output PDF filename inside --run-dir.",
+    )
+    p.add_argument(
+        "--title",
+        default=None,
+        help="Optional report title override.",
+    )
+    return p
+
+
 def build_compare_public_parser() -> argparse.ArgumentParser:
     """Build the parser for the ``compare-public`` CLI mode.
 
@@ -475,6 +509,25 @@ def run_workflow(argv: list[str] | None) -> int:
     if ctx.last_run_dir:
         _write_run_settings(Path(ctx.last_run_dir), argv, None)
         print(str(ctx.last_run_dir))
+    return 0
+
+
+def run_report(argv: list[str] | None) -> int:
+    """Run the ``report`` subcommand."""
+    args = build_report_parser().parse_args(argv)
+    stages = None
+    if args.stages:
+        stages = [s.strip() for s in str(args.stages).split(",") if s.strip()]
+    pdf_path = generate_run_report(
+        Path(args.run_dir),
+        title=(str(args.title) if args.title not in (None, "") else None),
+        output_name=str(args.output_name),
+        include_stages=stages,
+    )
+    if pdf_path is None:
+        raise SystemExit("consolidated report generation requires matplotlib.")
+    _write_run_settings(Path(args.run_dir), argv, None)
+    print(str(pdf_path))
     return 0
 
 
@@ -700,6 +753,8 @@ def main(argv=None) -> int:
         return run_qc_report(argv)
     if argv and argv[0] == "workflow":
         return run_workflow(argv)
+    if argv and argv[0] == "report":
+        return run_report(argv)
     if argv and argv[0] == "ingest":
         return run_ingest(argv)
     if argv and argv[0] == "compare-public":

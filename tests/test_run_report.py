@@ -68,3 +68,24 @@ def test_generate_run_report_writes_workflow_page_when_steps_supplied(tmp_path) 
     assert pdf_path is not None
     assert pdf_path.exists()
     assert pdf_path.name == "workflow_report.pdf"
+
+
+def test_generate_run_report_respects_stage_filter(tmp_path) -> None:
+    run_dir = tmp_path / "results" / "wf_demo" / "main"
+    (run_dir / "run_settings").mkdir(parents=True, exist_ok=True)
+    (run_dir / "run_settings" / "command.txt").write_text(
+        "pleb report --run-dir demo\n", encoding="utf-8"
+    )
+    qc_dir = run_dir / "qc"
+    qc_dir.mkdir(parents=True, exist_ok=True)
+    (qc_dir / "qc_summary.tsv").write_text(
+        "pulsar\tvariant\tbranch\tqc_status\tqc_csv\tqc_error\n"
+        "J0000+0001\tnew\tmain\tsuccess\t/path/J0000+0001.new_qc.csv\t\n",
+        encoding="utf-8",
+    )
+
+    pdf_path = generate_run_report(run_dir, include_stages=["summary", "qc"])
+
+    assert pdf_path is not None
+    assert pdf_path.exists()
+    assert pdf_path.stat().st_size > 0

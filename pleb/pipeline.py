@@ -21,6 +21,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib.util
 
+import numpy as np
 import pandas as pd
 
 try:
@@ -48,7 +49,7 @@ from .reports import (
 )
 from .run_report import generate_run_report
 from .tempo2 import run_tempo2_for_pulsar
-from .tim_utils import count_toa_lines, parse_include_lines
+from .tim_utils import count_toa_lines, parse_include_lines, list_backend_timfiles
 from .utils import (
     discover_pulsars,
     make_output_tree,
@@ -61,6 +62,7 @@ from .utils import (
 from .dataset_fix import (
     FixDatasetConfig,
     _find_qc_csv,
+    apply_fixdataset_branch,
     fix_pulsar_dataset,
     write_fix_report,
 )
@@ -177,6 +179,162 @@ def _variant_alltim_toa_count(alltim: Path) -> int:
             inc = base_dir / rel
         total += count_toa_lines(inc)
     return total
+
+
+def _canonical_timfile_keys(df: pd.DataFrame) -> pd.Series:
+    if "_timfile_base" in df.columns:
+        return df["_timfile_base"].fillna("").astype(str)
+    if "_timfile" in df.columns:
+        return df["_timfile"].fillna("").astype(str).map(
+            lambda x: Path(x).name if x else ""
+        )
+    return pd.Series([""] * len(df), index=df.index, dtype=str)
+
+
+def _rows_near_any(targets: np.ndarray, refs: np.ndarray, tol_days: float) -> np.ndarray:
+    if targets.size == 0 or refs.size == 0:
+        return np.zeros(targets.shape, dtype=bool)
+    refs = np.asarray(refs, dtype=float)
+    refs.sort()
+    pos = np.searchsorted(refs, targets)
+    out = np.zeros(targets.shape, dtype=bool)
+    left = pos - 1
+    left_ok = (left >= 0) & (left < len(refs))
+    if left_ok.any():
+        out[left_ok] |= np.abs(refs[left[left_ok]] - targets[left_ok]) <= tol_days
+    right_ok = (pos >= 0) & (pos < len(refs))
+    if right_ok.any():
+        out[right_ok] |= np.abs(refs[pos[right_ok]] - targets[right_ok]) <= tol_days
+    return out
+
+
+def _homogenize_variant_outlier_flags(
+    qc_rows: List[Dict[str, object]],
+    *,
+    outlier_cols: List[str],
+    tol_seconds: float,
+) -> None:
+    """Union outlier-like flags across successful variant QC CSVs for each pulsar."""
+    if tol_seconds <= 0:
+        tol_seconds = 1e-6
+    tol_days = float(tol_seconds) / 86400.0
+    grouped: Dict[str, List[Dict[str, object]]] = {}
+    for row in qc_rows:
+        if str(row.get("qc_status", "")) != "success":
+            continue
+        variant = str(row.get("variant", ""))
+        qc_csv = str(row.get("qc_csv", ""))
+        if not variant or variant == "base" or not qc_csv:
+            continue
+        grouped.setdefault(str(row.get("pulsar", "")), []).append(row)
+
+    total_csvs_changed = 0
+    total_cells_changed = 0
+    summary_updates: Dict[tuple[str, str], Dict[str, object]] = {}
+    for pulsar, rows in grouped.items():
+        if len(rows) < 2:
+            continue
+        frames: Dict[tuple[str, str], pd.DataFrame] = {}
+        csv_by_key: Dict[tuple[str, str], Path] = {}
+        per_col_refs: Dict[str, Dict[str, np.ndarray]] = {}
+        candidate_cols: set[str] = set()
+        for row in rows:
+            key = (str(row.get("pulsar", "")), str(row.get("variant", "")))
+            csv_path = Path(str(row.get("qc_csv", "")))
+            if not csv_path.exists():
+                continue
+            df = pd.read_csv(csv_path, low_memory=False)
+            if "mjd" not in df.columns:
+                continue
+            df["__timkey__"] = _canonical_timfile_keys(df)
+            frames[key] = df
+            csv_by_key[key] = csv_path
+            candidate_cols.update(c for c in outlier_cols if c in df.columns)
+        if not frames or not candidate_cols:
+            continue
+
+        for col in sorted(candidate_cols):
+            refs_by_tim: Dict[str, List[float]] = {}
+            for df in frames.values():
+                mask = df[col].fillna(False).astype(bool).to_numpy()
+                if not mask.any():
+                    continue
+                sub = df.loc[mask, ["__timkey__", "mjd"]]
+                for timkey, grp in sub.groupby("__timkey__"):
+                    refs_by_tim.setdefault(str(timkey), []).extend(
+                        float(x) for x in grp["mjd"].to_numpy()
+                    )
+            per_col_refs[col] = {
+                timkey: np.unique(np.asarray(vals, dtype=float))
+                for timkey, vals in refs_by_tim.items()
+                if vals
+            }
+
+        for key, df in frames.items():
+            changed = False
+            for col, refs_by_tim in per_col_refs.items():
+                if col not in df.columns:
+                    continue
+                current = df[col].fillna(False).astype(bool).to_numpy()
+                updated = current.copy()
+                for timkey, idx in df.groupby("__timkey__").indices.items():
+                    refs = refs_by_tim.get(str(timkey))
+                    if refs is None or len(refs) == 0:
+                        continue
+                    mjds = df.iloc[idx]["mjd"].to_numpy(dtype=float)
+                    updated[idx] |= _rows_near_any(mjds, refs, tol_days)
+                if not np.array_equal(current, updated):
+                    df[col] = updated
+                    total_cells_changed += int((updated != current).sum())
+                    changed = True
+            if "outlier_any" in df.columns:
+                src_cols = [c for c in candidate_cols if c != "outlier_any" and c in df.columns]
+                if src_cols:
+                    current = df["outlier_any"].fillna(False).astype(bool).to_numpy()
+                    union = (
+                        df[src_cols].fillna(False).astype(bool).any(axis=1).to_numpy()
+                    )
+                    updated = current | union
+                    if not np.array_equal(current, updated):
+                        df["outlier_any"] = updated
+                        total_cells_changed += int((updated != current).sum())
+                        changed = True
+            if not changed:
+                continue
+            csv_path = csv_by_key[key]
+            df.drop(columns=["__timkey__"], errors="ignore").to_csv(csv_path, index=False)
+            total_csvs_changed += 1
+            summary_updates[key] = summarize_pqc(df.drop(columns=["__timkey__"], errors="ignore"))
+
+    for row in qc_rows:
+        key = (str(row.get("pulsar", "")), str(row.get("variant", "")))
+        if key in summary_updates and str(row.get("qc_status", "")) == "success":
+            for k in list(row.keys()):
+                if k.startswith("metric.") or k in {
+                    "n_toas",
+                    "n_bad",
+                    "bad_fraction",
+                    "n_events",
+                    "n_event_members",
+                    "event_fraction",
+                    "event_stability",
+                    "residual_cleanliness",
+                    "residual_whiteness",
+                    "scaled_residual_cleanliness",
+                    "backend_inconsistency_penalty",
+                    "overfragmentation_penalty",
+                    "parameter_complexity_penalty",
+                    "stability",
+                }:
+                    row.pop(k, None)
+            row.update(summary_updates[key])
+
+    if total_csvs_changed > 0:
+        logger.info(
+            "Homogenized outlier flags across variants for %d QC CSV(s); updated %d cell(s).",
+            total_csvs_changed,
+            total_cells_changed,
+        )
 
 
 def _cfg_get(cfg, name: str, default=None):
@@ -570,6 +728,77 @@ def _validate_fixdataset_qc_inputs(
     )
 
 
+def _warn_backend_tim_drift(
+    repo,
+    cfg,
+    pulsars: List[str],
+    *,
+    baseline_branch: str,
+    compare_branch: str,
+    return_branch: str,
+) -> None:
+    """Warn if backend tim inventory differs from a baseline branch.
+
+    This is intentionally warning-only. It exists to surface workflow drift
+    when later stages assume Step 1 has already canonicalized backend timfiles.
+    """
+    baseline_branch = str(baseline_branch or "").strip()
+    compare_branch = str(compare_branch or "").strip()
+    if not baseline_branch or not compare_branch or baseline_branch == compare_branch:
+        return
+
+    dataset_root = Path(cfg.dataset_name)
+    baseline: Dict[str, set[str]] = {}
+    compare: Dict[str, set[str]] = {}
+
+    try:
+        checkout(repo, baseline_branch)
+        for psr in pulsars:
+            psr_dir = dataset_root / psr
+            if not psr_dir.exists():
+                baseline[psr] = set()
+                continue
+            baseline[psr] = {t.name for t in list_backend_timfiles(psr_dir)}
+
+        checkout(repo, compare_branch)
+        for psr in pulsars:
+            psr_dir = dataset_root / psr
+            if not psr_dir.exists():
+                compare[psr] = set()
+                continue
+            compare[psr] = {t.name for t in list_backend_timfiles(psr_dir)}
+    finally:
+        checkout(repo, return_branch)
+
+    drift_msgs: List[str] = []
+    for psr in pulsars:
+        b = baseline.get(psr, set())
+        c = compare.get(psr, set())
+        if b == c:
+            continue
+        added = sorted(c - b)
+        removed = sorted(b - c)
+        parts: List[str] = []
+        if added:
+            parts.append(f"added={added}")
+        if removed:
+            parts.append(f"removed={removed}")
+        drift_msgs.append(f"{psr}: " + ", ".join(parts))
+
+    if not drift_msgs:
+        return
+
+    preview = "; ".join(drift_msgs[:10])
+    if len(drift_msgs) > 10:
+        preview += f"; ... ({len(drift_msgs)} pulsars differ)"
+    logger.warning(
+        "Backend tim inventory differs between baseline branch %s and branch %s. %s",
+        baseline_branch,
+        compare_branch,
+        preview,
+    )
+
+
 def _apply_fixdataset_and_commit(
     repo,
     cfg,
@@ -629,33 +858,42 @@ def _apply_fixdataset_and_commit(
     _validate_fixdataset_qc_inputs(pulsars, fcfg, branch=new_branch)
 
     dataset_root = Path(cfg.dataset_name)
-    reports = []
     n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
-    if n_jobs == 1:
-        for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
-            rep = fix_pulsar_dataset(dataset_root / pulsar, fcfg)
-            rep["branch"] = new_branch
-            reports.append(rep)
+    if fcfg.infer_system_flags:
+        reports = apply_fixdataset_branch(
+            dataset_root,
+            pulsars,
+            fcfg,
+            branch=new_branch,
+            jobs=n_jobs,
+        )
     else:
-
-        def _run_fix(p: str) -> Dict[str, object]:
-            try:
-                rep = fix_pulsar_dataset(dataset_root / p, fcfg)
+        reports = []
+        if n_jobs == 1:
+            for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
+                rep = fix_pulsar_dataset(dataset_root / pulsar, fcfg)
                 rep["branch"] = new_branch
-                return rep
-            except Exception as e:
-                return {"psr": p, "branch": new_branch, "error": str(e)}
+                reports.append(rep)
+        else:
 
-        futures = []
-        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-            for pulsar in pulsars:
-                futures.append(ex.submit(_run_fix, pulsar))
-            for fut in tqdm(
-                as_completed(futures),
-                total=len(futures),
-                desc=f"fix-dataset (apply on {new_branch})",
-            ):
-                reports.append(fut.result())
+            def _run_fix(p: str) -> Dict[str, object]:
+                try:
+                    rep = fix_pulsar_dataset(dataset_root / p, fcfg)
+                    rep["branch"] = new_branch
+                    return rep
+                except Exception as e:
+                    return {"psr": p, "branch": new_branch, "error": str(e)}
+
+            futures = []
+            with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+                for pulsar in pulsars:
+                    futures.append(ex.submit(_run_fix, pulsar))
+                for fut in tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc=f"fix-dataset (apply on {new_branch})",
+                ):
+                    reports.append(fut.result())
 
     write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
     _raise_if_fixdataset_failed(reports, stage="apply", branch=new_branch)
@@ -709,6 +947,103 @@ def _apply_fixdataset_and_commit(
 
     require_clean_repo(repo)
     return new_branch
+
+
+def _commit_branch_artifacts(
+    repo,
+    cfg,
+    *,
+    branch: str,
+    out_paths: Dict[str, Path],
+    commit_message: str,
+) -> None:
+    """Commit persistent run artifacts for a fix-apply branch.
+
+    This is intentionally broader than the initial data-only commit: it stages
+    report outputs, CSVs, plots, and other useful run artifacts that were
+    generated after the branch was created.
+    """
+    repo_root = Path(cfg.home_dir).resolve()
+
+    def _rel_if_within_repo(path_like) -> str | None:
+        try:
+            p = Path(path_like).resolve()
+        except Exception:
+            return None
+        try:
+            return p.relative_to(repo_root).as_posix()
+        except Exception:
+            return None
+
+    prefixes: set[str] = set()
+    for p in (
+        out_paths.get("base"),
+        out_paths.get("tag"),
+        getattr(cfg, "results_dir", None),
+        getattr(cfg, "qc_report_dir", None),
+        getattr(cfg, "fix_jump_reference_csv_dir", None),
+    ):
+        rel = _rel_if_within_repo(p) if p is not None else None
+        if rel:
+            prefixes.add(rel.rstrip("/"))
+
+    if not prefixes:
+        return
+
+    changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
+    untracked = list(getattr(repo, "untracked_files", []) or [])
+    paths = list(dict.fromkeys(changed + untracked))
+
+    allowed_exts = {
+        ".par",
+        ".tim",
+        ".csv",
+        ".tsv",
+        ".pdf",
+        ".png",
+        ".json",
+        ".toml",
+        ".yaml",
+        ".yml",
+        ".txt",
+        ".html",
+        ".svg",
+    }
+    allowed_names = {
+        "run_report.pdf",
+        "fix_dataset_report.pdf",
+        "fix_dataset_report.json",
+        "qc_summary.tsv",
+        "whitenoise_summary.tsv",
+        "binary_analysis.tsv",
+    }
+
+    def _want(path_str: str) -> bool:
+        pp = path_str.replace("\\", "/")
+        if not any(pp == pref or pp.startswith(pref + "/") for pref in prefixes):
+            return False
+        if pp.endswith(".orig"):
+            return False
+        parts = pp.split("/")
+        if any(part.startswith(".pqc_") for part in parts):
+            return False
+        if any(part in {"work", "logs", "__pycache__"} for part in parts):
+            return False
+        name = Path(pp).name
+        if name in allowed_names:
+            return True
+        return Path(pp).suffix.lower() in allowed_exts
+
+    to_stage = [p for p in paths if _want(p)]
+    if not to_stage:
+        return
+
+    repo.git.add("--", *to_stage)
+    if repo.is_dirty(untracked_files=True):
+        repo.index.commit(f"{commit_message} [artifacts]")
+        logger.info(
+            "Committed run artifacts on branch %s (%d paths).", branch, len(to_stage)
+        )
 
 
 def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
@@ -872,6 +1207,20 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         pulsars = list(cfg.pulsars)  # type: ignore[arg-type]
     if not pulsars:
         raise RuntimeError("No pulsars selected/found.")
+
+    if fix_apply:
+        drift_branch = str(
+            _cfg_get(cfg, "fix_warn_backend_tim_drift_from_branch", "") or ""
+        ).strip()
+        if drift_branch and not bool(_cfg_get(cfg, "fix_update_alltim_includes", True)):
+            _warn_backend_tim_drift(
+                repo,
+                cfg,
+                pulsars,
+                baseline_branch=drift_branch,
+                compare_branch=base_branch,
+                return_branch=current_branch,
+            )
 
     out_paths = make_output_tree(
         cfg.results_dir, compare_branches, cfg.outdir_name, lazy=True
@@ -1379,93 +1728,161 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     settings_out = qc_settings_dir / f"{pulsar}.pqc_settings.toml"
                     tasks.append((pulsar, "base", parfile, out_csv, settings_out))
 
-                n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
-                if n_jobs == 1:
-                    for pulsar, variant, parfile, out_csv, settings_out in tqdm(
-                        tasks, desc=f"pqc ({branch})"
-                    ):
-                        try:
-                            df = run_pqc_for_parfile_subprocess(
-                                parfile,
-                                out_csv,
-                                qc_cfg,
-                                settings_out=settings_out,
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                "pqc failed for %s (%s); skipping QC for this pulsar: %s",
-                                pulsar,
-                                branch,
-                                e,
-                            )
-                            qc_rows.append(
-                                {
-                                    "pulsar": pulsar,
-                                    "variant": variant,
-                                    "branch": branch,
-                                    "qc_csv": str(out_csv),
-                                    "qc_status": "pqc_failed",
-                                    "qc_error": str(e),
-                                }
-                            )
-                            continue
-                        row = {
-                            "pulsar": pulsar,
-                            "variant": variant,
-                            "branch": branch,
-                            "qc_csv": str(out_csv),
-                            "qc_status": "success",
-                        }
-                        row.update(summarize_pqc(df))
-                        qc_rows.append(row)
-                else:
-
-                    def _run_pqc(
-                        task: tuple[str, str, Path, Path, Path],
-                    ) -> Dict[str, object]:
-                        p, variant, parfile, out_csv, settings_out = task
-                        try:
-                            df = run_pqc_for_parfile_subprocess(
-                                parfile,
-                                out_csv,
-                                qc_cfg,
-                                settings_out=settings_out,
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                "pqc failed for %s (%s); skipping QC for this pulsar: %s",
-                                p,
-                                branch,
-                                e,
-                            )
-                            return {
-                                "pulsar": p,
-                                "variant": variant,
-                                "branch": branch,
-                                "qc_csv": str(out_csv),
-                                "qc_status": "pqc_failed",
-                                "qc_error": str(e),
-                            }
-                        row = {
+                def _run_pqc(
+                    task: tuple[str, str, Path, Path, Path],
+                ) -> Dict[str, object]:
+                    p, variant, parfile, out_csv, settings_out = task
+                    try:
+                        df = run_pqc_for_parfile_subprocess(
+                            parfile,
+                            out_csv,
+                            qc_cfg,
+                            settings_out=settings_out,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "pqc failed for %s (%s); skipping QC for this pulsar: %s",
+                            p,
+                            branch,
+                            e,
+                        )
+                        return {
                             "pulsar": p,
                             "variant": variant,
                             "branch": branch,
                             "qc_csv": str(out_csv),
-                            "qc_status": "success",
+                            "qc_status": "pqc_failed",
+                            "qc_error": str(e),
                         }
-                        row.update(summarize_pqc(df))
-                        return row
+                    row = {
+                        "pulsar": p,
+                        "variant": variant,
+                        "branch": branch,
+                        "qc_csv": str(out_csv),
+                        "qc_status": "success",
+                    }
+                    row.update(summarize_pqc(df))
+                    return row
 
+                def _execute_pqc_tasks(
+                    task_list: List[tuple[str, str, Path, Path, Path]],
+                    *,
+                    n_jobs: int,
+                    desc: str,
+                ) -> List[Dict[str, object]]:
+                    rows: List[Dict[str, object]] = []
+                    if n_jobs == 1:
+                        for task in tqdm(task_list, desc=desc):
+                            rows.append(_run_pqc(task))
+                        return rows
                     futures = []
                     with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-                        for task in tasks:
+                        for task in task_list:
                             futures.append(ex.submit(_run_pqc, task))
                         for fut in tqdm(
                             as_completed(futures),
                             total=len(futures),
-                            desc=f"pqc ({branch})",
+                            desc=desc,
                         ):
-                            qc_rows.append(fut.result())
+                            rows.append(fut.result())
+                    return rows
+
+                n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+                qc_rows.extend(
+                    _execute_pqc_tasks(tasks, n_jobs=n_jobs, desc=f"pqc ({branch})")
+                )
+
+                auto_retry_enabled = bool(
+                    getattr(cfg, "pqc_auto_retry_failed", False)
+                )
+                max_retry_passes = max(
+                    0, int(getattr(cfg, "pqc_auto_retry_max_passes", 1) or 0)
+                )
+                retry_jobs = max(
+                    1,
+                    int(
+                        getattr(
+                            cfg,
+                            "pqc_auto_retry_jobs",
+                            min(2, n_jobs) if n_jobs > 1 else 1,
+                        )
+                        or 1
+                    ),
+                )
+                if auto_retry_enabled and max_retry_passes > 0 and tasks:
+                    tasks_by_key = {
+                        (task[0], task[1]): task
+                        for task in tasks
+                    }
+                    for retry_idx in range(1, max_retry_passes + 1):
+                        failed_keys = {
+                            (str(r.get("pulsar", "")), str(r.get("variant", "")))
+                            for r in qc_rows
+                            if str(r.get("qc_status", "")) == "pqc_failed"
+                        }
+                        retry_tasks = [
+                            tasks_by_key[key]
+                            for key in sorted(failed_keys)
+                            if key in tasks_by_key
+                        ]
+                        if not retry_tasks:
+                            break
+                        logger.warning(
+                            "Auto-retrying %d failed PQC task(s) for %s with jobs=%d (pass %d/%d).",
+                            len(retry_tasks),
+                            branch,
+                            retry_jobs,
+                            retry_idx,
+                            max_retry_passes,
+                        )
+                        retry_rows = _execute_pqc_tasks(
+                            retry_tasks,
+                            n_jobs=retry_jobs,
+                            desc=f"pqc retry {retry_idx} ({branch})",
+                        )
+                        merged_rows: Dict[tuple[str, str], Dict[str, object]] = {
+                            (str(r.get("pulsar", "")), str(r.get("variant", ""))): r
+                            for r in qc_rows
+                        }
+                        for row in retry_rows:
+                            key = (
+                                str(row.get("pulsar", "")),
+                                str(row.get("variant", "")),
+                            )
+                            row["qc_retry_pass"] = retry_idx
+                            row["qc_retry_attempted"] = True
+                            merged_rows[key] = row
+                        qc_rows = list(merged_rows.values())
+                        remaining = sum(
+                            1 for r in retry_rows if str(r.get("qc_status", "")) == "pqc_failed"
+                        )
+                        if remaining == 0:
+                            break
+                if bool(
+                    getattr(cfg, "pqc_homogenize_outliers_across_variants", False)
+                ):
+                    outlier_cols = list(
+                        getattr(cfg, "pqc_homogenize_outlier_cols", None)
+                        or [
+                            "bad_point",
+                            "bad_hard",
+                            "robust_outlier",
+                            "robust_global_outlier",
+                            "bad_mad",
+                            "bad_ou",
+                            "outlier_any",
+                        ]
+                    )
+                    tol_seconds = float(
+                        getattr(cfg, "pqc_homogenize_tol_seconds", None)
+                        or getattr(cfg, "pqc_merge_tol_seconds", 2.0)
+                        or 2.0
+                    )
+                    _homogenize_variant_outlier_flags(
+                        qc_rows,
+                        outlier_cols=outlier_cols,
+                        tol_seconds=tol_seconds,
+                    )
                 if (
                     run_variants
                     and not keep_variant_tmp
@@ -1626,21 +2043,34 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             except Exception as e:
                 logger.warning("QC report generation failed: %s", e)
 
-        try:
-            report_path = generate_run_report(
-                out_paths["tag"],
-                title="PLEB Pipeline Run Report",
-                output_name="run_report.pdf",
-            )
-            if report_path is not None:
-                logger.info("Run report written to: %s", report_path)
-        except Exception as e:
-            logger.warning("Run report generation failed: %s", e)
+        if bool(getattr(cfg, "consolidated_report", True)):
+            try:
+                report_path = generate_run_report(
+                    out_paths["tag"],
+                    title=getattr(cfg, "consolidated_report_title", None)
+                    or "PLEB Pipeline Run Report",
+                    output_name=getattr(cfg, "consolidated_report_name", None)
+                    or "run_report.pdf",
+                    include_stages=getattr(cfg, "consolidated_report_stages", None),
+                )
+                if report_path is not None:
+                    logger.info("Run report written to: %s", report_path)
+            except Exception as e:
+                logger.warning("Run report generation failed: %s", e)
 
         if getattr(cfg, "cleanup_work_dir", False):
             remove_tree_if_exists(out_paths["work"])
         if getattr(cfg, "cleanup_output_tree", False):
             cleanup_empty_dirs(out_paths["tag"])
+
+        if fix_apply and len(branches_to_run) == 1:
+            _commit_branch_artifacts(
+                repo,
+                cfg,
+                branch=branches_to_run[0],
+                out_paths=out_paths,
+                commit_message=str(commit_message),
+            )
 
         logger.info("Pipeline complete.")
         return out_paths

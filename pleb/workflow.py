@@ -714,13 +714,27 @@ def run_workflow(path: Path) -> WorkflowContext:
                 logger.info("Loop %s stopping early (stop_if condition met).", lname)
                 break
 
-    if ctx.last_run_dir is not None:
+    report_enabled = bool(base_dict.get("consolidated_report", True))
+    report_stages = base_dict.get("consolidated_report_stages", None)
+    report_title = base_dict.get("consolidated_report_title", None)
+    report_name = base_dict.get("consolidated_report_name", None)
+
+    if report_enabled and ctx.last_run_dir is not None:
         try:
             report_path = generate_run_report(
                 ctx.last_run_dir,
-                title=f"PLEB Workflow Report: {Path(path).name}",
-                output_name="workflow_report.pdf",
+                title=(
+                    str(report_title)
+                    if report_title not in (None, "")
+                    else f"PLEB Workflow Report: {Path(path).name}"
+                ),
+                output_name=(
+                    str(report_name)
+                    if report_name not in (None, "")
+                    else "workflow_report.pdf"
+                ),
                 workflow_steps=ctx.step_records,
+                include_stages=report_stages,
             )
             if report_path is not None:
                 logger.info("Workflow report written to: %s", report_path)

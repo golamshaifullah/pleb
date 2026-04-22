@@ -44,6 +44,7 @@ from dataclasses import field
 from .compat import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from fnmatch import fnmatch
 import shutil
 import json
@@ -52,6 +53,13 @@ import re
 from textwrap import wrap
 import numpy as np
 import pandas as pd
+
+try:
+    from tqdm.auto import tqdm  # type: ignore
+except Exception:  # pragma: no cover
+
+    def tqdm(x, **kwargs):
+        return x
 
 try:  # Python 3.11+
     import tomllib
@@ -2611,6 +2619,19 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     alltim = psr_dir / f"{psr}_all.tim"
 
     report: Dict[str, object] = {"psr": psr, "steps": []}
+    report["steps"].extend(_fix_pulsar_initial_steps(psr_dir, cfg))
+    report["steps"].extend(_fix_pulsar_post_system_steps(psr_dir, cfg))
+    return report
+
+
+def _fix_pulsar_initial_steps(
+    psr_dir: Path, cfg: FixDatasetConfig
+) -> List[Dict[str, object]]:
+    """Run the early per-pulsar FixDataset steps before global sys canonicalization."""
+    psr = psr_dir.name
+    parfile = psr_dir / f"{psr}.par"
+    alltim = psr_dir / f"{psr}_all.tim"
+    steps: List[Dict[str, object]] = []
 
     if cfg.remove_patterns and parfile.exists() and alltim.exists():
         rep = remove_patterns_from_par_tim(
@@ -2621,7 +2642,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             backup=cfg.backup,
             dry_run=cfg.dry_run,
         )
-        report["steps"].append({"remove_patterns": rep})
+        steps.append({"remove_patterns": rep})
 
     if cfg.update_alltim_includes:
         rep = update_alltim_includes(
@@ -2631,9 +2652,8 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             backup=cfg.backup,
             dry_run=cfg.dry_run,
         )
-        report["steps"].append({"update_alltim_includes": rep})
+        steps.append({"update_alltim_includes": rep})
 
-    # TIM hygiene: dedupe within each backend tim
     if cfg.apply and cfg.dedupe_toas_within_tim:
         tims = list_backend_timfiles(psr_dir)
         reps = []
@@ -2652,9 +2672,8 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 )
             except Exception as e:
                 reps.append({"timfile": str(t), "error": str(e)})
-        report["steps"].append({"dedupe_toas_within_tim": reps})
+        steps.append({"dedupe_toas_within_tim": reps})
 
-    # Smart system flag inference: ensure -sys/-group/-pta in every TOA line
     if cfg.infer_system_flags:
         tims = list_backend_timfiles(psr_dir)
         reps = []
@@ -2663,38 +2682,46 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 reps.append(infer_and_apply_system_flags(t, cfg))
             except Exception as e:
                 reps.append({"timfile": str(t), "error": str(e)})
-        report["steps"].append({"infer_system_flags": reps})
+        steps.append({"infer_system_flags": reps})
 
-    # Declarative relabeling for splitting/renaming backend groups after PQC.
+    return steps
+
+
+def _fix_pulsar_post_system_steps(
+    psr_dir: Path, cfg: FixDatasetConfig
+) -> List[Dict[str, object]]:
+    """Run the downstream per-pulsar FixDataset steps after sys canonicalization."""
+    psr = psr_dir.name
+    parfile = psr_dir / f"{psr}.par"
+    steps: List[Dict[str, object]] = []
+
     if cfg.relabel_rules_path:
         try:
             rep = apply_relabel_rules(psr_dir, cfg)
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"apply_relabel_rules": rep})
+        steps.append({"apply_relabel_rules": rep})
 
     if cfg.generate_alltim_variants:
         try:
             rep = generate_alltim_variants(psr_dir, cfg)
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"generate_alltim_variants": rep})
+        steps.append({"generate_alltim_variants": rep})
 
     if cfg.jump_reference_variants:
         try:
             rep = build_variant_reference_jump_pars(psr_dir, cfg)
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"build_variant_reference_jump_pars": rep})
+        steps.append({"build_variant_reference_jump_pars": rep})
 
-    # Declarative overlap handling (preferred) for system-specific duplicate policy.
     if cfg.apply and cfg.overlap_rules_path:
         try:
             rep = apply_overlap_rules(psr_dir, cfg)
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"apply_overlap_rules": rep})
-    # Legacy WSRT-P2 special-case switch (kept for backwards compatibility).
+        steps.append({"apply_overlap_rules": rep})
     elif cfg.apply and cfg.wsrt_p2_prefer_dual_channel:
         try:
             rep = wsrt_p2_prefer_dual_channel(
@@ -2710,9 +2737,8 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             )
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"wsrt_p2_prefer_dual_channel": rep})
+        steps.append({"wsrt_p2_prefer_dual_channel": rep})
 
-    # Cheap overlap removal (exact duplicates across known overlapping backend tims)
     if cfg.apply and cfg.remove_overlaps_exact:
         try:
             rep = remove_overlaps_exact(
@@ -2724,16 +2750,15 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             )
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"remove_overlaps_exact": rep})
+        steps.append({"remove_overlaps_exact": rep})
 
-    # Duplicate backend timfile detection (content-identical TOA sets)
     if cfg.check_duplicate_backend_tims:
         try:
             dups = find_duplicate_backend_timfiles(list_backend_timfiles(psr_dir))
             rep = {"groups": [[str(p) for p in g] for g in dups]}
         except Exception as e:
             rep = {"error": str(e)}
-        report["steps"].append({"duplicate_backend_timfiles": rep})
+        steps.append({"duplicate_backend_timfiles": rep})
 
     if cfg.required_tim_flags:
         tims = list_backend_timfiles(psr_dir)
@@ -2751,7 +2776,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 )
             except Exception as e:
                 tim_reports.append({"timfile": str(t), "error": str(e)})
-        report["steps"].append({"ensure_timfile_flags": tim_reports})
+        steps.append({"ensure_timfile_flags": tim_reports})
 
     if parfile.exists() and any(
         v is not None for v in (cfg.ensure_ephem, cfg.ensure_clk, cfg.ensure_ne_sw)
@@ -2766,10 +2791,9 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             backup=cfg.backup,
             dry_run=cfg.dry_run,
         )
-        report["steps"].append({"ensure_parfile_defaults": rep})
+        steps.append({"ensure_parfile_defaults": rep})
 
     if cfg.insert_missing_jumps and parfile.exists():
-        # gather jump values across backend tim files
         vals: Set[str] = set()
         for t in list_backend_timfiles(psr_dir):
             vals |= extract_flag_values(t, cfg.jump_flag)
@@ -2786,7 +2810,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             backup=cfg.backup,
             dry_run=cfg.dry_run,
         )
-        report["steps"].append({"update_parfile_jumps": rep})
+        steps.append({"update_parfile_jumps": rep})
 
     if cfg.coord_convert and parfile.exists():
         rep = convert_par_coordinates(
@@ -2796,13 +2820,295 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             backup=cfg.backup,
             dry_run=cfg.dry_run,
         )
-        report["steps"].append({"coord_convert": rep})
+        steps.append({"coord_convert": rep})
 
     if cfg.qc_remove_outliers or cfg.qc_write_pqc_flag:
         rep = apply_pqc_outliers(psr_dir, cfg)
-        report["steps"].append({"qc_outliers": rep})
+        steps.append({"qc_outliers": rep})
 
-    return report
+    return steps
+
+
+def _canonical_system_family(system_label: str) -> Tuple[str, Optional[int]]:
+    """Split ``TEL.BACKEND.CENTRE`` labels into a family key and numeric centre."""
+    label = str(system_label or "").strip()
+    if not label:
+        return "", None
+    head, sep, tail = label.rpartition(".")
+    if not sep:
+        return label, None
+    try:
+        return head, int(float(tail))
+    except Exception:
+        return label, None
+
+
+def _current_timfile_system_assignments(timfile: Path) -> pd.DataFrame:
+    """Read current ``-sys/-group/-pta`` assignments from a backend tim file."""
+    from .system_flag_inference import parse_tim_toa_table
+
+    df = parse_tim_toa_table(timfile)
+    rows = []
+    for row in df.itertuples(index=False):
+        flags = row.flags or {}
+        sys_val = str(flags.get("-sys", "")).strip()
+        group_val = str(flags.get("-group", "")).strip()
+        pta_val = str(flags.get("-pta", "")).strip()
+        family_key, centre_mhz = _canonical_system_family(sys_val)
+        rows.append(
+            {
+                "line_idx": int(row.line_idx),
+                "sys": sys_val,
+                "group": group_val,
+                "pta": pta_val,
+                "family_key": family_key,
+                "centre_mhz": centre_mhz,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def canonicalize_system_flags_dataset(
+    dataset_root: Path,
+    pulsars: Sequence[str],
+    cfg: FixDatasetConfig,
+) -> Dict[str, Dict[str, object]]:
+    """Canonicalize numeric ``-sys`` labels globally across selected pulsars.
+
+    This pass is intended to run after provisional per-tim inference and before
+    variant generation or jump-reference products. It preserves existing
+    ``-group``/``-pta`` flags and only snaps numeric ``-sys`` centres to a
+    shared dataset-wide canonical value within the configured tolerance.
+    """
+    from .system_flag_inference import (
+        SystemInferenceConfig,
+        apply_flags_to_timfile,
+        update_mapping_table,
+    )
+
+    reports: Dict[str, Dict[str, object]] = {
+        str(psr): {
+            "pulsar": str(psr),
+            "timfiles": 0,
+            "timfiles_changed": 0,
+            "n_sys_rows_changed": 0,
+            "errors": [],
+        }
+        for psr in pulsars
+    }
+    tim_assignments: Dict[Path, pd.DataFrame] = {}
+    all_rows: List[pd.DataFrame] = []
+
+    for psr in pulsars:
+        psr_name = str(psr)
+        psr_dir = dataset_root / psr_name
+        for timfile in list_backend_timfiles(psr_dir):
+            reports[psr_name]["timfiles"] += 1
+            current = _current_timfile_system_assignments(timfile)
+            if current.empty:
+                continue
+            missing_flags = {
+                flag_name
+                for flag_name in ("sys", "group", "pta")
+                if current[flag_name].astype(str).str.strip().eq("").any()
+            }
+            if missing_flags:
+                reports[psr_name]["errors"].append(
+                    f"{timfile.name}: missing current flags {sorted(missing_flags)}"
+                )
+                continue
+            current = current.copy()
+            current["timfile"] = timfile.name
+            current["pulsar"] = psr_name
+            tim_assignments[timfile] = current
+            all_rows.append(current)
+
+    if not all_rows:
+        return reports
+
+    assignments = pd.concat(all_rows, ignore_index=True)
+    tol_mhz = float(SystemInferenceConfig().canonical_tol_mhz)
+    numeric = assignments.dropna(subset=["centre_mhz"]).copy()
+    if not numeric.empty:
+        for family_key, sub in numeric.groupby("family_key", dropna=False):
+            family = str(family_key or "").strip()
+            if not family:
+                continue
+            centres = np.sort(
+                pd.Series(sub["centre_mhz"].astype(float)).dropna().unique()
+            )
+            if centres.size == 0:
+                continue
+            clusters: List[np.ndarray] = []
+            current_cluster = [centres[0]]
+            for centre in centres[1:]:
+                if abs(float(centre) - float(current_cluster[-1])) <= tol_mhz:
+                    current_cluster.append(float(centre))
+                else:
+                    clusters.append(np.array(current_cluster, dtype=float))
+                    current_cluster = [float(centre)]
+            clusters.append(np.array(current_cluster, dtype=float))
+
+            mapping: Dict[int, int] = {}
+            for cluster in clusters:
+                canon = int(np.rint(np.median(cluster)))
+                for value in cluster:
+                    mapping[int(np.rint(float(value)))] = canon
+
+            idx = sub.index
+            new_centres = (
+                numeric.loc[idx, "centre_mhz"].astype(float).round().astype(int).map(mapping)
+            )
+            numeric.loc[idx, "centre_mhz"] = new_centres.astype(int)
+            numeric.loc[idx, "sys"] = family + "." + new_centres.astype(int).astype(str)
+
+    assignments.loc[numeric.index, "centre_mhz"] = numeric["centre_mhz"].to_numpy()
+    assignments.loc[numeric.index, "sys"] = numeric["sys"].to_numpy()
+
+    final_rows: List[pd.DataFrame] = []
+    for timfile, current in tim_assignments.items():
+        rewritten = assignments[
+            (assignments["pulsar"] == current["pulsar"].iloc[0])
+            & (assignments["timfile"] == current["timfile"].iloc[0])
+        ][["line_idx", "sys", "group", "pta"]].copy()
+        stats = apply_flags_to_timfile(
+            timfile,
+            rewritten,
+            apply=cfg.apply,
+            backup=cfg.backup,
+            dry_run=cfg.dry_run,
+            overwrite_existing=True,
+        )
+        psr_name = str(current["pulsar"].iloc[0])
+        if stats.get("changed"):
+            reports[psr_name]["timfiles_changed"] += 1
+        before_sys = current["sys"].astype(str).tolist()
+        after_sys = rewritten["sys"].astype(str).tolist()
+        reports[psr_name]["n_sys_rows_changed"] += sum(
+            1 for before, after in zip(before_sys, after_sys) if before != after
+        )
+        rewritten = rewritten.copy()
+        rewritten["timfile"] = timfile.name
+        final_rows.append(rewritten)
+
+    try:
+        mapping_path = (
+            Path(cfg.system_flag_table_path)
+            if cfg.system_flag_table_path
+            else (dataset_root / "system_flag_table.json")
+        )
+        if not mapping_path.is_absolute():
+            mapping_path = dataset_root / mapping_path
+        if final_rows:
+            update_mapping_table(mapping_path, pd.concat(final_rows, ignore_index=True))
+        for psr_name in reports:
+            reports[psr_name]["mapping_table"] = str(mapping_path)
+        if cfg.apply and not cfg.dry_run:
+            for psr_name in reports:
+                psr_dir = dataset_root / psr_name
+                for fname in ("system_flag_table.json", "system_flag_table.toml"):
+                    per_psr = psr_dir / fname
+                    try:
+                        if per_psr.exists() and per_psr.resolve() != mapping_path.resolve():
+                            per_psr.unlink()
+                    except Exception:
+                        pass
+    except Exception as e:
+        for psr_name in reports:
+            reports[psr_name]["errors"].append(f"mapping table update failed: {e}")
+
+    for psr_name, rep in reports.items():
+        if rep["errors"]:
+            rep["error"] = "; ".join(str(e) for e in rep["errors"])
+
+    return reports
+
+
+def apply_fixdataset_branch(
+    dataset_root: Path,
+    pulsars: Sequence[str],
+    cfg: FixDatasetConfig,
+    *,
+    branch: str = "",
+    jobs: int = 1,
+) -> List[Dict[str, object]]:
+    """Apply FixDataset across a branch with a dataset-global sys canonicalization pass."""
+    if not (cfg.apply and cfg.infer_system_flags):
+        reports = []
+        for pulsar in pulsars:
+            rep = fix_pulsar_dataset(dataset_root / str(pulsar), cfg)
+            rep["branch"] = branch
+            reports.append(rep)
+        return reports
+
+    report_map: Dict[str, Dict[str, object]] = {
+        str(psr): {"psr": str(psr), "steps": [], "branch": branch} for psr in pulsars
+    }
+
+    def _run_initial(psr_name: str) -> Dict[str, object]:
+        try:
+            return {"steps": _fix_pulsar_initial_steps(dataset_root / psr_name, cfg)}
+        except Exception as e:
+            return {"error": str(e), "steps": []}
+
+    n_jobs = max(1, int(jobs or 1))
+    if n_jobs == 1:
+        initial_results = {str(psr): _run_initial(str(psr)) for psr in pulsars}
+    else:
+        initial_results = {}
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            futures = {ex.submit(_run_initial, str(psr)): str(psr) for psr in pulsars}
+            for fut in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc=f"fix-dataset phase1 ({branch or 'apply'})",
+            ):
+                initial_results[futures[fut]] = fut.result()
+
+    ready_for_global: List[str] = []
+    for psr_name, result in initial_results.items():
+        report_map[psr_name]["steps"].extend(result.get("steps", []))
+        if result.get("error"):
+            report_map[psr_name]["error"] = str(result["error"])
+            continue
+        ready_for_global.append(psr_name)
+
+    if ready_for_global:
+        global_reports = canonicalize_system_flags_dataset(dataset_root, ready_for_global, cfg)
+        for psr_name, global_rep in global_reports.items():
+            report_map[psr_name]["steps"].append({"canonicalize_system_flags": global_rep})
+            if global_rep.get("error"):
+                report_map[psr_name]["error"] = str(global_rep["error"])
+
+    ready_for_post = [
+        psr_name for psr_name in ready_for_global if not report_map[psr_name].get("error")
+    ]
+
+    def _run_post(psr_name: str) -> Dict[str, object]:
+        try:
+            return {"steps": _fix_pulsar_post_system_steps(dataset_root / psr_name, cfg)}
+        except Exception as e:
+            return {"error": str(e), "steps": []}
+
+    if n_jobs == 1:
+        post_results = {psr_name: _run_post(psr_name) for psr_name in ready_for_post}
+    else:
+        post_results = {}
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            futures = {ex.submit(_run_post, psr_name): psr_name for psr_name in ready_for_post}
+            for fut in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc=f"fix-dataset phase2 ({branch or 'apply'})",
+            ):
+                post_results[futures[fut]] = fut.result()
+
+    for psr_name, result in post_results.items():
+        report_map[psr_name]["steps"].extend(result.get("steps", []))
+        if result.get("error"):
+            report_map[psr_name]["error"] = str(result["error"])
+
+    return [report_map[str(psr)] for psr in pulsars]
 
 
 def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
