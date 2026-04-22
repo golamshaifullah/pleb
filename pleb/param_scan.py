@@ -537,14 +537,15 @@ def run_param_scan(
     cfg = cfg.resolved()
     if not cfg.home_dir.exists():
         raise FileNotFoundError(f"home_dir does not exist: {cfg.home_dir}")
-    if not cfg.singularity_image.exists():
-        raise FileNotFoundError(
-            f"singularity_image does not exist: {cfg.singularity_image}"
+    if not bool(getattr(cfg, "tempo2_native", False)):
+        if not cfg.singularity_image.exists():
+            raise FileNotFoundError(
+                f"singularity_image does not exist: {cfg.singularity_image}"
+            )
+        which_or_raise(
+            "singularity",
+            hint="Install Singularity/Apptainer or load it in your environment.",
         )
-    which_or_raise(
-        "singularity",
-        hint="Install Singularity/Apptainer or load it in your environment.",
-    )
 
     # Allow config to set a default "typical" scan profile.
     scan_typical = bool(scan_typical or getattr(cfg, "param_scan_typical", False))

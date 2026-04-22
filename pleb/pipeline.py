@@ -532,6 +532,7 @@ def _build_fixdataset_config(
         tempo2_home_dir=str(getattr(cfg, "home_dir", "")),
         tempo2_dataset_name=str(getattr(cfg, "dataset_name", "")),
         tempo2_singularity_image=str(getattr(cfg, "singularity_image", "")),
+        tempo2_native=bool(getattr(cfg, "tempo2_native", False)),
         system_flag_overwrite_existing=bool(
             _cfg_get(cfg, "fix_system_flag_overwrite_existing", False)
         ),
@@ -1152,15 +1153,16 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             f"Dataset {cfg.dataset_name} does not exist. Assuming the pulsar folders live in {cfg.home_dir}.",
             stacklevel=2,
         )
-    if not cfg.singularity_image.exists():
-        raise FileNotFoundError(
-            f"singularity_image does not exist: {cfg.singularity_image}"
-        )
+    if not bool(getattr(cfg, "tempo2_native", False)):
+        if not cfg.singularity_image.exists():
+            raise FileNotFoundError(
+                f"singularity_image does not exist: {cfg.singularity_image}"
+            )
 
-    which_or_raise(
-        "singularity",
-        hint="Install Singularity/Apptainer or load it in your environment.",
-    )
+        which_or_raise(
+            "singularity",
+            hint="Install Singularity/Apptainer or load it in your environment.",
+        )
 
     try:
         from git import Repo  # type: ignore
@@ -1356,6 +1358,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             home_dir=cfg.home_dir,
                             dataset_name=cfg.dataset_name,
                             singularity_image=cfg.singularity_image,
+                            native=bool(getattr(cfg, "tempo2_native", False)),
                             out_paths=out_paths,
                             pulsar=pulsar,
                             branch=branch,
@@ -1372,6 +1375,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                                     home_dir=cfg.home_dir,
                                     dataset_name=cfg.dataset_name,
                                     singularity_image=cfg.singularity_image,
+                                    native=bool(getattr(cfg, "tempo2_native", False)),
                                     out_paths=out_paths,
                                     pulsar=pulsar,
                                     branch=branch,

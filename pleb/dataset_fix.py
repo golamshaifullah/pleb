@@ -207,6 +207,7 @@ class FixDatasetConfig:
     tempo2_home_dir: Optional[str] = None
     tempo2_dataset_name: Optional[str] = None
     tempo2_singularity_image: Optional[str] = None
+    tempo2_native: bool = False
 
     # tim flag insertion (applies to per-backend tims under <psr>/tims/)
     # Example: {"-pta": "EPTA", "-be": "P200", "-sys": "SomeSys"}
@@ -689,12 +690,15 @@ def build_variant_reference_jump_pars(
     par = psr_dir / f"{psr}.par"
     if not par.exists():
         return {"psr": psr, "error": f"Missing par file: {par}"}
-    if not (
-        cfg.tempo2_home_dir and cfg.tempo2_dataset_name and cfg.tempo2_singularity_image
-    ):
+    if not (cfg.tempo2_home_dir and cfg.tempo2_dataset_name):
         return {
             "psr": psr,
-            "error": "tempo2 context missing; set tempo2_home_dir/tempo2_dataset_name/tempo2_singularity_image",
+            "error": "tempo2 context missing; set tempo2_home_dir/tempo2_dataset_name",
+        }
+    if (not bool(cfg.tempo2_native)) and (not cfg.tempo2_singularity_image):
+        return {
+            "psr": psr,
+            "error": "tempo2 context missing; set tempo2_singularity_image or enable tempo2_native",
         }
 
     all_variants = sorted(
@@ -739,7 +743,8 @@ def build_variant_reference_jump_pars(
     prefix = build_singularity_prefix(
         Path(str(cfg.tempo2_home_dir)),
         Path(str(cfg.tempo2_dataset_name)),
-        Path(str(cfg.tempo2_singularity_image)),
+        Path(str(cfg.tempo2_singularity_image or "")),
+        native=bool(cfg.tempo2_native),
     )
 
     out_variants: Dict[str, object] = {}
@@ -788,14 +793,18 @@ def build_variant_reference_jump_pars(
                 lines.append(f"INCLUDE {f.name}")
             sys_all.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-            # Temp jump-reference files now live under:
-            #   <dataset_root>/results/jump_reference_tmp/<PSR>/
-            # and the dataset root is bound to /data inside the container.
-            par_container = f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
-            tim_container = f"/data/results/jump_reference_tmp/{psr}/{sys_all.name}"
+            if bool(cfg.tempo2_native):
+                par_target = str(no_jump_par)
+                tim_target = str(sys_all)
+            else:
+                # Temp jump-reference files now live under:
+                #   <dataset_root>/results/jump_reference_tmp/<PSR>/
+                # and the dataset root is bound to /data inside the container.
+                par_target = f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
+                tim_target = f"/data/results/jump_reference_tmp/{psr}/{sys_all.name}"
             log_path = tmp_root / f"{psr}_{vname}_{sysv}.tempo2.log"
             rc = run_subprocess(
-                prefix + ["tempo2", "-f", par_container, tim_container], log_path
+                prefix + ["tempo2", "-f", par_target, tim_target], log_path
             )
             red = _parse_tempo2_redchisq(log_path) if rc == 0 else None
             system_rows[sysv]["reduced_chisq"] = red

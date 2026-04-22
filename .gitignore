@@ -2,34 +2,29 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
 # Tool caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
 htmlcov/
-
 # Build / packaging artifacts
 build/
 dist/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
-
 # Docs build output
 docs/_build/
-
 # Notebook checkpoints / temp notebook state
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
-
 # Local runtime output
 logs/
 trash/
-
 # Local container images
 *.sif
-
 # Local ingest lock artifacts (runtime-generated)
 *.lock.*json
+/EPTA-DR3/epta-dr3-data-v1_5/_campaign/
+pleb_tempo2.sif

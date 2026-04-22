@@ -701,6 +701,9 @@ class PipelineConfig:
     # Singularity/Apptainer image containing tempo2
     singularity_image: Path
 
+    # Run tempo2 directly in the current runtime instead of nesting a container.
+    tempo2_native: bool = False
+
     # Name of the dataset (EPTA likes to use different combinations)
     dataset_name: Optional[str] = None
 
@@ -1288,6 +1291,7 @@ class PipelineConfig:
             home_dir=home_dir or Path("."),
             dataset_name=p(d.get("dataset_name", ".")),
             singularity_image=p(d["singularity_image"]),
+            tempo2_native=bool(d.get("tempo2_native", False)),
             results_dir=p(d.get("results_dir", ".")),
             branches=list(d.get("branches", ["main", ""])),
             reference_branch=str(d.get("reference_branch", "main")),

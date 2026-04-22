@@ -26,6 +26,8 @@ def build_singularity_prefix(
     home_dir: Path,
     dataset_name: Path,
     singularity_image: Path,
+    *,
+    native: bool = False,
     extra_binds: List[tuple[Path, str]] | None = None,
 ) -> List[str]:
     """Build the singularity/apptainer exec prefix.
@@ -47,8 +49,13 @@ def build_singularity_prefix(
     Returns
     -------
     list of str
-        Command prefix suitable for ``subprocess`` execution.
+        Command prefix suitable for ``subprocess`` execution. When ``native``
+        is ``True``, returns an empty prefix and callers should invoke
+        ``tempo2`` directly in the current runtime.
     """
+    if native:
+        return []
+
     cmd: List[str] = ["singularity", "exec"]
     binds: List[tuple[Path, str]] = [(home_dir / dataset_name, "/data")]
     if extra_binds:
@@ -118,6 +125,8 @@ def run_tempo2_for_pulsar(
     home_dir: Path,
     dataset_name: Path,
     singularity_image: Path,
+    *,
+    native: bool = False,
     out_paths: Dict[str, Path],
     pulsar: str,
     branch: str,
@@ -150,11 +159,18 @@ def run_tempo2_for_pulsar(
         Outputs are written to ``plk``, ``covmat``, and ``general2`` subtrees in
         ``out_paths``.
     """
-    prefix = build_singularity_prefix(home_dir, dataset_name, singularity_image)
-    par, tim = tempo2_paths_in_container(pulsar)
-    # Compute total TOAs from all INCLUDE tim files for -nobs.
     psr_dir = Path(home_dir) / Path(dataset_name) / pulsar
     all_tim = psr_dir / f"{pulsar}_all.tim"
+    prefix = build_singularity_prefix(
+        home_dir, dataset_name, singularity_image, native=native
+    )
+    if native:
+        par = str(psr_dir / f"{pulsar}.par")
+        tim = str(all_tim)
+    else:
+        par, tim = tempo2_paths_in_container(pulsar)
+
+    # Compute total TOAs from all INCLUDE tim files for -nobs.
     total_toas = 0
     includes = parse_include_lines(all_tim)
     if includes:
