@@ -231,13 +231,17 @@ def _should_stop(stop_if: List[Any], ctx: WorkflowContext) -> bool:
 
 
 def _run_step(
-    step: Dict[str, Any], base_dict: Dict[str, Any], ctx: WorkflowContext
+    step: Dict[str, Any],
+    base_dict: Dict[str, Any],
+    ctx: WorkflowContext,
+    *,
+    config_base_dir: Path | None = None,
 ) -> None:
     name = step["name"]
     step_cfg_path = step.get("config")
     step_base_dict = base_dict
     if step_cfg_path:
-        step_base_dict = _load_config_dict(str(step_cfg_path))
+        step_base_dict = _load_config_dict(str(step_cfg_path), base_dir=config_base_dir)
     cfg = _build_cfg(step_base_dict, step.get("set", []), step.get("overrides", {}))
     if name in (
         "pipeline",
@@ -509,11 +513,12 @@ def _run_steps_serial(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
+    config_base_dir: Path | None = None,
     label_prefix: str = "",
 ) -> None:
     for idx, s in enumerate(steps, start=1):
         logger.info("%sStep %s/%s: %s", label_prefix, idx, len(steps), s["name"])
-        _run_step(s, base_dict, ctx)
+        _run_step(s, base_dict, ctx, config_base_dir=config_base_dir)
 
 
 def _run_steps_parallel(
@@ -521,6 +526,7 @@ def _run_steps_parallel(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
+    config_base_dir: Path | None = None,
     workers: int = 0,
     label_prefix: str = "",
 ) -> None:
@@ -549,7 +555,7 @@ def _run_steps_parallel(
         logger.info(
             "%s[parallel %d/%d] %s", label_prefix, i + 1, len(steps), st["name"]
         )
-        _run_step(st, base_dict, local_ctx)
+        _run_step(st, base_dict, local_ctx, config_base_dir=config_base_dir)
         return i, local_ctx
 
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -576,6 +582,7 @@ def _run_step_sequence(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
+    config_base_dir: Path | None = None,
     mode: str = "serial",
     parallel_workers: int = 0,
     label_prefix: str = "",
@@ -586,12 +593,19 @@ def _run_step_sequence(
             f"Unsupported workflow mode: {mode!r}; use 'serial' or 'parallel'."
         )
     if m == "serial":
-        _run_steps_serial(steps, base_dict, ctx, label_prefix=label_prefix)
+        _run_steps_serial(
+            steps,
+            base_dict,
+            ctx,
+            config_base_dir=config_base_dir,
+            label_prefix=label_prefix,
+        )
         return
     _run_steps_parallel(
         steps,
         base_dict,
         ctx,
+        config_base_dir=config_base_dir,
         workers=int(parallel_workers or 0),
         label_prefix=label_prefix,
     )
@@ -630,11 +644,13 @@ def run_workflow(path: Path) -> WorkflowContext:
     change per-step internal parallelism (e.g., pulsar-level workers inside a
     pipeline step).
     """
-    wf = _load_workflow(Path(path))
+    path = Path(path).expanduser().resolve()
+    wf = _load_workflow(path)
+    workflow_base_dir = path.parent
     config_path = wf.get("config")
     if not config_path:
         raise ValueError("Workflow must specify 'config' (path to pipeline config).")
-    base_dict = _load_config_dict(str(config_path))
+    base_dict = _load_config_dict(str(config_path), base_dir=workflow_base_dir)
     base_dict = _apply_overrides(
         base_dict, list(wf.get("set", []) or []), dict(wf.get("overrides", {}) or {})
     )
@@ -652,6 +668,7 @@ def run_workflow(path: Path) -> WorkflowContext:
             norm_steps,
             base_dict,
             ctx,
+            config_base_dir=workflow_base_dir,
             mode=global_mode,
             parallel_workers=global_parallel_workers,
         )
@@ -667,6 +684,7 @@ def run_workflow(path: Path) -> WorkflowContext:
                 gp["steps"],
                 base_dict,
                 ctx,
+                config_base_dir=workflow_base_dir,
                 mode=str(gp.get("mode") or global_mode),
                 parallel_workers=int(
                     gp.get("parallel_workers") or global_parallel_workers
@@ -693,6 +711,7 @@ def run_workflow(path: Path) -> WorkflowContext:
                         gp["steps"],
                         loop_base,
                         ctx,
+                        config_base_dir=workflow_base_dir,
                         mode=str(gp.get("mode") or lp.get("mode") or "serial"),
                         parallel_workers=int(
                             gp.get("parallel_workers")
@@ -706,6 +725,7 @@ def run_workflow(path: Path) -> WorkflowContext:
                     lp["steps"],
                     loop_base,
                     ctx,
+                    config_base_dir=workflow_base_dir,
                     mode=str(lp.get("mode") or "serial"),
                     parallel_workers=int(lp.get("parallel_workers") or 0),
                     label_prefix="  ",

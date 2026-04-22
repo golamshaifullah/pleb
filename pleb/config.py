@@ -31,6 +31,29 @@ except Exception:  # pragma: no cover
 PulsarSelection = Union[str, List[str]]  # "ALL" or explicit list
 
 
+def _resolve_declared_path(
+    value: Path | str | None,
+    *,
+    base_dir: Path | None = None,
+    repo_root: Path | None = None,
+) -> Optional[Path]:
+    """Resolve a declared config path against an explicit base.
+
+    Resolution order for relative paths:
+    1. ``repo_root`` when provided
+    2. ``base_dir`` when provided
+    3. current working directory via ``Path.resolve()``
+    """
+    if value in (None, ""):
+        return None
+    p = Path(value).expanduser()
+    if not p.is_absolute():
+        anchor = repo_root if repo_root is not None else base_dir
+        if anchor is not None:
+            p = anchor / p
+    return p.resolve()
+
+
 def _resolve_repo_root(home_dir: Path | str) -> Path:
     """Resolve and validate the repository root.
 
@@ -155,7 +178,7 @@ class IngestConfig:
         return d
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "IngestConfig":
+    def from_dict(d: Dict[str, Any], *, base_dir: Path | None = None) -> "IngestConfig":
         if "pipeline" in d and isinstance(d["pipeline"], dict):
             d = d["pipeline"]
 
@@ -169,10 +192,19 @@ class IngestConfig:
                 return None
             return str(x)
 
+        home_dir = _resolve_declared_path(p_opt(d.get("home_dir")), base_dir=base_dir)
         return IngestConfig(
-            ingest_mapping_file=p_opt(d.get("ingest_mapping_file")),
-            ingest_output_dir=p_opt(d.get("ingest_output_dir")),
-            home_dir=p_opt(d.get("home_dir")),
+            ingest_mapping_file=_resolve_declared_path(
+                p_opt(d.get("ingest_mapping_file")),
+                base_dir=base_dir,
+                repo_root=home_dir,
+            ),
+            ingest_output_dir=_resolve_declared_path(
+                p_opt(d.get("ingest_output_dir")),
+                base_dir=base_dir,
+                repo_root=home_dir,
+            ),
+            home_dir=home_dir,
             dataset_name=s_opt(d.get("dataset_name")),
             ingest_verify=bool(d.get("ingest_verify", False)),
             ingest_commit_branch_name=s_opt(d.get("ingest_commit_branch_name")),
@@ -188,16 +220,17 @@ class IngestConfig:
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(str(path))
+        base_dir = path.expanduser().resolve().parent
         if path.suffix.lower() == ".json":
             data = json.loads(path.read_text(encoding="utf-8"))
-            return IngestConfig.from_dict(data)
+            return IngestConfig.from_dict(data, base_dir=base_dir)
         if path.suffix.lower() in (".toml", ".tml"):
             if tomllib is None:
                 raise RuntimeError(
                     "TOML config requested but tomllib is unavailable in this Python."
                 )
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-            return IngestConfig.from_dict(data)
+            return IngestConfig.from_dict(data, base_dir=base_dir)
         raise ValueError(
             f"Unsupported config file type: {path.suffix}. Use .json or .toml"
         )
@@ -242,7 +275,9 @@ class ParamScanConfig:
         return PipelineConfig.from_dict(self.to_dict())
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "ParamScanConfig":
+    def from_dict(
+        d: Dict[str, Any], *, base_dir: Path | None = None
+    ) -> "ParamScanConfig":
         if "param_scan" in d and isinstance(d["param_scan"], dict):
             d = d["param_scan"]
         elif "pipeline" in d and isinstance(d["pipeline"], dict):
@@ -251,9 +286,17 @@ class ParamScanConfig:
         def p(x: Any) -> Path:
             return Path(x) if x is not None else Path(".")
 
+        home_dir = _resolve_declared_path(p(d["home_dir"]), base_dir=base_dir)
         return ParamScanConfig(
-            home_dir=p(d["home_dir"]),
-            singularity_image=p(d["singularity_image"]),
+            home_dir=home_dir or Path("."),
+            singularity_image=(
+                _resolve_declared_path(
+                    p(d["singularity_image"]),
+                    base_dir=base_dir,
+                    repo_root=home_dir,
+                )
+                or Path(".")
+            ),
             dataset_name=d.get("dataset_name", "."),
             results_dir=p(d.get("results_dir", ".")),
             reference_branch=str(d.get("reference_branch", "main")),
@@ -279,16 +322,17 @@ class ParamScanConfig:
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(str(path))
+        base_dir = path.expanduser().resolve().parent
         if path.suffix.lower() == ".json":
             data = json.loads(path.read_text(encoding="utf-8"))
-            return ParamScanConfig.from_dict(data)
+            return ParamScanConfig.from_dict(data, base_dir=base_dir)
         if path.suffix.lower() in (".toml", ".tml"):
             if tomllib is None:
                 raise RuntimeError(
                     "TOML config requested but tomllib is unavailable in this Python."
                 )
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-            return ParamScanConfig.from_dict(data)
+            return ParamScanConfig.from_dict(data, base_dir=base_dir)
         raise ValueError(
             f"Unsupported config file type: {path.suffix}. Use .json or .toml"
         )
@@ -316,17 +360,24 @@ class QCReportConfig:
     compact_pdf_name: str = "qc_compact_report.pdf"
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "QCReportConfig":
+    def from_dict(
+        d: Dict[str, Any], *, base_dir: Path | None = None
+    ) -> "QCReportConfig":
         if "qc_report" in d and isinstance(d["qc_report"], dict):
             d = d["qc_report"]
         return QCReportConfig(
-            run_dir=Path(d["run_dir"]),
+            run_dir=_resolve_declared_path(
+                Path(d["run_dir"]), base_dir=base_dir
+            )
+            or Path("."),
             backend_col=str(d.get("backend_col", "group")),
             backend=(None if d.get("backend") in (None, "") else str(d.get("backend"))),
             report_dir=(
                 None
                 if d.get("report_dir") in (None, "")
-                else Path(str(d.get("report_dir")))
+                else _resolve_declared_path(
+                    Path(str(d.get("report_dir"))), base_dir=base_dir
+                )
             ),
             no_plots=bool(d.get("no_plots", False)),
             structure_group_cols=(
@@ -344,16 +395,17 @@ class QCReportConfig:
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(str(path))
+        base_dir = path.expanduser().resolve().parent
         if path.suffix.lower() == ".json":
             data = json.loads(path.read_text(encoding="utf-8"))
-            return QCReportConfig.from_dict(data)
+            return QCReportConfig.from_dict(data, base_dir=base_dir)
         if path.suffix.lower() in (".toml", ".tml"):
             if tomllib is None:
                 raise RuntimeError(
                     "TOML config requested but tomllib is unavailable in this Python."
                 )
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-            return QCReportConfig.from_dict(data)
+            return QCReportConfig.from_dict(data, base_dir=base_dir)
         raise ValueError(
             f"Unsupported config file type: {path.suffix}. Use .json or .toml"
         )
@@ -373,7 +425,9 @@ class WorkflowRunConfig:
     workflow_file: Path
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "WorkflowRunConfig":
+    def from_dict(
+        d: Dict[str, Any], *, base_dir: Path | None = None
+    ) -> "WorkflowRunConfig":
         if "workflow" in d and isinstance(d["workflow"], dict):
             d = d["workflow"]
         wf = d.get("workflow_file")
@@ -381,23 +435,27 @@ class WorkflowRunConfig:
             raise ValueError(
                 "workflow config requires 'workflow_file' (or [workflow].workflow_file)."
             )
-        return WorkflowRunConfig(workflow_file=Path(str(wf)))
+        return WorkflowRunConfig(
+            workflow_file=_resolve_declared_path(Path(str(wf)), base_dir=base_dir)
+            or Path(".")
+        )
 
     @staticmethod
     def load(path: Path) -> "WorkflowRunConfig":
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(str(path))
+        base_dir = path.expanduser().resolve().parent
         if path.suffix.lower() == ".json":
             data = json.loads(path.read_text(encoding="utf-8"))
-            return WorkflowRunConfig.from_dict(data)
+            return WorkflowRunConfig.from_dict(data, base_dir=base_dir)
         if path.suffix.lower() in (".toml", ".tml"):
             if tomllib is None:
                 raise RuntimeError(
                     "TOML config requested but tomllib is unavailable in this Python."
                 )
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-            return WorkflowRunConfig.from_dict(data)
+            return WorkflowRunConfig.from_dict(data, base_dir=base_dir)
         raise ValueError(
             f"Unsupported config file type: {path.suffix}. Use .json or .toml"
         )
@@ -1009,7 +1067,10 @@ class PipelineConfig:
         c.home_dir = _resolve_repo_root(c.home_dir)
         c.dataset_name = _resolve_dataset_root(c.home_dir, c.dataset_name)
 
-        c.singularity_image = c.singularity_image.expanduser().resolve()
+        c.singularity_image = (
+            _resolve_declared_path(c.singularity_image, repo_root=c.home_dir)
+            or c.singularity_image
+        )
         # Keep results under home_dir when results_dir is relative.
         if not c.results_dir.is_absolute():
             c.results_dir = (Path(c.home_dir) / c.results_dir).expanduser().resolve()
@@ -1020,58 +1081,93 @@ class PipelineConfig:
         if c.qc_cross_pulsar_dir is not None:
             c.qc_cross_pulsar_dir = Path(c.qc_cross_pulsar_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
-            c.fix_qc_results_dir = Path(c.fix_qc_results_dir).expanduser().resolve()
+            c.fix_qc_results_dir = (
+                _resolve_declared_path(c.fix_qc_results_dir, repo_root=c.home_dir)
+                or c.fix_qc_results_dir
+            )
         if c.pqc_backend_profiles_path is not None:
             c.pqc_backend_profiles_path = (
-                Path(c.pqc_backend_profiles_path).expanduser().resolve()
+                _resolve_declared_path(c.pqc_backend_profiles_path, repo_root=c.home_dir)
+                or Path(c.pqc_backend_profiles_path)
             )
         if c.whitenoise_source_path is not None:
             c.whitenoise_source_path = (
-                Path(c.whitenoise_source_path).expanduser().resolve()
+                _resolve_declared_path(c.whitenoise_source_path, repo_root=c.home_dir)
+                or Path(c.whitenoise_source_path)
             )
         if c.fix_system_flag_mapping_path is not None:
             c.fix_system_flag_mapping_path = (
-                Path(c.fix_system_flag_mapping_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.fix_system_flag_mapping_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_system_flag_mapping_path)
             )
         if c.fix_flag_sys_freq_rules_path is not None:
             c.fix_flag_sys_freq_rules_path = (
-                Path(c.fix_flag_sys_freq_rules_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.fix_flag_sys_freq_rules_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_flag_sys_freq_rules_path)
             )
         if c.fix_system_flag_table_path is not None:
             c.fix_system_flag_table_path = (
-                Path(c.fix_system_flag_table_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.fix_system_flag_table_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_system_flag_table_path)
             )
         if c.fix_backend_classifications_path is not None:
             c.fix_backend_classifications_path = (
-                Path(c.fix_backend_classifications_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.fix_backend_classifications_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_backend_classifications_path)
             )
         if c.fix_alltim_variants_path is not None:
             c.fix_alltim_variants_path = (
-                Path(c.fix_alltim_variants_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.fix_alltim_variants_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_alltim_variants_path)
             )
         if c.fix_relabel_rules_path is not None:
             c.fix_relabel_rules_path = (
-                Path(c.fix_relabel_rules_path).expanduser().resolve()
+                _resolve_declared_path(c.fix_relabel_rules_path, repo_root=c.home_dir)
+                or Path(c.fix_relabel_rules_path)
             )
         if c.fix_overlap_rules_path is not None:
             c.fix_overlap_rules_path = (
-                Path(c.fix_overlap_rules_path).expanduser().resolve()
+                _resolve_declared_path(c.fix_overlap_rules_path, repo_root=c.home_dir)
+                or Path(c.fix_overlap_rules_path)
             )
         if c.fix_overlap_exact_catalog_path is not None:
             c.fix_overlap_exact_catalog_path = (
-                Path(c.fix_overlap_exact_catalog_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.fix_overlap_exact_catalog_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_overlap_exact_catalog_path)
             )
         if c.ingest_mapping_file is not None:
-            c.ingest_mapping_file = Path(c.ingest_mapping_file).expanduser().resolve()
+            c.ingest_mapping_file = (
+                _resolve_declared_path(c.ingest_mapping_file, repo_root=c.home_dir)
+                or Path(c.ingest_mapping_file)
+            )
         if c.ingest_output_dir is not None:
-            c.ingest_output_dir = Path(c.ingest_output_dir).expanduser().resolve()
+            c.ingest_output_dir = (
+                _resolve_declared_path(c.ingest_output_dir, repo_root=c.home_dir)
+                or Path(c.ingest_output_dir)
+            )
         if c.compare_public_out_dir is not None:
             c.compare_public_out_dir = (
-                Path(c.compare_public_out_dir).expanduser().resolve()
+                _resolve_declared_path(c.compare_public_out_dir, repo_root=c.home_dir)
+                or Path(c.compare_public_out_dir)
             )
         if c.compare_public_providers_path is not None:
             c.compare_public_providers_path = (
-                Path(c.compare_public_providers_path).expanduser().resolve()
+                _resolve_declared_path(
+                    c.compare_public_providers_path, repo_root=c.home_dir
+                )
+                or Path(c.compare_public_providers_path)
             )
         return c
 
@@ -1137,7 +1233,9 @@ class PipelineConfig:
         return d
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "PipelineConfig":
+    def from_dict(
+        d: Dict[str, Any], *, base_dir: Path | None = None
+    ) -> "PipelineConfig":
         """Construct a :class:`PipelineConfig` from a dict.
 
         Args:
@@ -1185,8 +1283,9 @@ class PipelineConfig:
                 return list(default)
             return list(v)
 
+        home_dir = _resolve_declared_path(p(d["home_dir"]), base_dir=base_dir)
         return PipelineConfig(
-            home_dir=p(d["home_dir"]),
+            home_dir=home_dir or Path("."),
             dataset_name=p(d.get("dataset_name", ".")),
             singularity_image=p(d["singularity_image"]),
             results_dir=p(d.get("results_dir", ".")),
@@ -1630,10 +1729,11 @@ class PipelineConfig:
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(str(path))
+        base_dir = path.expanduser().resolve().parent
 
         if path.suffix.lower() == ".json":
             data = json.loads(path.read_text(encoding="utf-8"))
-            return PipelineConfig.from_dict(data)
+            return PipelineConfig.from_dict(data, base_dir=base_dir)
 
         if path.suffix.lower() in (".toml", ".tml"):
             if tomllib is None:
@@ -1644,7 +1744,7 @@ class PipelineConfig:
             # Accept either top-level keys or [pipeline] table
             if "pipeline" in data and isinstance(data["pipeline"], dict):
                 data = data["pipeline"]
-            return PipelineConfig.from_dict(data)
+            return PipelineConfig.from_dict(data, base_dir=base_dir)
 
         raise ValueError(
             f"Unsupported config file type: {path.suffix}. Use .json or .toml"

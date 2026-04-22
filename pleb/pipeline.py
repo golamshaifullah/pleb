@@ -16,6 +16,8 @@ from datetime import datetime
 from typing import Dict, List
 
 import os
+import subprocess
+import tempfile
 import shutil
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -76,6 +78,35 @@ from .whitenoise_integration import (
 )
 
 logger = get_logger("pleb")
+
+
+def _git_add_pathspecs(repo_root: Path, paths: list[str]) -> None:
+    """Stage many paths without overflowing argv length."""
+    if not paths:
+        return
+    with tempfile.NamedTemporaryFile("wb", delete=False) as fh:
+        for p in paths:
+            fh.write(p.encode("utf-8"))
+            fh.write(b"\0")
+        path_file = fh.name
+    try:
+        subprocess.run(
+            [
+                "git",
+                "add",
+                "-A",
+                "--pathspec-from-file",
+                path_file,
+                "--pathspec-file-nul",
+            ],
+            cwd=str(repo_root),
+            check=True,
+        )
+    finally:
+        try:
+            Path(path_file).unlink()
+        except Exception:
+            pass
 
 
 def _discover_pqc_variants(psr_dir: Path, psr: str) -> List[str]:
@@ -932,7 +963,7 @@ def _apply_fixdataset_and_commit(
     to_stage = [p for p in paths if _want(p)]
 
     if to_stage:
-        repo.git.add("--", *to_stage)
+        _git_add_pathspecs(Path(cfg.home_dir).resolve(), to_stage)
         repo.index.commit(commit_message)
     else:
         repo.git.commit("--allow-empty", "-m", commit_message + " (no changes)")
@@ -1038,7 +1069,7 @@ def _commit_branch_artifacts(
     if not to_stage:
         return
 
-    repo.git.add("--", *to_stage)
+    _git_add_pathspecs(repo_root, to_stage)
     if repo.is_dirty(untracked_files=True):
         repo.index.commit(f"{commit_message} [artifacts]")
         logger.info(

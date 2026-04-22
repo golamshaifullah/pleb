@@ -29,10 +29,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import os
 import shlex
 import sys
-import tempfile
 from dataclasses import fields
 
 from .config import (
@@ -779,34 +777,27 @@ def main(argv=None) -> int:
         v = _parse_value_as_toml_literal(vraw)
         _set_dotted_key(cfg_dict, k, v)
 
-    tmp_path = None
-    try:
-        tmp = tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False)
-        tmp_path = tmp.name
-        tmp.write(_dump_toml_no_nulls(cfg_dict))
-        tmp.close()
-        # Ingest-only configs should not need full PipelineConfig required fields.
-        ingest_mapping = cfg_dict.get("ingest_mapping_file")
-        if ingest_mapping is None and isinstance(cfg_dict.get("pipeline"), dict):
-            ingest_mapping = cfg_dict["pipeline"].get("ingest_mapping_file")
-        if ingest_mapping and not args.param_scan:
-            mapping_arg = ["--mapping", str(ingest_mapping)]
-            output_arg = []
-            ingest_output = cfg_dict.get("ingest_output_dir")
-            if ingest_output is None and isinstance(cfg_dict.get("pipeline"), dict):
-                ingest_output = cfg_dict["pipeline"].get("ingest_output_dir")
-            if ingest_output:
-                output_arg = ["--output-dir", str(ingest_output)]
-            return run_ingest(mapping_arg + output_arg + ["--config", str(tmp_path)])
+    config_base_dir = None
+    if args.config and args.config != "-":
+        config_base_dir = Path(args.config).expanduser().resolve().parent
 
-        if args.param_scan:
-            pscfg = ParamScanConfig.load(tmp_path)
-            cfg = pscfg.to_pipeline_config()
-        else:
-            cfg = PipelineConfig.load(tmp_path)
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    # Ingest-only configs should not need full PipelineConfig required fields.
+    ingest_mapping = cfg_dict.get("ingest_mapping_file")
+    if ingest_mapping is None and isinstance(cfg_dict.get("pipeline"), dict):
+        ingest_mapping = cfg_dict["pipeline"].get("ingest_mapping_file")
+    if ingest_mapping and not args.param_scan:
+        cfg_ingest = IngestConfig.from_dict(cfg_dict, base_dir=config_base_dir)
+        mapping_arg = ["--mapping", str(cfg_ingest.ingest_mapping_file)]
+        output_arg = []
+        if cfg_ingest.ingest_output_dir:
+            output_arg = ["--output-dir", str(cfg_ingest.ingest_output_dir)]
+        return run_ingest(mapping_arg + output_arg + ["--config", args.config or "-"])
+
+    if args.param_scan:
+        pscfg = ParamScanConfig.from_dict(cfg_dict, base_dir=config_base_dir)
+        cfg = pscfg.to_pipeline_config()
+    else:
+        cfg = PipelineConfig.from_dict(cfg_dict, base_dir=config_base_dir)
 
     if args.param_scan:
         specs: list[str] = []

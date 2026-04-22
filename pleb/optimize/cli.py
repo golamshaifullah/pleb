@@ -18,6 +18,16 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(str(path))
+    base_dir = path.expanduser().resolve().parent
+
+    def _path(raw):
+        if raw in (None, ""):
+            return None
+        p = Path(str(raw)).expanduser()
+        if not p.is_absolute():
+            p = base_dir / p
+        return p.resolve()
+
     if path.suffix.lower() == ".json":
         data = json.loads(path.read_text(encoding="utf-8"))
     elif path.suffix.lower() in (".toml", ".tml"):
@@ -27,34 +37,34 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
     if "optimize" in data and isinstance(data["optimize"], dict):
         data = data["optimize"]
     return OptimizationConfig(
-        base_config_path=Path(str(data["base_config_path"])),
+        base_config_path=_path(data["base_config_path"]) or Path("."),
         execution_mode=str(data.get("execution_mode", "pipeline")),
         workflow_file=(
             None
             if data.get("workflow_file") in (None, "")
-            else Path(str(data["workflow_file"]))
+            else _path(data["workflow_file"])
         ),
         search_space_path=(
             None
             if data.get("search_space_path") in (None, "")
-            else Path(str(data["search_space_path"]))
+            else _path(data["search_space_path"])
         ),
         objective_path=(
             None
             if data.get("objective_path") in (None, "")
-            else Path(str(data["objective_path"]))
+            else _path(data["objective_path"])
         ),
         folds_path=(
             None
             if data.get("folds_path") in (None, "")
-            else Path(str(data["folds_path"]))
+            else _path(data["folds_path"])
         ),
-        out_dir=Path(str(data.get("out_dir", "results/optimize"))),
+        out_dir=_path(data.get("out_dir", "results/optimize")) or Path("results/optimize"),
         study_name=str(data.get("study_name", "pqc_optimize")),
         baseline_run_dir=(
             None
             if data.get("baseline_run_dir") in (None, "")
-            else Path(str(data["baseline_run_dir"]))
+            else _path(data["baseline_run_dir"])
         ),
         n_trials=int(data.get("n_trials", 20)),
         sampler=str(data.get("sampler", "random")),

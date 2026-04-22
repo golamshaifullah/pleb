@@ -123,13 +123,24 @@ def _norm_backend_key(key: str) -> str:
 
 
 def _load_mapping(path: Path) -> IngestMapping:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    sources = tuple(Path(p).expanduser().resolve() for p in data.get("sources", []))
+    path = Path(path).expanduser().resolve()
+    base_dir = path.parent
+
+    def _path(raw: str | Path | None) -> Optional[Path]:
+        if raw in (None, ""):
+            return None
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            p = base_dir / p
+        return p.resolve()
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    sources = tuple(_path(p) for p in data.get("sources", []) if _path(p) is not None)
     par_roots = tuple(
-        Path(p).expanduser().resolve() for p in data.get("par_roots", sources)
+        _path(p) for p in data.get("par_roots", sources) if _path(p) is not None
     )
     template_roots = tuple(
-        Path(p).expanduser().resolve() for p in data.get("template_roots", [])
+        _path(p) for p in data.get("template_roots", []) if _path(p) is not None
     )
 
     backends: List[BackendSpec] = []
@@ -142,7 +153,11 @@ def _load_mapping(path: Path) -> IngestMapping:
             raise IngestError(
                 f"Backend '{key}' is missing required 'root' in mapping file."
             )
-        root = Path(root_raw).expanduser().resolve()
+        root = _path(root_raw)
+        if root is None:
+            raise IngestError(
+                f"Backend '{key}' has an invalid 'root' in mapping file."
+            )
         backends.append(
             BackendSpec(
                 name=key,
@@ -165,13 +180,13 @@ def _load_mapping(path: Path) -> IngestMapping:
     )
     raw_priority_roots = data.get("priority_roots") or {}
     priority_roots = {
-        str(k): Path(v).expanduser().resolve()
+        str(k): _path(v)
         for k, v in raw_priority_roots.items()
-        if str(k).strip() and str(v).strip()
+        if str(k).strip() and str(v).strip() and _path(v) is not None
     }
     lockfile_path = data.get("lockfile_path")
     lockfile_strict = bool(data.get("lockfile_strict", True))
-    lockfile = Path(lockfile_path).expanduser().resolve() if lockfile_path else None
+    lockfile = _path(lockfile_path) if lockfile_path else None
     return IngestMapping(
         sources=sources,
         par_roots=par_roots,

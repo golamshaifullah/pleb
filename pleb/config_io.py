@@ -37,7 +37,7 @@ def _set_dotted_key(d: dict, key: str, value):
     cur[parts[-1]] = value
 
 
-def _load_config_dict(config_arg: str | None) -> dict:
+def _load_config_dict(config_arg: str | None, *, base_dir: Path | None = None) -> dict:
     """Load a raw config dictionary from a file or stdin."""
     if not config_arg:
         return {}
@@ -49,7 +49,11 @@ def _load_config_dict(config_arg: str | None) -> dict:
             return json.loads(text)
         return tomllib.loads(text)
 
-    path = Path(config_arg).expanduser().resolve()
+    path = Path(config_arg).expanduser()
+    if not path.is_absolute() and base_dir is not None:
+        path = (base_dir / path).resolve()
+    else:
+        path = path.resolve()
     if not path.exists():
         raise FileNotFoundError(str(path))
     suf = path.suffix.lower()
