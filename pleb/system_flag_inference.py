@@ -37,7 +37,6 @@ from typing import Dict, List, Optional, Tuple
 
 import json
 from threading import Lock
-import re
 
 import numpy as np
 import pandas as pd
@@ -47,7 +46,7 @@ try:  # optional dependency for rules file support
 except Exception:  # pragma: no cover
     yaml = None  # type: ignore
 
-from .tim_utils import is_toa_line
+from .tim_utils import is_toa_line, parse_tim_flags_from_line
 
 TELESCOPE_CODES = {"EFF", "JBO", "WSRT", "NRT", "SRT", "LEAP", "LOFAR", "NFR"}
 
@@ -61,9 +60,6 @@ DEFAULT_PTA_BY_TEL = {
     "LOFAR": "EPTA",
     "NFR": "EPTA",
 }
-
-# Regex that finds "-key value" pairs (value = next non-space token).
-_FLAG_RE = re.compile(r"(?P<k>-\w+)\s+(?P<v>[^\s]+)")
 
 # WSRT P2 subband centers used for system flagging (MHz).
 _WSRT_P2_BANDS = {
@@ -200,13 +196,8 @@ class SystemInferenceConfig:
 
 
 def _extract_flags(line: str) -> Dict[str, str]:
-    """Extract ``-flag value`` pairs from a TOA line."""
-    # Only scan the part after the first 4 columns to reduce false positives.
-    parts = line.split()
-    if len(parts) <= 4:
-        return {}
-    tail = " ".join(parts[4:])
-    return {m.group("k"): m.group("v") for m in _FLAG_RE.finditer(tail)}
+    """Extract TOA flags from a line, preserving valueless flags."""
+    return parse_tim_flags_from_line(line, start_col=4)
 
 
 def _infer_telescope_code(timfile: Path) -> Optional[str]:
@@ -1070,6 +1061,11 @@ def update_mapping_table(
 
         table = update_mapping_table(Path("system_flag_table.json"), inferred)
     """
+    if "timfile" not in inferred.columns:
+        raise ValueError(
+            "inferred must have column 'timfile' with the tim filename/key"
+        )
+
     with _MAPPING_TABLE_LOCK:
         mapping_path.parent.mkdir(parents=True, exist_ok=True)
         if mapping_path.exists():
@@ -1077,17 +1073,15 @@ def update_mapping_table(
         else:
             table = {}
 
-    # inferred must include timfile_name + sys
-    if "timfile" not in inferred.columns:
-        raise ValueError(
-            "inferred must have column 'timfile' with the tim filename/key"
-        )
-    for tname, sub in inferred.groupby("timfile"):
-        sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
-        if sys_vals:
-            table[tname] = sys_vals
+        for tname, sub in inferred.groupby("timfile"):
+            sys_vals = sorted(pd.Series(sub["sys"]).dropna().unique().tolist())
+            if sys_vals:
+                table[tname] = sys_vals
 
-    mapping_path.write_text(
-        json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    return table
+        tmp_path = mapping_path.with_suffix(mapping_path.suffix + ".tmp")
+        tmp_path.write_text(
+            json.dumps(table, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(mapping_path)
+        return table

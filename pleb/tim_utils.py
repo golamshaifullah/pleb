@@ -7,7 +7,8 @@ without creating circular dependencies.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, List, Optional, Set, Tuple
+import re
+from typing import Callable, Dict, List, Optional, Set, Tuple
 import warnings
 
 # Common tempo2 directive words in .tim files.
@@ -30,6 +31,8 @@ TIM_DIRECTIVES = {
 }
 
 _WARNED_LOWERCASE_C_COMMENT = False
+_FLAG_TOKEN_RE = re.compile(r"-\w+$")
+_NEGATIVE_NUMBER_RE = re.compile(r"-(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
 
 def is_toa_line(line: str) -> bool:
@@ -81,6 +84,41 @@ def is_tim_comment_line(line: str) -> bool:
             return True
         return s[1].isspace()
     return False
+
+
+def _looks_like_flag_token(token: str) -> bool:
+    """Return whether a token should be treated as a tim flag key."""
+    if not _FLAG_TOKEN_RE.fullmatch(token):
+        return False
+    return _NEGATIVE_NUMBER_RE.fullmatch(token) is None
+
+
+def parse_tim_flags_from_line(line: str, *, start_col: int = 4) -> Dict[str, str]:
+    """Parse TOA flags from one tim line.
+
+    Flags without explicit values are preserved with the empty string as value.
+    This avoids swallowing a following flag token as the previous flag's value,
+    e.g. ``-gis -pta EPTA`` becomes ``{"-gis": "", "-pta": "EPTA"}``.
+    """
+    parts = line.split()
+    if len(parts) <= start_col:
+        return {}
+    tail = parts[start_col:]
+    flags: Dict[str, str] = {}
+    i = 0
+    while i < len(tail):
+        tok = tail[i]
+        if not _looks_like_flag_token(tok):
+            i += 1
+            continue
+        value = ""
+        if i + 1 < len(tail) and not _looks_like_flag_token(tail[i + 1]):
+            value = tail[i + 1]
+            i += 2
+        else:
+            i += 1
+        flags[tok] = value
+    return flags
 
 
 def count_toa_lines(timfile: Path) -> int:
@@ -195,10 +233,9 @@ def extract_flag_values(timfile: Path, flag: str) -> Set[str]:
     for raw in timfile.read_text(encoding="utf-8", errors="ignore").splitlines():
         if not is_toa_line(raw):
             continue
-        parts = raw.split()
-        for i, tok in enumerate(parts[:-1]):
-            if tok == flag:
-                vals.add(parts[i + 1])
+        flags = parse_tim_flags_from_line(raw)
+        if flag in flags:
+            vals.add(flags[flag])
     return vals
 
 
@@ -206,11 +243,7 @@ def extract_flag_value_from_line(line: str, flag: str) -> Optional[str]:
     """Return the value of one flag from a TOA line, if present."""
     if not is_toa_line(line):
         return None
-    parts = line.split()
-    for i, tok in enumerate(parts[:-1]):
-        if tok == flag:
-            return parts[i + 1]
-    return None
+    return parse_tim_flags_from_line(line).get(flag)
 
 
 def filter_timfile(

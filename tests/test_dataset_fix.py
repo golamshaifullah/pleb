@@ -8,6 +8,7 @@ import warnings
 import pytest
 
 from pleb.tim_utils import is_toa_line
+from pleb.system_flag_inference import parse_tim_toa_table
 from pleb.dataset_fix import (
     FixDatasetConfig,
     _find_qc_csvs,
@@ -23,6 +24,7 @@ from pleb.dataset_fix import (
     update_alltim_includes,
     update_parfile_jumps,
 )
+from pleb.tim_utils import extract_flag_value_from_line, parse_tim_flags_from_line
 
 
 def _write(path: Path, text: str) -> None:
@@ -144,6 +146,51 @@ JUMP -sys SYS1 0 0
     text = par.read_text(encoding="utf-8")
     assert "EPHEM DE440" in text
     assert "JUMP -sys SYS2 0 0" in text
+
+
+def test_parse_tim_flags_preserves_valueless_flags() -> None:
+    line = (
+        "toa 1400 55000 1 1 "
+        "-xyz -aaa -bcd -pta EPTA -padd -0.193655 -gis"
+    )
+
+    flags = parse_tim_flags_from_line(line)
+
+    assert flags["-xyz"] == ""
+    assert flags["-aaa"] == ""
+    assert flags["-bcd"] == ""
+    assert flags["-pta"] == "EPTA"
+    assert flags["-padd"] == "-0.193655"
+    assert flags["-gis"] == ""
+    assert extract_flag_value_from_line(line, "-pta") == "EPTA"
+    assert extract_flag_value_from_line(line, "-xyz") == ""
+
+
+def test_parse_tim_toa_table_does_not_swallow_next_flag_after_valueless_flag(
+    tmp_path: Path,
+) -> None:
+    tim = tmp_path / "EFF.EBPP.2639.tim"
+    _write(
+        tim,
+        "\n".join(
+            [
+                "FORMAT 1",
+                (
+                    "Cc062251.align.pazr.30min 2625.499 56486.8600580664295 29.730 g "
+                    "-sys EFF.EBPP.2639 -padd 0.112837 -addsat +1 "
+                    "-gis -pta EPTA -group EFF.EBPP.2639"
+                ),
+            ]
+        )
+        + "\n",
+    )
+
+    df = parse_tim_toa_table(tim)
+    flags = df.iloc[0]["flags"]
+
+    assert flags["-gis"] == ""
+    assert flags["-pta"] == "EPTA"
+    assert flags["-group"] == "EFF.EBPP.2639"
 
 
 def test_remove_patterns_from_par_tim(tmp_path: Path) -> None:
