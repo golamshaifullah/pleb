@@ -1291,7 +1291,6 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             new_branch=fix_branch_name,
             commit_message=commit_message,
         )
-        checkout(repo, current_branch)
 
     try:
         for branch in branches_to_run:

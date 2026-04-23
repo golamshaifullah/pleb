@@ -801,6 +801,18 @@ def _format_pdf_table_value(value: Any) -> str:
     return str(value)
 
 
+def _df_map_compat(df: "pd.DataFrame", func):
+    """Apply a scalar function elementwise across pandas versions.
+
+    Newer pandas exposes ``DataFrame.map`` while older versions used
+    ``DataFrame.applymap``. Prefer ``map`` when available and fall back.
+    """
+    mapper = getattr(df, "map", None)
+    if callable(mapper):
+        return mapper(func)
+    return df.applymap(func)
+
+
 def _write_per_pulsar_summary_tables(pdf, per_pulsar: List[Dict[str, Any]]) -> None:
     """Write paginated per-pulsar summary tables."""
     import matplotlib.pyplot as plt
@@ -829,7 +841,7 @@ def _write_per_pulsar_summary_tables(pdf, per_pulsar: List[Dict[str, Any]]) -> N
         start = page_idx * rows_per_page
         stop = start + rows_per_page
         chunk = df.iloc[start:stop].copy()
-        chunk = chunk.applymap(_format_pdf_table_value)
+        chunk = _df_map_compat(chunk, _format_pdf_table_value)
 
         fig = plt.figure(figsize=_A4_FIGSIZE)
         ax = fig.add_subplot(111)
@@ -1223,7 +1235,9 @@ def _plot_upset(df: pd.DataFrame, out_prefix: Path, title: str) -> None:
     if not labels:
         return
 
-    presence = df[labels].applymap(lambda x: isinstance(x, str) and x.strip() != "")
+    presence = _df_map_compat(
+        df[labels], lambda x: isinstance(x, str) and x.strip() != ""
+    )
     row_order = labels
 
     # Colors (tab10 fallback)
