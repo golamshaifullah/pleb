@@ -9,8 +9,9 @@ Notes
 -----
 Statistical operations in this module are lightweight and mostly descriptive:
 
-- Reference-system selection uses robust ranking by median TOA uncertainty and
-  TOA count (a pragmatic proxy for a stable timing anchor).
+- Reference-system selection uses a weighted deterministic score that favors
+  lower timing RMS, longer Tspan, better TOA precision, denser cadence, and
+  broader overlap support across backend timfiles and MJD coverage.
 - Deduplication can use user-defined tolerance or auto-derived frequency
   tolerance from channel spacing.
 - QC application consumes precomputed ``pqc`` flags; this module does not fit
@@ -21,8 +22,9 @@ Worked example
 For a variant ``J1713+0747_new_all.tim``, reference-system generation:
 
 1. Split included backend timfiles by ``-sys``.
-2. Count TOAs per system and compute median TOA error (microseconds).
-3. Choose system with smallest median error; tie-break by largest TOA count.
+2. Measure timing RMS, Tspan, TOA precision, cadence, and overlap-support
+   diagnostics per system.
+3. Choose the reference system with the best weighted score across those metrics.
 4. Write ``J1713+0747_new.par`` with ``JUMP -sys <system> 0 <fitflag>`` lines.
 
 References
@@ -67,6 +69,7 @@ except Exception:  # pragma: no cover
     tomllib = None  # type: ignore
 
 from .logging_utils import get_logger
+from .parsers import read_general2
 from .system_tables import load_table
 from .tim_utils import (
     TIM_DIRECTIVES,
@@ -582,6 +585,167 @@ def _parse_tempo2_redchisq(stdout_path: Path) -> Optional[float]:
     return None
 
 
+def _parse_tempo2_timing_rms_us(stdout_path: Path) -> Optional[float]:
+    """Compute post-fit weighted RMS from a tempo2 general2 log.
+
+    The general2 plugin is asked for ``post`` and ``err`` columns. Following
+    the existing report logic, ``err`` is treated as microseconds for the
+    purpose of weighting; the resulting RMS is returned in microseconds.
+    """
+    if not stdout_path.exists():
+        return None
+    try:
+        df = read_general2(stdout_path)
+    except Exception:
+        return None
+    if not {"post", "err"}.issubset(df.columns):
+        return None
+    post = pd.to_numeric(df["post"], errors="coerce")
+    err = pd.to_numeric(df["err"], errors="coerce")
+    good = post.notna() & err.notna() & (err > 0)
+    if good.sum() <= 1:
+        return None
+    y = post[good].to_numpy(dtype=float)
+    e = err[good].to_numpy(dtype=float) * 1e-6
+    w = 1.0 / (e**2)
+    mu = np.sum(w * y) / np.sum(w)
+    wrms = float(np.sqrt(np.sum(w * (y - mu) ** 2) / np.sum(w)))
+    return wrms * 1e6
+
+
+def _normalize_reference_metric(
+    values: Sequence[float], *, higher_is_better: bool
+) -> List[float]:
+    """Normalize one reference-selection metric onto ``[0, 1]``."""
+    def _as_float(value: object) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return float("nan")
+
+    finite = [_as_float(v) for v in values if np.isfinite(_as_float(v))]
+    if not finite:
+        return [0.0 for _ in values]
+    lo = min(finite)
+    hi = max(finite)
+    if hi == lo:
+        return [1.0 if np.isfinite(_as_float(v)) else 0.0 for v in values]
+    out: List[float] = []
+    for value in values:
+        v = _as_float(value)
+        if not np.isfinite(v):
+            out.append(0.0)
+            continue
+        frac = (v - lo) / (hi - lo)
+        out.append(frac if higher_is_better else (1.0 - frac))
+    return out
+
+
+def _rank_reference_system_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
+    """Rank reference-JUMP candidates using timing quality and overlap support.
+
+    Weighting follows the current policy:
+
+    - timing RMS: 0.35
+    - Tspan: 0.20
+    - TOA precision (median TOA uncertainty): 0.15
+    - cadence: 0.10
+    - number of backends overlapped: 0.05
+    - number of MJDs overlapped: 0.15
+
+    Number of TOAs remains diagnostic only and does not contribute to the score.
+    """
+    def _as_float(value: object) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return float("nan")
+
+    ranked: List[Dict[str, object]] = [dict(row) for row in rows]
+    precision_vals = [_as_float(row.get("median_toa_err_us", np.nan)) for row in ranked]
+    rms_vals = [_as_float(row.get("timing_rms_us", np.nan)) for row in ranked]
+    tspan_vals = [_as_float(row.get("tspan_days", np.nan)) for row in ranked]
+    cadence_vals = [_as_float(row.get("cadence_days", np.nan)) for row in ranked]
+    backend_overlap_vals = [
+        _as_float(row.get("n_overlapped_backends", np.nan)) for row in ranked
+    ]
+    mjd_overlap_vals = [
+        _as_float(row.get("n_overlapped_mjds", np.nan)) for row in ranked
+    ]
+
+    precision_scores = _normalize_reference_metric(
+        precision_vals, higher_is_better=False
+    )
+    rms_scores = _normalize_reference_metric(rms_vals, higher_is_better=False)
+    tspan_scores = _normalize_reference_metric(tspan_vals, higher_is_better=True)
+    cadence_scores = _normalize_reference_metric(
+        cadence_vals, higher_is_better=False
+    )
+    backend_overlap_scores = _normalize_reference_metric(
+        backend_overlap_vals, higher_is_better=True
+    )
+    mjd_overlap_scores = _normalize_reference_metric(
+        mjd_overlap_vals, higher_is_better=True
+    )
+
+    for (
+        row,
+        precision_score,
+        rms_score,
+        tspan_score,
+        cadence_score,
+        backend_overlap_score,
+        mjd_overlap_score,
+    ) in zip(
+        ranked,
+        precision_scores,
+        rms_scores,
+        tspan_scores,
+        cadence_scores,
+        backend_overlap_scores,
+        mjd_overlap_scores,
+    ):
+        score = (
+            0.35 * rms_score
+            + 0.20 * tspan_score
+            + 0.15 * precision_score
+            + 0.10 * cadence_score
+            + 0.05 * backend_overlap_score
+            + 0.15 * mjd_overlap_score
+        )
+        row["reference_score"] = float(score)
+
+    ranked.sort(
+        key=lambda row: (
+            -_as_float(row.get("reference_score", -np.inf)),
+            (
+                np.inf
+                if not np.isfinite(_as_float(row.get("timing_rms_us", np.nan)))
+                else _as_float(row.get("timing_rms_us", np.nan))
+            ),
+            (
+                np.inf
+                if not np.isfinite(_as_float(row.get("tspan_days", np.nan)))
+                else -_as_float(row.get("tspan_days", np.nan))
+            ),
+            (
+                np.inf
+                if not np.isfinite(_as_float(row.get("median_toa_err_us", np.nan)))
+                else _as_float(row.get("median_toa_err_us", np.nan))
+            ),
+            -_as_float(row.get("n_overlapped_mjds", 0.0) or 0.0),
+            (
+                np.inf
+                if not np.isfinite(_as_float(row.get("cadence_days", np.nan)))
+                else _as_float(row.get("cadence_days", np.nan))
+            ),
+            -_as_float(row.get("n_overlapped_backends", 0.0) or 0.0),
+            str(row.get("system", "")),
+        )
+    )
+    return ranked
+
+
 def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
     base = alltim.name
     if base == f"{psr}_all.tim":
@@ -599,7 +763,7 @@ def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
 def _parse_tim_system_rows(
     timfile: Path,
     system_flag: str = "-sys",
-) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]]]:
+) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]], Dict[str, List[float]]]:
     """Split TOAs into per-system buffers using the selected tim flag.
 
     Parameters
@@ -613,6 +777,7 @@ def _parse_tim_system_rows(
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
     systems: Set[str] = set()
     errs: Dict[str, List[float]] = {}
+    mjds: Dict[str, List[float]] = {}
     for raw in lines:
         if not is_toa_line(raw):
             continue
@@ -630,6 +795,9 @@ def _parse_tim_system_rows(
             errs.setdefault(sys_val, []).append(float(parts[3]))
         except Exception:
             pass
+        mjd = mjd_from_toa_line(raw)
+        if mjd is not None:
+            mjds.setdefault(sys_val, []).append(float(mjd))
 
     by_sys: Dict[str, List[str]] = {s: [] for s in systems}
     for raw in lines:
@@ -646,7 +814,7 @@ def _parse_tim_system_rows(
         for s in by_sys:
             by_sys[s].append(raw)
 
-    return by_sys, sorted(systems), errs
+    return by_sys, sorted(systems), errs, mjds
 
 
 def build_variant_reference_jump_pars(
@@ -672,19 +840,16 @@ def build_variant_reference_jump_pars(
 
     Notes
     -----
-    Reference system choice is a deterministic rank:
+    Reference system choice is a deterministic weighted rank:
 
-    1. largest TOA count,
-    2. then smallest median TOA uncertainty (microseconds),
-    3. then lexical system name.
+    1. lower timing RMS carries the largest weight,
+    2. longer Tspan is next,
+    3. TOA precision and MJD overlap support add moderate weight,
+    4. cadence and backend-overlap support add smaller secondary weight,
+    5. then lexical system name.
 
-    ``median`` is used because it is robust to heavy-tailed TOA-error
-    distributions and occasional bad uncertainty values. This is a pragmatic
-    quality proxy, not a formal optimal estimator of timing precision.
-
-    The function runs ``tempo2`` for each system-only temporary include file and
-    stores reduced chi-square as diagnostic context; reduced chi-square is *not*
-    currently used in the ranking rule.
+    Reduced chi-square remains diagnostic context only. Number of TOAs is also
+    recorded for diagnostics but does not contribute to the ranking.
     """
     psr = psr_dir.name
     par = psr_dir / f"{psr}.par"
@@ -759,7 +924,7 @@ def build_variant_reference_jump_pars(
             src_tim = psr_dir / rel
             if not src_tim.exists():
                 continue
-            by_sys, systems, errs = _parse_tim_system_rows(
+            by_sys, systems, errs, mjds = _parse_tim_system_rows(
                 src_tim, system_flag=jump_flag
             )
             if not systems:
@@ -777,12 +942,17 @@ def build_variant_reference_jump_pars(
                         "system": sysv,
                         "n_toa": 0,
                         "toa_err_us": [],
+                        "toa_mjd": [],
                         "source_timfiles": set(),
+                        "n_overlapped_backends": 0,
+                        "n_overlapped_mjds": 0,
                         "reduced_chisq": None,
+                        "timing_rms_us": None,
                     },
                 )
                 r["n_toa"] = int(r["n_toa"]) + int(count_toa_lines(out_tim))
                 r["toa_err_us"].extend(errs.get(sysv, []))
+                r["toa_mjd"].extend(mjds.get(sysv, []))
                 r["source_timfiles"].add(src_tim.name)
 
         # Evaluate each system with no-JUMP par.
@@ -808,13 +978,48 @@ def build_variant_reference_jump_pars(
             )
             red = _parse_tempo2_redchisq(log_path) if rc == 0 else None
             system_rows[sysv]["reduced_chisq"] = red
+            gen2_log = tmp_root / f"{psr}_{vname}_{sysv}.general2.log"
+            gen2_cmd = prefix + [
+                "tempo2",
+                "-output",
+                "general2",
+                "-f",
+                par_target,
+                tim_target,
+                "-s",
+                "{post} {err}\n",
+            ]
+            gen_rc = run_subprocess(gen2_cmd, gen2_log)
+            timing_rms_us = _parse_tempo2_timing_rms_us(gen2_log) if gen_rc == 0 else None
+            system_rows[sysv]["timing_rms_us"] = timing_rms_us
 
         # Finalize metrics and choose reference system.
         rows = []
         for sysv, r in system_rows.items():
             errs = np.asarray(r.pop("toa_err_us", []), dtype=float)
             med = float(np.median(errs)) if errs.size else np.nan
+            mjds = np.asarray(r.pop("toa_mjd", []), dtype=float)
+            uniq_mjds = np.unique(np.sort(mjds)) if mjds.size else np.asarray([], dtype=float)
+            if mjds.size >= 2:
+                tspan_days = float(np.nanmax(mjds) - np.nanmin(mjds))
+                if uniq_mjds.size >= 2:
+                    cadence_days = float(np.median(np.diff(uniq_mjds)))
+                else:
+                    cadence_days = np.nan
+            elif mjds.size == 1:
+                tspan_days = 0.0
+                cadence_days = np.nan
+            else:
+                tspan_days = np.nan
+                cadence_days = np.nan
             r["median_toa_err_us"] = med
+            r["tspan_days"] = tspan_days
+            r["cadence_days"] = cadence_days
+            # Overlap-support diagnostics for ranking:
+            # - backend overlap is the number of contributing backend timfiles
+            # - MJD overlap is the number of unique TOA MJDs represented
+            r["n_overlapped_backends"] = int(len(r.get("source_timfiles", [])))
+            r["n_overlapped_mjds"] = int(uniq_mjds.size)
             r["source_timfiles"] = ",".join(sorted(r["source_timfiles"]))
             rows.append(r)
 
@@ -825,29 +1030,17 @@ def build_variant_reference_jump_pars(
             }
             continue
 
-        # Prefer representative systems: larger TOA support first, then precision.
-        rows_sorted = sorted(
-            rows,
-            key=lambda x: (
-                -int(x.get("n_toa", 0)),
-                (
-                    np.inf
-                    if np.isnan(float(x.get("median_toa_err_us", np.nan)))
-                    else float(x.get("median_toa_err_us", np.nan))
-                ),
-                str(x.get("system", "")),
-            ),
-        )
+        rows_sorted = _rank_reference_system_rows(rows)
         ref_system = str(rows_sorted[0]["system"])
 
         csv_path = csv_base / f"{psr}_jump_reference_{vname}.csv"
         with open(csv_path, "w", encoding="utf-8") as f:
             f.write(
-                "variant,system,n_toa,median_toa_err_us,reduced_chisq,source_timfiles,reference_system\n"
+                "variant,system,n_toa,n_overlapped_backends,n_overlapped_mjds,tspan_days,cadence_days,median_toa_err_us,timing_rms_us,reduced_chisq,reference_score,source_timfiles,reference_system\n"
             )
             for r in rows_sorted:
                 f.write(
-                    f"{vname},{r['system']},{r['n_toa']},{r['median_toa_err_us']},{r.get('reduced_chisq')},{r.get('source_timfiles')},{ref_system}\n"
+                    f"{vname},{r['system']},{r['n_toa']},{r.get('n_overlapped_backends')},{r.get('n_overlapped_mjds')},{r.get('tspan_days')},{r.get('cadence_days')},{r['median_toa_err_us']},{r.get('timing_rms_us')},{r.get('reduced_chisq')},{r.get('reference_score')},{r.get('source_timfiles')},{ref_system}\n"
                 )
 
         # Build variant par with jumps for all systems in this variant:

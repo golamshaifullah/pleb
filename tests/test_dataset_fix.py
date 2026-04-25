@@ -12,6 +12,7 @@ from pleb.system_flag_inference import parse_tim_toa_table
 from pleb.dataset_fix import (
     FixDatasetConfig,
     _find_qc_csvs,
+    _rank_reference_system_rows,
     _variant_name_from_alltim,
     apply_pqc_outliers,
     build_variant_reference_jump_pars,
@@ -524,3 +525,208 @@ def test_build_variant_reference_jump_pars_uses_underscore_outputs(
     assert par_out.exists()
     assert variant["par_out"] == str(par_out)
     assert Path(str(variant["csv"])).name == f"{psr}_jump_reference_legacy.csv"
+
+
+def test_rank_reference_system_rows_prefers_lower_timing_rms() -> None:
+    rows = [
+        {
+            "system": "SYS_LOW_RMS",
+            "n_toa": 80,
+            "tspan_days": 120.0,
+            "cadence_days": 15.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 1.0,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 30,
+        },
+        {
+            "system": "SYS_HIGH_RMS",
+            "n_toa": 500,
+            "tspan_days": 120.0,
+            "cadence_days": 15.0,
+            "timing_rms_us": 1.4,
+            "median_toa_err_us": 1.0,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 30,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_LOW_RMS"
+    assert ranked[0]["reference_score"] > ranked[1]["reference_score"]
+
+
+def test_rank_reference_system_rows_uses_tspan_after_timing_rms() -> None:
+    rows = [
+        {
+            "system": "SYS_SHORT",
+            "n_toa": 150,
+            "tspan_days": 100.0,
+            "cadence_days": 20.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 1.0,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 25,
+        },
+        {
+            "system": "SYS_LONG",
+            "n_toa": 150,
+            "tspan_days": 400.0,
+            "cadence_days": 20.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 1.0,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 25,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_LONG"
+
+
+def test_rank_reference_system_rows_uses_precision_after_rms_and_tspan() -> None:
+    rows = [
+        {
+            "system": "SYS_PRECISE",
+            "n_toa": 150,
+            "tspan_days": 200.0,
+            "cadence_days": 20.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 0.8,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 25,
+        },
+        {
+            "system": "SYS_IMPRECISE",
+            "n_toa": 150,
+            "tspan_days": 200.0,
+            "cadence_days": 20.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 1.4,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 25,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_PRECISE"
+
+
+def test_rank_reference_system_rows_uses_cadence_after_rms_tspan_and_precision() -> None:
+    rows = [
+        {
+            "system": "SYS_DENSE",
+            "n_toa": 50,
+            "tspan_days": 200.0,
+            "cadence_days": 7.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 1.0,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 25,
+        },
+        {
+            "system": "SYS_SPARSE",
+            "n_toa": 500,
+            "tspan_days": 200.0,
+            "cadence_days": 30.0,
+            "timing_rms_us": 0.8,
+            "median_toa_err_us": 1.0,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 25,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_DENSE"
+
+
+def test_rank_reference_system_rows_prefers_mjd_overlap_over_backend_overlap() -> None:
+    rows = [
+        {
+            "system": "SYS_MORE_MJDS",
+            "n_toa": 40,
+            "tspan_days": 200.0,
+            "cadence_days": 10.0,
+            "timing_rms_us": 0.9,
+            "median_toa_err_us": 0.9,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 40,
+        },
+        {
+            "system": "SYS_MORE_BACKENDS",
+            "n_toa": 40,
+            "tspan_days": 200.0,
+            "cadence_days": 10.0,
+            "timing_rms_us": 0.9,
+            "median_toa_err_us": 0.9,
+            "n_overlapped_backends": 4,
+            "n_overlapped_mjds": 10,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_MORE_MJDS"
+
+
+def test_rank_reference_system_rows_uses_backend_overlap_when_other_metrics_tie() -> None:
+    rows = [
+        {
+            "system": "SYS_FEWER_BACKENDS",
+            "n_toa": 40,
+            "tspan_days": 200.0,
+            "cadence_days": 10.0,
+            "timing_rms_us": 0.9,
+            "median_toa_err_us": 0.9,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 20,
+        },
+        {
+            "system": "SYS_MORE_BACKENDS",
+            "n_toa": 40,
+            "tspan_days": 200.0,
+            "cadence_days": 10.0,
+            "timing_rms_us": 0.9,
+            "median_toa_err_us": 0.9,
+            "n_overlapped_backends": 4,
+            "n_overlapped_mjds": 20,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_MORE_BACKENDS"
+
+
+def test_rank_reference_system_rows_ignores_toa_count() -> None:
+    rows = [
+        {
+            "system": "SYS_FEW",
+            "n_toa": 20,
+            "tspan_days": 200.0,
+            "cadence_days": 10.0,
+            "timing_rms_us": 0.9,
+            "median_toa_err_us": 0.9,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 20,
+        },
+        {
+            "system": "SYS_MANY",
+            "n_toa": 2000,
+            "tspan_days": 200.0,
+            "cadence_days": 10.0,
+            "timing_rms_us": 0.9,
+            "median_toa_err_us": 0.9,
+            "n_overlapped_backends": 2,
+            "n_overlapped_mjds": 20,
+        },
+    ]
+
+    ranked = _rank_reference_system_rows(rows)
+
+    assert ranked[0]["system"] == "SYS_FEW"
+    assert ranked[0]["reference_score"] == ranked[1]["reference_score"]
