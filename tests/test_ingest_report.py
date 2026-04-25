@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pleb.ingest import ingest_dataset
+import pytest
+
+from pleb.ingest import commit_ingest_changes, ingest_dataset
 
 
 def _write(path: Path, text: str) -> None:
@@ -92,3 +94,44 @@ def test_ingest_writes_summary_breakdown_and_optional_pdf(tmp_path: Path) -> Non
         pdf_path = Path(str(report["pdf_report"]))
         assert pdf_path.exists()
         assert pdf_path.name == "ingest_report.pdf"
+
+
+def test_commit_ingest_changes_leaves_repo_on_ingest_branch(tmp_path: Path) -> None:
+    git = pytest.importorskip("git")  # provided by GitPython
+
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    repo = git.Repo.init(str(repo_root))
+    if repo.head.is_valid():
+        current = repo.active_branch.name
+        if current != "main":
+            repo.git.checkout("-b", "main")
+    else:
+        repo.git.checkout("-b", "main")
+
+    output_root = repo_root / "EPTA-DR3" / "epta-dr3-data-v1_5"
+    output_root.mkdir(parents=True)
+    (output_root / "_campaign").mkdir()
+    (repo_root / "README.md").write_text("seed\n", encoding="utf-8")
+    repo.git.add("-A")
+    repo.index.commit("seed")
+
+    psr_dir = output_root / "J1234+5678"
+    psr_dir.mkdir(parents=True)
+    (psr_dir / "J1234+5678.par").write_text("PSRJ J1234+5678\n", encoding="utf-8")
+    (output_root / "ingest_reports").mkdir(exist_ok=True)
+    (output_root / "ingest_reports" / "ingest_manifest_tim.csv").write_text(
+        "pulsar,backend,src_backend,src,dst\n", encoding="utf-8"
+    )
+
+    new_branch = commit_ingest_changes(
+        output_root,
+        branch_name="raw_ingest_v1_5",
+        base_branch="main",
+        commit_message="Ingest: test",
+    )
+
+    repo = git.Repo(str(repo_root))
+    assert new_branch == "raw_ingest_v1_5"
+    assert repo.active_branch.name == "raw_ingest_v1_5"
+    assert "raw_ingest_v1_5" in {h.name for h in repo.heads}

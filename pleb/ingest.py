@@ -1717,6 +1717,10 @@ def commit_ingest_changes(
     This helper commits only paths under ``output_root`` (relative to repo
     root), adds a minimal ``.gitignore`` for runtime products, and creates a
     read-only ``raw`` snapshot branch when absent.
+
+    The repository is left checked out on ``new_branch``. For staged campaign
+    handoff, downstream steps need the returned worktree to reflect the branch
+    that actually received the ingest commit.
     """
     try:
         from git import Repo, InvalidGitRepositoryError  # type: ignore
@@ -1816,6 +1820,4 @@ def commit_ingest_changes(
             f"Untracked={len(untracked)} Changed={len(changed)}"
         )
 
-    if current:
-        checkout(repo, current)
     return new_branch
