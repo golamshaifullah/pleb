@@ -28,3 +28,15 @@ trash/
 *.lock.*json
 /EPTA-DR3/epta-dr3-data-v1_5/_campaign/
 pleb_tempo2.sif
+condor_optimize_v0.tar.gz
+condor_optimize_v0/
+condor_optimize_v1_5/
+configs/runs/fixdataset/fixdataset_jump_reference_variants_J1713_J1022_2.toml
+configs/runs/fixdataset/fixdataset_jump_reference_variants_J1713_J1022_2.toml~
+configs_v0/
+configs_v1/
+configs_v1_3/
+configs_v1_5/
+data_source/
+notebooks/
+*.tar.gz
