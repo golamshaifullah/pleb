@@ -76,6 +76,28 @@ def run_pipeline(cfg: PipelineConfig):
     return _run(cfg)
 
 
+_LAZY_EXPORTS = {
+    "FixDatasetConfig": (".dataset_fix", "FixDatasetConfig"),
+    "fix_pulsar_dataset": (".dataset_fix", "fix_pulsar_dataset"),
+    "write_fix_report": (".dataset_fix", "write_fix_report"),
+    "BinaryAnalysisConfig": (".pulsar_analysis", "BinaryAnalysisConfig"),
+    "write_binary_analysis": (".pulsar_analysis", "write_binary_analysis"),
+    "OptimizationConfig": (".optimize", "OptimizationConfig"),
+    "run_optimization": (".optimize", "run_optimization"),
+}
+
+
+def __getattr__(name: str):
+    if name not in _LAZY_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = _LAZY_EXPORTS[name]
+    from importlib import import_module
+
+    value = getattr(import_module(module_name, __name__), attr_name)
+    globals()[name] = value
+    return value
+
+
 def run_param_scan(cfg: PipelineConfig, **kwargs):
     """Run a parameter scan (fit-only) workflow.
 

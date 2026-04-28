@@ -199,16 +199,32 @@ def _prepare_variant_pqc_workspace(
     return target_par
 
 
-def _variant_alltim_toa_count(alltim: Path) -> int:
-    """Return the total TOA count referenced by one variant ``*_all.tim``."""
-    total = 0
+def _variant_alltim_toa_count(alltim: Path, *, _seen: set[Path] | None = None) -> int:
+    """Return the total TOA count referenced by one variant ``*_all.tim``.
+
+    Counts TOA rows in the file itself and in any referenced INCLUDE files.  The
+    recursive handling is intentionally conservative; normal PLEB variant files
+    are include lists, but this prevents false ``empty_variant`` skips when a
+    variant alltim contains direct TOAs or nested includes.
+    """
+    if _seen is None:
+        _seen = set()
+    try:
+        key = alltim.resolve()
+    except Exception:
+        key = alltim
+    if key in _seen or not alltim.exists():
+        return 0
+    _seen.add(key)
+
+    total = count_toa_lines(alltim)
     base_dir = alltim.parent
     for rel in sorted(parse_include_lines(alltim)):
         try:
             inc = (base_dir / rel).resolve()
         except Exception:
             inc = base_dir / rel
-        total += count_toa_lines(inc)
+        total += _variant_alltim_toa_count(inc, _seen=_seen)
     return total
 
 

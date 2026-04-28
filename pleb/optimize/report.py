@@ -202,10 +202,15 @@ def _discover_baseline_run_dir(result: OptimizationResult) -> Optional[Path]:
 
 
 def _load_trial_frame(run_dir: Path | str) -> Optional[pd.DataFrame]:
-    paths = list(Path(run_dir).glob("**/*_qc.csv"))
+    paths = sorted(Path(run_dir).glob("**/*_qc.csv"))
     if not paths:
         return None
-    return pd.read_csv(paths[0], low_memory=False)
+    frames = []
+    for path in paths:
+        frame = pd.read_csv(path, low_memory=False)
+        frame["_source_csv"] = str(path)
+        frames.append(frame)
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def _bool_series(df: pd.DataFrame, col: str) -> pd.Series:

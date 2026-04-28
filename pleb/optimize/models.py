@@ -33,11 +33,13 @@ class SearchSpace:
 
 @dataclass(slots=True)
 class ObjectiveConfig:
-    """Weighted objective definition."""
+    """Weighted objective definition plus optional hard metric constraints."""
 
     weights: Dict[str, float]
     maximize: bool = True
     score_offset: float = 0.0
+    constraints: Dict[str, float] | None = None
+    constraint_penalty: float = 1.0e12
 
 
 @dataclass(slots=True)
