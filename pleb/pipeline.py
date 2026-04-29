@@ -568,14 +568,14 @@ def _build_fixdataset_config(
         raise_on_backend_missing=bool(
             _cfg_get(cfg, "fix_raise_on_backend_missing", False)
         ),
-        dedupe_toas_within_tim=bool(_cfg_get(cfg, "fix_dedupe_toas_within_tim", False)),
+        dedupe_toas_within_tim=bool(_cfg_get(cfg, "fix_dedupe_toas_within_tim", True)),
         dedupe_mjd_tol_sec=float(_cfg_get(cfg, "fix_dedupe_mjd_tol_sec", 0.0)),
         dedupe_freq_tol_mhz=_cfg_get(cfg, "fix_dedupe_freq_tol_mhz", None),
         dedupe_freq_tol_auto=bool(_cfg_get(cfg, "fix_dedupe_freq_tol_auto", False)),
         check_duplicate_backend_tims=bool(
             _cfg_get(cfg, "fix_check_duplicate_backend_tims", False)
         ),
-        remove_overlaps_exact=bool(_cfg_get(cfg, "fix_remove_overlaps_exact", False)),
+        remove_overlaps_exact=bool(_cfg_get(cfg, "fix_remove_overlaps_exact", True)),
         insert_missing_jumps=bool(_cfg_get(cfg, "fix_insert_missing_jumps", True)),
         jump_flag=str(_cfg_get(cfg, "fix_jump_flag", "-sys") or "-sys"),
         prune_stale_jumps=bool(_cfg_get(cfg, "fix_prune_stale_jumps", False)),

@@ -16,8 +16,10 @@ from pleb.optimize.models import (
 from pleb.optimize.objectives import compute_score, load_objective_config, violated_constraints
 from pleb.optimize.optimizer import _score_trial
 from pleb.optimize.scorers import (
+    score_run_dir_consensus,
     score_run_dir_variants,
     write_bad_toa_masks,
+    write_variant_consensus_artifacts,
     write_variant_selection_table,
 )
 from pleb.optimize.trial_runner import run_fold_trial
@@ -134,6 +136,60 @@ def test_bad_mask_artifacts_have_stable_ids_keep_flags_and_reasons(tmp_path: Pat
     assert "bad_point" in str(mask.loc[mask["bad"], "bad_reason"].iloc[0])
 
 
+def test_consensus_scoring_collapses_overlapping_variant_rows_and_tracks_support(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    qc_dir = run_dir / "qc"
+    qc_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "pulsar": ["J0000+0000", "J0000+0000"],
+            "variant": ["legacy", "legacy"],
+            "mjd": [58000.0, 58001.0],
+            "freq": [1400.0, 1400.0],
+            "sys": ["A", "A"],
+            "_timfile": ["tims/SHARED.tim", "tims/LEGACY.tim"],
+            "bad_point": [True, False],
+            "resid_us": [8.0, 0.2],
+            "sigma_us": [1.0, 1.0],
+        }
+    ).to_csv(qc_dir / "J0000+0000.legacy_qc.csv", index=False)
+    pd.DataFrame(
+        {
+            "pulsar": ["J0000+0000", "J0000+0000"],
+            "variant": ["new", "new"],
+            "mjd": [58000.0, 58002.0],
+            "freq": [1400.0, 1400.0],
+            "sys": ["A", "B"],
+            "_timfile": ["tims/SHARED.tim", "tims/NEW.tim"],
+            "bad_point": [False, True],
+            "resid_us": [7.5, 9.0],
+            "sigma_us": [1.0, 1.0],
+        }
+    ).to_csv(qc_dir / "J0000+0000.new_qc.csv", index=False)
+
+    metrics, _folds, consensus = score_run_dir_consensus(
+        run_dir,
+        fold_cfg=load_fold_config(None),
+        parameter_complexity_penalty=0.0,
+    )
+
+    assert metrics["n_toas"] == 3.0
+    assert metrics["n_bad"] == 2.0
+    shared = consensus.loc[consensus["_timfile_base"] == "SHARED.tim"].iloc[0]
+    assert shared["bad_point"] in {True, "True"}
+    assert shared["variant_support_present"] == 2
+    assert shared["variant_support_any_bad_count"] == 1
+    assert shared["variant_support_any_bad_fraction"] == 0.5
+
+    written = write_variant_consensus_artifacts(run_dir, consensus_df=consensus)
+    assert (run_dir / "optimize_bad_masks" / "variant_consensus.csv").exists()
+    assert (run_dir / "optimize_bad_masks" / "consensus_bad_mask.csv").exists()
+    assert (run_dir / "optimize_bad_masks" / "J0000+0000.consensus_qc.csv").exists()
+    assert len(written) >= 3
+
+
 def test_score_trial_selects_best_variant_and_writes_selection_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -158,7 +214,10 @@ def test_score_trial_selects_best_variant_and_writes_selection_artifacts(
         metrics={},
         run_dir=run_dir,
     )
-    cfg = OptimizationConfig(base_config_path=tmp_path / "base.toml")
+    cfg = OptimizationConfig(
+        base_config_path=tmp_path / "base.toml",
+        variant_strategy="select_best",
+    )
     objective = ObjectiveConfig(
         weights={"residual_cleanliness": 100.0, "bad_fraction": -1.0},
         constraints={"max_bad_fraction": 0.50, "min_n_clean": 2.0},
@@ -179,6 +238,139 @@ def test_score_trial_selects_best_variant_and_writes_selection_artifacts(
     )
     assert (run_dir / "optimize_bad_masks" / "aggressive_bad_mask.csv").exists()
     assert (run_dir / "optimize_bad_masks" / "conservative_bad_mask.csv").exists()
+
+
+def test_score_trial_auto_uses_consensus_when_variant_qc_files_exist(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    qc_dir = run_dir / "qc"
+    qc_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "pulsar": ["J0000+0000", "J0000+0000"],
+            "variant": ["legacy", "legacy"],
+            "mjd": [58000.0, 58001.0],
+            "freq": [1400.0, 1400.0],
+            "sys": ["A", "A"],
+            "_timfile": ["tims/SHARED.tim", "tims/LEGACY.tim"],
+            "bad_point": [True, True],
+            "resid_us": [8.0, 9.0],
+            "sigma_us": [1.0, 1.0],
+        }
+    ).to_csv(qc_dir / "J0000+0000.legacy_qc.csv", index=False)
+    pd.DataFrame(
+        {
+            "pulsar": ["J0000+0000", "J0000+0000"],
+            "variant": ["new", "new"],
+            "mjd": [58000.0, 58002.0],
+            "freq": [1400.0, 1400.0],
+            "sys": ["A", "B"],
+            "_timfile": ["tims/SHARED.tim", "tims/NEW.tim"],
+            "bad_point": [False, False],
+            "resid_us": [7.0, 0.2],
+            "sigma_us": [1.0, 1.0],
+        }
+    ).to_csv(qc_dir / "J0000+0000.new_qc.csv", index=False)
+
+    trial = TrialResult(
+        trial_id=1,
+        status="ok",
+        params={},
+        score=None,
+        metrics={},
+        run_dir=run_dir,
+    )
+    cfg = OptimizationConfig(base_config_path=tmp_path / "base.toml")
+    objective = ObjectiveConfig(weights={"bad_fraction": -1.0})
+
+    _score_trial(cfg, trial, FoldConfig(), objective, SearchSpace(parameters=[]))
+
+    assert trial.metrics["n_toas"] == 3.0
+    assert trial.metrics["bad_fraction"] == 2.0 / 3.0
+    selection = pd.read_csv(
+        run_dir / "optimize_bad_masks" / "variant_selection_scores.csv"
+    )
+    assert set(selection["selected"].astype(str)) == {"False"}
+    assert (run_dir / "optimize_bad_masks" / "variant_consensus.csv").exists()
+    assert (run_dir / "optimize_bad_masks" / "J0000+0000.consensus_qc.csv").exists()
+
+
+def test_score_trial_uses_pipeline_backend_col_for_variant_selection(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    qc_dir = run_dir / "qc"
+    qc_dir.mkdir(parents=True)
+    base = {
+        "pulsar": ["J0000+0000"] * 4,
+        "mjd": [58000.0, 58001.0, 58002.0, 58003.0],
+        "freq": [1400.0] * 4,
+        "sys": ["A"] * 4,
+        "bad_point": [False] * 4,
+        "resid_us": [0.1] * 4,
+        "sigma_us": [1.0] * 4,
+    }
+    pd.DataFrame(
+        {
+            **base,
+            "variant": ["safe"] * 4,
+            "group": ["G1", "G1", "G2", "G2"],
+            "event_member": [True, True, False, False],
+            "_timfile": ["tims/safe.tim"] * 4,
+        }
+    ).to_csv(qc_dir / "J0000+0000.safe_qc.csv", index=False)
+    pd.DataFrame(
+        {
+            **base,
+            "variant": ["risky"] * 4,
+            "group": ["G1", "G2", "G1", "G2"],
+            "event_member": [True, True, False, False],
+            "_timfile": ["tims/risky.tim"] * 4,
+        }
+    ).to_csv(qc_dir / "J0000+0000.risky_qc.csv", index=False)
+
+    base_cfg = tmp_path / "pipeline.toml"
+    base_cfg.write_text(
+        "\n".join(
+            [
+                'home_dir = "."',
+                'dataset_name = "."',
+                'singularity_image = "tempo2.sif"',
+                'results_dir = "results"',
+                'branches = ["main"]',
+                'reference_branch = "main"',
+                'pulsars = ["J0000+0000"]',
+                'pqc_backend_col = "group"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    trial = TrialResult(
+        trial_id=1,
+        status="ok",
+        params={},
+        score=None,
+        metrics={},
+        run_dir=run_dir,
+    )
+    cfg = OptimizationConfig(
+        base_config_path=base_cfg,
+        variant_strategy="select_best",
+    )
+    objective = ObjectiveConfig(weights={"event_coherence": 1.0})
+
+    _score_trial(cfg, trial, FoldConfig(), objective, SearchSpace(parameters=[]))
+
+    assert trial.metrics["event_coherence"] == 1.0
+    selection = pd.read_csv(
+        run_dir / "optimize_bad_masks" / "variant_selection_scores.csv"
+    )
+    assert (
+        selection.loc[selection["selected"].astype(str) == "True", "variant"].iloc[0]
+        == "safe"
+    )
 
 
 def test_fold_dataset_can_be_built_from_selected_variant_only(tmp_path: Path) -> None:
@@ -312,3 +504,44 @@ pqc_run_variants = true
 
     assert run_dir == tmp_path / "trial_out"
     assert seen["cfg"].pqc_run_variants is False
+
+
+def test_fold_rerun_preserves_variant_discovery_without_selected_variant(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    base_cfg = tmp_path / "base.toml"
+    base_cfg.write_text(
+        """
+home_dir = "."
+singularity_image = "tempo2.sif"
+dataset_name = "dataset"
+pulsars = ["J0000+0000"]
+pqc_run_variants = true
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    seen = {}
+
+    def fake_run_pipeline(cfg):
+        seen["cfg"] = cfg
+        out = tmp_path / "trial_out"
+        out.mkdir(parents=True, exist_ok=True)
+        return {"tag": out}
+
+    monkeypatch.setattr("pleb.optimize.trial_runner.run_pipeline", fake_run_pipeline)
+    cfg = OptimizationConfig(base_config_path=base_cfg, execution_mode="pipeline")
+
+    run_dir = run_fold_trial(
+        cfg,
+        1,
+        {},
+        fold_label="fold_00",
+        home_dir=tmp_path / "fold_home",
+        dataset_name="dataset",
+        selected_variant=None,
+    )
+
+    assert run_dir == tmp_path / "trial_out"
+    assert seen["cfg"].pqc_run_variants is True

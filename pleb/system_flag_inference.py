@@ -33,7 +33,7 @@ from __future__ import annotations
 from dataclasses import field
 from .compat import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import json
 from threading import Lock
@@ -139,6 +139,24 @@ class BackendMissingError(RuntimeError):
         )
         self.timfile = timfile
         self.sample_toa_line = sample_toa_line
+
+
+class MixedBackendValuesError(BackendMissingError):
+    """Raised when a tim file carries multiple distinct backend values."""
+
+    def __init__(
+        self, timfile: Path, backend_values: Sequence[str], sample_toa_line: str
+    ):
+        values = tuple(sorted({str(v).strip() for v in backend_values if str(v).strip()}))
+        RuntimeError.__init__(
+            self,
+            f"Multiple backend values found in {timfile}: {', '.join(values)}. "
+            f"Split the timfile or provide an explicit backend mapping; "
+            f"sample TOA line:\n{sample_toa_line}",
+        )
+        self.timfile = timfile
+        self.sample_toa_line = sample_toa_line
+        self.backend_values = values
 
 
 class TelescopeMissingError(RuntimeError):
@@ -522,14 +540,8 @@ def infer_backend(
             else:
                 return val
         if len(uniq) > 1:
-            # If multiple, keep as-is: backend varies => treat each distinct as a backend group.
-            # Downstream caller can handle grouping.
-            val = _apply_alias(_norm_token(uniq[0]), cfg.backend_aliases)
-            if _is_rejected(val, cfg.reject_backend_values):
-                raise BackendMissingError(timfile, df["line"].iloc[0])
-            if not _enforce_allowlist(val, cfg.backend_allowlist):
-                raise BackendMissingError(timfile, df["line"].iloc[0])
-            return val
+            sample = df["line"].iloc[0] if len(df) else "(no TOA lines found)"
+            raise MixedBackendValuesError(timfile, uniq, sample)
 
     tel = _infer_telescope_code(timfile)
     be2 = _infer_backend_from_filename(timfile, tel)

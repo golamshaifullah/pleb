@@ -16,9 +16,12 @@ from .results import write_results
 from .report import write_markdown_report, write_pdf_report
 from .models import FoldSummary
 from .scorers import (
+    list_variant_labels,
     score_run_dir,
+    score_run_dir_consensus,
     score_run_dir_variants,
     write_bad_toa_masks,
+    write_variant_consensus_artifacts,
     write_variant_selection_table,
 )
 from .search_space import (
@@ -162,22 +165,54 @@ def _suggest_with_optuna(space, trial) -> Dict[str, Any]:
 def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
     if trial.status != "ok" or trial.run_dir is None:
         return
+    pipeline_cfg = None
+    backend_col = _resolve_trial_backend_col(None, fold_cfg)
+    try:
+        pipeline_cfg = _build_pipeline_config_for_trial(cfg, trial.params)
+    except Exception:
+        if fold_cfg.mode != "none" and fold_cfg.n_splits > 1:
+            raise
+    if pipeline_cfg is not None:
+        backend_col = _resolve_trial_backend_col(pipeline_cfg, fold_cfg)
     parameter_complexity_penalty = active_parameter_count(
         space, trial.params
     ) / max(len(space.parameters), 1)
-    selected_variant, full_metrics = _select_trial_variant(
-        trial.run_dir,
-        objective=objective,
-        parameter_complexity_penalty=parameter_complexity_penalty,
+    variant_strategy = _resolve_trial_variant_strategy(
+        cfg, trial.run_dir, pipeline_cfg
     )
+    selected_variant: str | None = None
+    if variant_strategy == "select_best":
+        selected_variant, full_metrics = _select_trial_variant(
+            trial.run_dir,
+            objective=objective,
+            parameter_complexity_penalty=parameter_complexity_penalty,
+            backend_col=backend_col,
+        )
+    elif variant_strategy == "consensus":
+        full_metrics = _score_trial_consensus(
+            trial.run_dir,
+            objective=objective,
+            parameter_complexity_penalty=parameter_complexity_penalty,
+            backend_col=backend_col,
+        )
+    else:
+        full_metrics, _ = score_run_dir(
+            trial.run_dir,
+            fold_cfg=load_fold_config(None),
+            parameter_complexity_penalty=parameter_complexity_penalty,
+            backend_col=backend_col,
+        )
     if fold_cfg.mode != "none" and fold_cfg.n_splits > 1:
         fold_summaries = _run_true_fold_reruns(
             cfg,
             trial,
+            pipeline_cfg,
             fold_cfg,
             space,
             objective,
             selected_variant=selected_variant,
+            variant_strategy=variant_strategy,
+            backend_col=backend_col,
         )
         averaged = _average_fold_metrics(fold_summaries)
         for key, value in full_metrics.items():
@@ -200,6 +235,7 @@ def _select_trial_variant(
     *,
     objective,
     parameter_complexity_penalty: float,
+    backend_col: str,
 ) -> tuple[str, Dict[str, float]]:
     """Pick one candidate bad-TOA variant for trial scoring.
 
@@ -211,12 +247,13 @@ def _select_trial_variant(
         run_dir,
         fold_cfg=load_fold_config(None),
         parameter_complexity_penalty=parameter_complexity_penalty,
+        backend_col=backend_col,
     )
     selected_variant, (selected_metrics, _selected_folds) = max(
         variant_metrics.items(),
         key=lambda item: compute_score(item[1][0], objective),
     )
-    write_bad_toa_masks(run_dir)
+    write_bad_toa_masks(run_dir, backend_col=backend_col)
     write_variant_selection_table(
         run_dir,
         variant_metrics,
@@ -226,17 +263,70 @@ def _select_trial_variant(
     return selected_variant, selected_metrics
 
 
+def _score_trial_consensus(
+    run_dir: Path,
+    *,
+    objective,
+    parameter_complexity_penalty: float,
+    backend_col: str,
+) -> Dict[str, float]:
+    """Score one trial by collapsing variants into one support-aware QC table."""
+    variant_metrics = score_run_dir_variants(
+        run_dir,
+        fold_cfg=load_fold_config(None),
+        parameter_complexity_penalty=parameter_complexity_penalty,
+        backend_col=backend_col,
+    )
+    metrics, _folds, consensus = score_run_dir_consensus(
+        run_dir,
+        fold_cfg=load_fold_config(None),
+        parameter_complexity_penalty=parameter_complexity_penalty,
+        backend_col=backend_col,
+    )
+    write_bad_toa_masks(run_dir, backend_col=backend_col)
+    write_variant_consensus_artifacts(
+        run_dir,
+        backend_col=backend_col,
+        consensus_df=consensus,
+    )
+    write_variant_selection_table(
+        run_dir,
+        variant_metrics,
+        objective,
+        selected_variant=None,
+    )
+    return metrics
+
+
+def _resolve_trial_variant_strategy(
+    cfg: OptimizationConfig,
+    run_dir: Path,
+    pipeline_cfg: PipelineConfig | None,
+) -> str:
+    strategy = str(getattr(cfg, "variant_strategy", "auto") or "auto").strip().lower()
+    if strategy in {"single", "consensus", "select_best"}:
+        return strategy
+    labels = [label for label in list_variant_labels(run_dir) if label != "base"]
+    if labels:
+        return "consensus"
+    if pipeline_cfg is not None and bool(getattr(pipeline_cfg, "pqc_run_variants", False)):
+        return "consensus"
+    return "single"
+
+
 def _run_true_fold_reruns(
     cfg: OptimizationConfig,
     trial: TrialResult,
+    pipeline_cfg: PipelineConfig,
     fold_cfg,
     space,
     objective,
     *,
-    selected_variant: str,
+    selected_variant: str | None,
+    variant_strategy: str,
+    backend_col: str,
 ) -> List[FoldSummary]:
     del objective
-    pipeline_cfg = _build_pipeline_config_for_trial(cfg, trial.params)
     dataset_name = Path(pipeline_cfg.resolved().dataset_name).name
     work_root = Path(cfg.out_dir) / "_fold_datasets" / f"trial_{trial.trial_id:04d}"
     out: List[FoldSummary] = []
@@ -247,7 +337,9 @@ def _run_true_fold_reruns(
                 fold_cfg=fold_cfg,
                 fold_index=fold_index,
                 out_root=work_root,
-                variant_label=selected_variant,
+                variant_label=(
+                    selected_variant if variant_strategy == "select_best" else None
+                ),
             )
             fold_run_dir = run_fold_trial(
                 cfg,
@@ -256,16 +348,30 @@ def _run_true_fold_reruns(
                 fold_label=f"fold_{fold_index:02d}",
                 home_dir=tmp_home,
                 dataset_name=dataset_name,
-                selected_variant=selected_variant,
-            )
-            fold_metrics, _ = score_run_dir(
-                fold_run_dir,
-                fold_cfg=load_fold_config(None),
-                parameter_complexity_penalty=(
-                    active_parameter_count(space, trial.params)
-                    / max(len(space.parameters), 1)
+                selected_variant=(
+                    selected_variant if variant_strategy == "select_best" else None
                 ),
             )
+            if variant_strategy == "consensus":
+                fold_metrics, _folds, _consensus = score_run_dir_consensus(
+                    fold_run_dir,
+                    fold_cfg=load_fold_config(None),
+                    parameter_complexity_penalty=(
+                        active_parameter_count(space, trial.params)
+                        / max(len(space.parameters), 1)
+                    ),
+                    backend_col=backend_col,
+                )
+            else:
+                fold_metrics, _ = score_run_dir(
+                    fold_run_dir,
+                    fold_cfg=load_fold_config(None),
+                    parameter_complexity_penalty=(
+                        active_parameter_count(space, trial.params)
+                        / max(len(space.parameters), 1)
+                    ),
+                    backend_col=backend_col,
+                )
             out.append(
                 FoldSummary(
                     label=str(held_out_label),
@@ -308,6 +414,19 @@ def _build_pipeline_config_for_trial(
     for key, value in (cfg.fixed_overrides or {}).items():
         _set_dotted_key(raw, str(key), value)
     return PipelineConfig.from_dict(raw)
+
+
+def _resolve_trial_backend_col(
+    pipeline_cfg: PipelineConfig | None, fold_cfg
+) -> str:
+    if pipeline_cfg is not None:
+        backend_col = str(getattr(pipeline_cfg, "pqc_backend_col", "") or "").strip()
+        if backend_col:
+            return backend_col
+    fold_backend_col = str(getattr(fold_cfg, "backend_col", "") or "").strip()
+    if fold_backend_col:
+        return fold_backend_col
+    return "group"
 
 
 def _toml_literal(value: Any) -> str:

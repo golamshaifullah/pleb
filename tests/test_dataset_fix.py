@@ -347,6 +347,28 @@ def test_find_qc_csvs_discovers_variant_specific_files(tmp_path: Path) -> None:
     assert [p.name for p in found] == [f"{psr}.legacy_qc.csv", f"{psr}.new_qc.csv"]
 
 
+def test_find_qc_csvs_prefers_consensus_qc_artifact_when_present(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0004"
+    qc_root = tmp_path / "qc"
+    _write(qc_root / "main" / f"{psr}.legacy_qc.csv", "_timfile,mjd,bad_point\n")
+    _write(qc_root / "main" / f"{psr}.new_qc.csv", "_timfile,mjd,bad_point\n")
+    _write(
+        qc_root / "optimize_bad_masks" / f"{psr}.consensus_qc.csv",
+        "_timfile,mjd,bad_point\nLEGACY.tim,56000,True\n",
+    )
+
+    cfg = FixDatasetConfig(
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+    )
+
+    found = _find_qc_csvs(psr, cfg)
+    assert [p.name for p in found] == [f"{psr}.consensus_qc.csv"]
+
+
 def test_apply_pqc_outliers_can_merge_variant_specific_qc_csvs(
     tmp_path: Path,
 ) -> None:

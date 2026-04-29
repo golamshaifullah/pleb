@@ -84,6 +84,25 @@ n_splits = 3
     )
 
 
+def test_load_optimization_config_reads_variant_strategy(tmp_path: Path) -> None:
+    base_cfg = tmp_path / "pipeline.toml"
+    base_cfg.write_text('home_dir = "."\n', encoding="utf-8")
+    optimize_cfg = tmp_path / "optimize.toml"
+    optimize_cfg.write_text(
+        f"""
+[optimize]
+base_config_path = "{base_cfg}"
+variant_strategy = "consensus"
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_optimization_config(optimize_cfg)
+
+    assert cfg.variant_strategy == "consensus"
+
+
 def test_score_run_dir_reads_qc_outputs(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     qc_dir = run_dir / "qc"

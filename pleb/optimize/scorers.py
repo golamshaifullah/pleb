@@ -1,9 +1,11 @@
 """Score optimization trials from existing PLEB QC artifacts.
 
-The optimize layer treats each PQC variant QC CSV as a separate candidate
-bad-TOA selection.  Aggregating variants is still available through
-``score_run_dir`` for backward compatibility, but optimize ranking should use
-``score_run_dir_variants`` so candidate masks are never blended before scoring.
+The optimize layer supports two distinct variant semantics:
+
+- ``score_run_dir_variants``: treat each PQC variant QC CSV as a competing
+  candidate bad-TOA selection.
+- ``score_run_dir_consensus``: treat variants as evidence views over the same
+  TOAs and collapse them into one support-aware QC table before scoring.
 """
 
 from __future__ import annotations
@@ -43,6 +45,8 @@ IDENTITY_PREFERRED_COLS = (
     "sys",
     "group",
 )
+
+CONSENSUS_MERGE_TOL_SECONDS = 2.0
 
 
 def score_run_dir(
@@ -103,6 +107,27 @@ def score_run_dir_variants(
     }
 
 
+def score_run_dir_consensus(
+    run_dir: Path,
+    *,
+    fold_cfg: FoldConfig,
+    parameter_complexity_penalty: float,
+    backend_col: str = "sys",
+) -> tuple[Dict[str, float], List[FoldSummary], pd.DataFrame]:
+    """Collapse overlapping variant rows into one support-aware QC table."""
+    frames = _load_qc_frames(run_dir)
+    if not frames:
+        raise RuntimeError(f"No *_qc.csv files found under {run_dir}")
+    consensus = _build_variant_consensus_frame(frames, backend_col=backend_col)
+    metrics, folds = _score_frames(
+        [consensus],
+        fold_cfg=fold_cfg,
+        parameter_complexity_penalty=parameter_complexity_penalty,
+        backend_col=backend_col,
+    )
+    return metrics, folds, consensus
+
+
 def write_bad_toa_masks(
     run_dir: Path,
     *,
@@ -132,6 +157,49 @@ def write_bad_toa_masks(
         safe_variant = _safe_filename_part(variant)
         path = root / f"{safe_variant}_bad_mask.csv"
         pd.concat(masks, ignore_index=True, sort=False).to_csv(path, index=False)
+        paths.append(path)
+    return paths
+
+
+def write_variant_consensus_artifacts(
+    run_dir: Path,
+    *,
+    backend_col: str = "sys",
+    out_dirname: str = "optimize_bad_masks",
+    consensus_df: pd.DataFrame | None = None,
+) -> List[Path]:
+    """Write one aggregated cross-variant QC table plus review masks."""
+    if consensus_df is None:
+        frames = _load_qc_frames(run_dir)
+        if not frames:
+            return []
+        consensus_df = _build_variant_consensus_frame(frames, backend_col=backend_col)
+    if consensus_df.empty:
+        return []
+
+    root = Path(run_dir) / out_dirname
+    root.mkdir(parents=True, exist_ok=True)
+    paths: List[Path] = []
+
+    combined_path = root / "variant_consensus.csv"
+    consensus_df.to_csv(combined_path, index=False)
+    paths.append(combined_path)
+
+    mask_path = root / "consensus_bad_mask.csv"
+    _mask_frame(consensus_df, variant="consensus", backend_col=backend_col).to_csv(
+        mask_path, index=False
+    )
+    paths.append(mask_path)
+
+    if "pulsar" in consensus_df.columns:
+        for pulsar, frame in consensus_df.groupby("pulsar", sort=True, dropna=False):
+            label = str(pulsar) or "unknown"
+            path = root / f"{label}.consensus_qc.csv"
+            frame.to_csv(path, index=False)
+            paths.append(path)
+    else:
+        path = root / "consensus_qc.csv"
+        consensus_df.to_csv(path, index=False)
         paths.append(path)
     return paths
 
@@ -194,7 +262,12 @@ def _score_frames(
 
 
 def _load_qc_frames(run_dir: Path) -> List[pd.DataFrame]:
-    csvs = sorted(Path(run_dir).rglob("*_qc.csv"))
+    csvs = sorted(
+        path
+        for path in Path(run_dir).rglob("*_qc.csv")
+        if not path.name.endswith(".consensus_qc.csv")
+        and "optimize_bad_masks" not in path.parts
+    )
     frames: List[pd.DataFrame] = []
     for path in csvs:
         frame = pd.read_csv(path)
@@ -202,6 +275,15 @@ def _load_qc_frames(run_dir: Path) -> List[pd.DataFrame]:
         frame["_optimize_variant"] = _variant_label_from_qc_path(path, frame)
         frames.append(frame)
     return frames
+
+
+def list_variant_labels(run_dir: Path) -> List[str]:
+    """Return discovered QC variant labels under one run directory."""
+    labels = []
+    for frame in _load_qc_frames(run_dir):
+        label = str(frame.get("_optimize_variant", pd.Series(["base"])).iloc[0]) or "base"
+        labels.append(label)
+    return sorted(dict.fromkeys(labels))
 
 
 def _variant_label_from_qc_path(path: Path, frame: pd.DataFrame) -> str:
@@ -253,6 +335,24 @@ def _compute_metrics(
         "parameter_complexity_penalty": float(parameter_complexity_penalty),
     }
     metrics.update(_backend_bad_fraction_metrics(df, bad_mask, backend_col=backend_col))
+    if "variant_support_present" in df.columns:
+        support = pd.to_numeric(df["variant_support_present"], errors="coerce")
+        metrics["variant_support_mean_present"] = float(support.mean()) if support.notna().any() else 0.0
+    if "variant_support_any_bad_fraction" in df.columns:
+        support = pd.to_numeric(
+            df["variant_support_any_bad_fraction"], errors="coerce"
+        )
+        if support.notna().any():
+            metrics["variant_bad_support_mean"] = float(support.mean())
+            metrics["variant_bad_support_among_bad"] = float(
+                support.loc[bad_mask & support.notna()].mean()
+            ) if (bad_mask & support.notna()).any() else 0.0
+    if "variant_support_any_event_fraction" in df.columns:
+        support = pd.to_numeric(
+            df["variant_support_any_event_fraction"], errors="coerce"
+        )
+        if support.notna().any():
+            metrics["variant_event_support_mean"] = float(support.mean())
     if sigma.notna().any() and resid.notna().any():
         valid = resid.notna() & sigma.notna() & (sigma > 0)
         if valid.any():
@@ -268,7 +368,10 @@ def _mask_frame(df: pd.DataFrame, *, variant: str, backend_col: str) -> pd.DataF
     out["variant"] = variant
     out["source_csv"] = df.get("_source_csv", pd.Series([""] * len(df), index=df.index))
     out["row_index"] = range(len(df))
-    out["toa_id"] = [_toa_id(row, idx) for idx, row in df.iterrows()]
+    if "toa_id" in df.columns:
+        out["toa_id"] = df["toa_id"].astype(str)
+    else:
+        out["toa_id"] = [_toa_id(row, idx) for idx, row in df.iterrows()]
     out["keep"] = ~bad_mask
     out["bad"] = bad_mask
     out["event_member"] = event_mask
@@ -283,8 +386,15 @@ def _mask_frame(df: pd.DataFrame, *, variant: str, backend_col: str) -> pd.DataF
         "resid_us",
         "resid",
         "_timfile",
+        "_timfile_base",
         "filename",
         backend_col,
+        "variant_support_present",
+        "variant_support_labels",
+        "variant_support_any_bad_count",
+        "variant_support_any_bad_fraction",
+        "variant_support_any_event_count",
+        "variant_support_any_event_fraction",
     ):
         if col in df.columns and col not in out.columns:
             out[col] = df[col]
@@ -305,7 +415,7 @@ def _toa_id(row: pd.Series, row_index: int) -> str:
 def _bad_reason(df: pd.DataFrame, idx) -> str:
     reasons = []
     for col in DEFAULT_OUTLIER_COLS:
-        if col in df.columns and bool(df.at[idx, col]):
+        if col in df.columns and bool(_truthy_mask(df[col]).loc[idx]):
             reasons.append(col)
     for col in _event_id_columns(df.columns):
         try:
@@ -315,27 +425,275 @@ def _bad_reason(df: pd.DataFrame, idx) -> str:
         if value != -1:
             reasons.append(col)
     for col in ("event_member", "solar_event_member", "orbital_phase_bad"):
-        if col in df.columns and bool(df.at[idx, col]):
+        if col in df.columns and bool(_truthy_mask(df[col]).loc[idx]):
             reasons.append(col)
     return ",".join(sorted(set(reasons)))
+
+
+def _build_variant_consensus_frame(
+    frames: List[pd.DataFrame], *, backend_col: str
+) -> pd.DataFrame:
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    if combined.empty:
+        return combined
+
+    work = combined.copy()
+    if "pulsar" not in work.columns:
+        work["pulsar"] = ""
+    if "_optimize_variant" not in work.columns:
+        work["_optimize_variant"] = "base"
+    work["_optimize_variant"] = work["_optimize_variant"].fillna("base").astype(str)
+    work["_timfile_base"] = _canonical_timfile_keys(work)
+    work["__mjd__"] = pd.to_numeric(work.get("mjd", pd.Series(dtype=float)), errors="coerce")
+    work["__freq__"] = pd.to_numeric(
+        work.get("freq", pd.Series(dtype=float)), errors="coerce"
+    )
+    work["__site__"] = work.get("site", pd.Series([""] * len(work), index=work.index)).fillna("").astype(str)
+    work["__group_id__"] = -1
+
+    next_group_id = 0
+    group_keys = ["pulsar", "_timfile_base", "__site__"]
+    if "__freq__" in work.columns:
+        work["__freq_key__"] = work["__freq__"].round(6)
+        group_keys.append("__freq_key__")
+    for _group_key, idx in work.groupby(group_keys, sort=False, dropna=False).indices.items():
+        sub = work.loc[idx].copy()
+        mjd = pd.to_numeric(sub["__mjd__"], errors="coerce")
+        if mjd.notna().any():
+            order = mjd.sort_values(kind="mergesort").index.tolist()
+            current: List[int] = []
+            current_center: float | None = None
+            for row_idx in order:
+                row_mjd = work.at[row_idx, "__mjd__"]
+                if pd.isna(row_mjd):
+                    if current:
+                        work.loc[current, "__group_id__"] = next_group_id
+                        next_group_id += 1
+                        current = []
+                        current_center = None
+                    work.at[row_idx, "__group_id__"] = next_group_id
+                    next_group_id += 1
+                    continue
+                row_mjd = float(row_mjd)
+                if current_center is None:
+                    current = [int(row_idx)]
+                    current_center = row_mjd
+                    continue
+                if abs(row_mjd - current_center) <= (CONSENSUS_MERGE_TOL_SECONDS / 86400.0):
+                    current.append(int(row_idx))
+                    current_center = float(work.loc[current, "__mjd__"].astype(float).mean())
+                else:
+                    work.loc[current, "__group_id__"] = next_group_id
+                    next_group_id += 1
+                    current = [int(row_idx)]
+                    current_center = row_mjd
+            if current:
+                work.loc[current, "__group_id__"] = next_group_id
+                next_group_id += 1
+        else:
+            for row_idx in sub.index:
+                work.at[row_idx, "__group_id__"] = next_group_id
+                next_group_id += 1
+
+    bool_cols = _consensus_bool_columns(work.columns)
+    event_id_cols = _event_id_columns(work.columns)
+    rows: List[Dict[str, object]] = []
+    for group_id, sub in work.groupby("__group_id__", sort=True):
+        rows.append(
+            _aggregate_consensus_group(
+                sub,
+                group_id=int(group_id),
+                backend_col=backend_col,
+                bool_cols=bool_cols,
+                event_id_cols=event_id_cols,
+            )
+        )
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+    if "mjd" in out.columns:
+        out = out.sort_values(["pulsar", "_timfile_base", "mjd"], kind="mergesort")
+    return out.reset_index(drop=True)
+
+
+def _aggregate_consensus_group(
+    df: pd.DataFrame,
+    *,
+    group_id: int,
+    backend_col: str,
+    bool_cols: List[str],
+    event_id_cols: List[str],
+) -> Dict[str, object]:
+    variants = sorted(
+        {
+            str(value).strip() or "base"
+            for value in df["_optimize_variant"].dropna().astype(str).tolist()
+        }
+    )
+    present_count = max(len(variants), 1)
+    row: Dict[str, object] = {
+        "variant": "consensus",
+        "variant_support_present": present_count,
+        "variant_support_labels": ",".join(variants),
+        "variant_support_source_csvs": ",".join(
+            sorted(
+                {
+                    str(value)
+                    for value in df.get("_source_csv", pd.Series(dtype=str))
+                    .dropna()
+                    .astype(str)
+                    .tolist()
+                    if str(value)
+                }
+            )
+        ),
+    }
+
+    preferred_cols = [
+        "pulsar",
+        "branch",
+        "_timfile",
+        "_timfile_base",
+        "filename",
+        "row_id",
+        "mjd",
+        "freq",
+        "sigma_us",
+        "sigma",
+        "resid_us",
+        "resid",
+        "site",
+        "be",
+        "sys",
+        "group",
+        backend_col,
+    ]
+    for col in preferred_cols:
+        if col in row or col not in df.columns:
+            continue
+        row[col] = _representative_value(df[col], prefer_numeric=col in {"mjd", "freq", "sigma_us", "sigma", "resid_us", "resid"})
+
+    bad_mask = _combined_bad_mask(df)
+    event_mask = _combined_event_mask(df)
+    row["variant_support_any_bad_count"] = _unique_variant_truth_count(
+        df, bad_mask
+    )
+    row["variant_support_any_bad_fraction"] = float(
+        row["variant_support_any_bad_count"]
+    ) / float(present_count)
+    row["variant_support_any_event_count"] = _unique_variant_truth_count(
+        df, event_mask
+    )
+    row["variant_support_any_event_fraction"] = float(
+        row["variant_support_any_event_count"]
+    ) / float(present_count)
+
+    for col in bool_cols:
+        truth_count = _unique_variant_truth_count(df, _truthy_mask(df[col]))
+        row[f"variant_support_{col}_count"] = truth_count
+        row[f"variant_support_{col}_fraction"] = float(truth_count) / float(present_count)
+        row[col] = truth_count > 0
+
+    for col in event_id_cols:
+        row[col] = _representative_event_id(df[col])
+
+    row_series = pd.Series(row)
+    row["toa_id"] = _toa_id(row_series, group_id)
+    return row
+
+
+def _canonical_timfile_keys(df: pd.DataFrame) -> pd.Series:
+    if "_timfile_base" in df.columns:
+        return df["_timfile_base"].fillna("").astype(str)
+    if "_timfile" in df.columns:
+        return df["_timfile"].fillna("").astype(str).map(
+            lambda x: Path(x).name if x else ""
+        )
+    return pd.Series([""] * len(df), index=df.index, dtype=str)
+
+
+def _consensus_bool_columns(columns: Iterable[str]) -> List[str]:
+    known = {
+        "bad",
+        "bad_day",
+        "bad_hard",
+        "bad_mad",
+        "bad_ou",
+        "bad_point",
+        "event_member",
+        "orbital_phase_bad",
+        "outlier_any",
+        "robust_global_outlier",
+        "robust_outlier",
+        "solar_event_member",
+    }
+    out = []
+    for col in columns:
+        if col.startswith("_") or col in {"variant"}:
+            continue
+        if col in known or col.endswith("_member"):
+            out.append(str(col))
+    return sorted(dict.fromkeys(out))
+
+
+def _truthy_mask(series: pd.Series) -> pd.Series:
+    if series.dtype == bool:
+        return series.fillna(False)
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.notna().any():
+        return numeric.fillna(0).astype(float) != 0.0
+    return series.fillna("").astype(str).str.lower().isin({"1", "true", "t", "yes", "y"})
+
+
+def _unique_variant_truth_count(df: pd.DataFrame, mask: pd.Series) -> int:
+    if not mask.any():
+        return 0
+    return int(
+        df.loc[mask, "_optimize_variant"].fillna("base").astype(str).nunique(dropna=True)
+    )
+
+
+def _representative_value(series: pd.Series, *, prefer_numeric: bool) -> object:
+    clean = series.dropna()
+    if clean.empty:
+        return None
+    if prefer_numeric:
+        numeric = pd.to_numeric(clean, errors="coerce")
+        if numeric.notna().any():
+            return float(numeric.median())
+    text = clean.astype(str)
+    text = text.loc[(text != "") & (text.str.lower() != "nan")]
+    if text.empty:
+        return None
+    counts = text.value_counts(dropna=False)
+    return str(counts.index[0])
+
+
+def _representative_event_id(series: pd.Series) -> int:
+    numeric = pd.to_numeric(series, errors="coerce").fillna(-1).astype(int)
+    active = numeric.loc[numeric != -1]
+    if active.empty:
+        return -1
+    counts = active.value_counts()
+    return int(counts.index[0])
 
 
 def _combined_bad_mask(df: pd.DataFrame) -> pd.Series:
     mask = pd.Series(False, index=df.index)
     for col in DEFAULT_OUTLIER_COLS:
         if col in df.columns:
-            mask = mask | df[col].fillna(False).astype(bool)
+            mask = mask | _truthy_mask(df[col])
     return mask
 
 
 def _combined_event_mask(df: pd.DataFrame) -> pd.Series:
     mask = pd.Series(False, index=df.index)
     if "event_member" in df.columns:
-        mask = mask | df["event_member"].fillna(False).astype(bool)
+        mask = mask | _truthy_mask(df["event_member"])
     if "solar_event_member" in df.columns:
-        mask = mask | df["solar_event_member"].fillna(False).astype(bool)
+        mask = mask | _truthy_mask(df["solar_event_member"])
     if "orbital_phase_bad" in df.columns:
-        mask = mask | df["orbital_phase_bad"].fillna(False).astype(bool)
+        mask = mask | _truthy_mask(df["orbital_phase_bad"])
     for col in _event_id_columns(df.columns):
         values = pd.to_numeric(df[col], errors="coerce").fillna(-1).astype(int)
         mask = mask | (values != -1)
@@ -360,12 +718,12 @@ def _event_count(df: pd.DataFrame) -> int:
             total += int(values.loc[values != -1].nunique())
     if (
         "solar_event_member" in df.columns
-        and df["solar_event_member"].fillna(False).any()
+        and _truthy_mask(df["solar_event_member"]).any()
     ):
         total += 1
     if (
         "orbital_phase_bad" in df.columns
-        and df["orbital_phase_bad"].fillna(False).any()
+        and _truthy_mask(df["orbital_phase_bad"]).any()
     ):
         total += 1
     return total

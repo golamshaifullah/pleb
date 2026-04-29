@@ -202,7 +202,18 @@ def _discover_baseline_run_dir(result: OptimizationResult) -> Optional[Path]:
 
 
 def _load_trial_frame(run_dir: Path | str) -> Optional[pd.DataFrame]:
-    paths = sorted(Path(run_dir).glob("**/*_qc.csv"))
+    run_dir = Path(run_dir)
+    consensus_path = run_dir / "optimize_bad_masks" / "variant_consensus.csv"
+    if consensus_path.exists():
+        frame = pd.read_csv(consensus_path, low_memory=False)
+        frame["_source_csv"] = str(consensus_path)
+        return frame
+    paths = sorted(
+        path
+        for path in run_dir.glob("**/*_qc.csv")
+        if not path.name.endswith(".consensus_qc.csv")
+        and "optimize_bad_masks" not in path.parts
+    )
     if not paths:
         return None
     frames = []

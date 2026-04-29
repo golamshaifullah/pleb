@@ -73,6 +73,7 @@ class OptimizationConfig:
     keep_trial_runs: bool = True
     fail_fast: bool = False
     write_best_config: bool = True
+    variant_strategy: str = "auto"
     fixed_overrides: Dict[str, Any] | None = None
 
 

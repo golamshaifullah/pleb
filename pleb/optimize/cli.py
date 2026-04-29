@@ -73,6 +73,7 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
         keep_trial_runs=bool(data.get("keep_trial_runs", True)),
         fail_fast=bool(data.get("fail_fast", False)),
         write_best_config=bool(data.get("write_best_config", True)),
+        variant_strategy=str(data.get("variant_strategy", "auto")),
         fixed_overrides=(
             dict(data.get("fixed_overrides", {}))
             if isinstance(data.get("fixed_overrides"), dict)

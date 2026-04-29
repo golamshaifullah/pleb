@@ -1939,8 +1939,12 @@ def _find_qc_csvs(psr: str, cfg: FixDatasetConfig) -> List[Path]:
         return []
     searched: List[Path] = []
     found: List[Path] = []
+    consensus_found: List[Path] = []
     if cfg.qc_branch:
         branch_root = base / str(cfg.qc_branch)
+        consensus_matches = sorted(branch_root.rglob(f"{psr}.consensus_qc.csv"))
+        searched.extend(consensus_matches)
+        consensus_found.extend(consensus_matches)
         base_cand = branch_root / f"{psr}_qc.csv"
         searched.append(base_cand)
         if base_cand.exists():
@@ -1948,6 +1952,10 @@ def _find_qc_csvs(psr: str, cfg: FixDatasetConfig) -> List[Path]:
         variant_matches = sorted(branch_root.glob(f"{psr}.*_qc.csv"))
         searched.extend(variant_matches)
         found.extend(variant_matches)
+    if not consensus_found:
+        consensus_found = sorted(base.rglob(f"{psr}.consensus_qc.csv"))
+    if consensus_found:
+        return sorted(dict.fromkeys(consensus_found))
     if not found:
         matches = sorted(base.rglob(f"{psr}_qc.csv"))
         variant_matches = sorted(base.rglob(f"{psr}.*_qc.csv"))
@@ -3860,43 +3868,7 @@ def infer_and_apply_system_flags(
     except Exception:
         wsrt_p2_mismatches = None
 
-    def _is_new_wsrt_p2_timfile(tpath: Path) -> bool:
-        try:
-            lines = tpath.read_text(encoding="utf-8", errors="ignore").splitlines()
-        except Exception:
-            return False
-        has_gof = False
-        has_pta = False
-        has_group = False
-        for raw in lines:
-            s = raw.strip()
-            if not s or s.startswith(("#", "C")):
-                continue
-            head = s.split(maxsplit=1)[0]
-            if head in TIM_DIRECTIVES:
-                continue
-            if "-gof" in s:
-                has_gof = True
-            if "-pta" in s:
-                has_pta = True
-            if "-group" in s:
-                has_group = True
-        return has_gof and not (has_pta or has_group)
-
     allow_overwrite = cfg.system_flag_overwrite_existing and not legacy_sys
-    try:
-        tel_vals = inferred.get("tel", pd.Series([], dtype=object))
-        be_vals = inferred.get("backend", pd.Series([], dtype=object))
-        tel_set = {str(t).upper() for t in pd.Series(tel_vals).dropna().unique()}
-        be_set = {str(b).upper() for b in pd.Series(be_vals).dropna().unique()}
-        if not (
-            tel_set == {"WSRT"}
-            and be_set == {"P2"}
-            and _is_new_wsrt_p2_timfile(timfile)
-        ):
-            allow_overwrite = False
-    except Exception:
-        allow_overwrite = False
     if cfg.wsrt_p2_force_sys_by_freq:
         try:
             tel_vals = inferred.get("tel", pd.Series([], dtype=object))
