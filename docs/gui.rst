@@ -11,6 +11,9 @@ What it provides
 - **Settings editor** with a schema-driven form and raw text editor
 - **Workflow editor** (load/edit/save JSON or TOML)
 - **Runner** tab for pipeline/param-scan/qc-report/ingest/workflow
+- **Expert QC review tools** via separate Streamlit apps:
+  - ``scripts/pleb_qc_review.py`` for Plotly-based review
+  - ``scripts/pleb_qc_review_matplotlib.py`` for a lower-overhead Matplotlib/table workflow
 
 Install
 -------
@@ -29,6 +32,18 @@ From the repo root:
 .. code-block:: bash
 
    python -m streamlit run scripts/pleb_gui.py
+
+Expert QC review:
+
+.. code-block:: bash
+
+   python -m streamlit run scripts/pleb_qc_review.py -- --run-dir /path/to/run
+
+or:
+
+.. code-block:: bash
+
+   python -m streamlit run scripts/pleb_qc_review_matplotlib.py -- --run-dir /path/to/run
 
 Notes
 -----

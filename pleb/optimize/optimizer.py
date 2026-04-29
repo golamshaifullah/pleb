@@ -15,7 +15,12 @@ from .objectives import compute_score, load_objective_config, violated_constrain
 from .results import write_results
 from .report import write_markdown_report, write_pdf_report
 from .models import FoldSummary
-from .scorers import score_run_dir, score_run_dir_variants, write_bad_toa_masks, write_variant_selection_table
+from .scorers import (
+    score_run_dir,
+    score_run_dir_variants,
+    write_bad_toa_masks,
+    write_variant_selection_table,
+)
 from .search_space import (
     active_parameter_count,
     load_search_space,
@@ -157,15 +162,23 @@ def _suggest_with_optuna(space, trial) -> Dict[str, Any]:
 def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
     if trial.status != "ok" or trial.run_dir is None:
         return
-    full_metrics, _ = score_run_dir(
+    parameter_complexity_penalty = active_parameter_count(
+        space, trial.params
+    ) / max(len(space.parameters), 1)
+    selected_variant, full_metrics = _select_trial_variant(
         trial.run_dir,
-        fold_cfg=load_fold_config(None),
-        parameter_complexity_penalty=(
-            active_parameter_count(space, trial.params) / max(len(space.parameters), 1)
-        ),
+        objective=objective,
+        parameter_complexity_penalty=parameter_complexity_penalty,
     )
     if fold_cfg.mode != "none" and fold_cfg.n_splits > 1:
-        fold_summaries = _run_true_fold_reruns(cfg, trial, fold_cfg, space, objective)
+        fold_summaries = _run_true_fold_reruns(
+            cfg,
+            trial,
+            fold_cfg,
+            space,
+            objective,
+            selected_variant=selected_variant,
+        )
         averaged = _average_fold_metrics(fold_summaries)
         for key, value in full_metrics.items():
             averaged[f"full_{key}"] = value
@@ -182,8 +195,45 @@ def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
     trial.score = compute_score(full_metrics, objective)
 
 
+def _select_trial_variant(
+    run_dir: Path,
+    *,
+    objective,
+    parameter_complexity_penalty: float,
+) -> tuple[str, Dict[str, float]]:
+    """Pick one candidate bad-TOA variant for trial scoring.
+
+    Each PQC variant QC CSV is scored independently. The highest-scoring
+    constraint-satisfying candidate (or least-bad penalized candidate) is
+    selected and recorded with mask/selection artifacts in the run directory.
+    """
+    variant_metrics = score_run_dir_variants(
+        run_dir,
+        fold_cfg=load_fold_config(None),
+        parameter_complexity_penalty=parameter_complexity_penalty,
+    )
+    selected_variant, (selected_metrics, _selected_folds) = max(
+        variant_metrics.items(),
+        key=lambda item: compute_score(item[1][0], objective),
+    )
+    write_bad_toa_masks(run_dir)
+    write_variant_selection_table(
+        run_dir,
+        variant_metrics,
+        objective,
+        selected_variant=selected_variant,
+    )
+    return selected_variant, selected_metrics
+
+
 def _run_true_fold_reruns(
-    cfg: OptimizationConfig, trial: TrialResult, fold_cfg, space, objective
+    cfg: OptimizationConfig,
+    trial: TrialResult,
+    fold_cfg,
+    space,
+    objective,
+    *,
+    selected_variant: str,
 ) -> List[FoldSummary]:
     del objective
     pipeline_cfg = _build_pipeline_config_for_trial(cfg, trial.params)
@@ -197,6 +247,7 @@ def _run_true_fold_reruns(
                 fold_cfg=fold_cfg,
                 fold_index=fold_index,
                 out_root=work_root,
+                variant_label=selected_variant,
             )
             fold_run_dir = run_fold_trial(
                 cfg,
@@ -205,6 +256,7 @@ def _run_true_fold_reruns(
                 fold_label=f"fold_{fold_index:02d}",
                 home_dir=tmp_home,
                 dataset_name=dataset_name,
+                selected_variant=selected_variant,
             )
             fold_metrics, _ = score_run_dir(
                 fold_run_dir,

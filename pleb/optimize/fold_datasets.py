@@ -69,6 +69,8 @@ def build_fold_dataset(
             variant_label=variant_label,
         )
         _rewrite_alltim_includes(dst_psr)
+        if variant_label not in (None, "", "base"):
+            _materialize_selected_variant_as_base(dst_psr, psr, str(variant_label))
     return tmp_home, str(held_out_key)
 
 
@@ -205,6 +207,37 @@ def _rewrite_alltim_includes(psr_dir: Path) -> None:
                 continue
             out_lines.append(raw)
         alltim.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+
+def _materialize_selected_variant_as_base(
+    psr_dir: Path,
+    psr: str,
+    variant_label: str,
+) -> None:
+    """Copy the selected variant inputs onto the base PQC filenames.
+
+    Held-out reruns should evaluate only the chosen candidate bad-mask. The
+    pipeline PQC runner looks for ``<PSR>.par`` and ``<PSR>_all.tim`` when
+    ``pqc_run_variants`` is disabled, so selected variant inputs are
+    materialized under those canonical base names in the temporary fold dataset.
+    """
+    base_par = psr_dir / f"{psr}.par"
+    variant_par = psr_dir / f"{psr}_{variant_label}.par"
+    if not variant_par.exists():
+        variant_par = psr_dir / f"{psr}.{variant_label}.par"
+    src_par = variant_par if variant_par.exists() else base_par
+    if not src_par.exists():
+        raise FileNotFoundError(str(src_par))
+
+    selected_all = psr_dir / f"{psr}_{variant_label}_all.tim"
+    if not selected_all.exists():
+        selected_all = psr_dir / f"{psr}_all.{variant_label}.tim"
+    if not selected_all.exists():
+        raise FileNotFoundError(str(selected_all))
+
+    if src_par.resolve() != base_par.resolve():
+        shutil.copy2(src_par, base_par)
+    shutil.copy2(selected_all, psr_dir / f"{psr}_all.tim")
 
 
 def _active_backend_timfiles(

@@ -56,6 +56,7 @@ def run_fold_trial(
     fold_label: str,
     home_dir: Path,
     dataset_name: str,
+    selected_variant: str | None = None,
 ) -> Path:
     """Execute one fold-specific held-in rerun."""
     if cfg.execution_mode == "pipeline":
@@ -65,6 +66,10 @@ def run_fold_trial(
             _apply_flat_overrides(raw, cfg.fixed_overrides)
         raw["home_dir"] = str(home_dir)
         raw["dataset_name"] = dataset_name
+        if selected_variant not in (None, ""):
+            # The selected candidate variant has already been materialized as the
+            # base <PSR>_all.tim in the temporary fold dataset.
+            raw["pqc_run_variants"] = False
         raw["outdir_name"] = f"{cfg.study_name}_trial_{trial_id:04d}_{fold_label}"
         raw["force_rerun"] = True
         pcfg = PipelineConfig.from_dict(raw)
@@ -81,6 +86,8 @@ def run_fold_trial(
             )
         raw["set"].append(f'home_dir="{str(home_dir)}"')
         raw["set"].append(f'dataset_name="{dataset_name}"')
+        if selected_variant not in (None, ""):
+            raw["set"].append("pqc_run_variants=false")
         raw["set"].append(
             f'outdir_name="{cfg.study_name}_trial_{trial_id:04d}_{fold_label}"'
         )

@@ -42,6 +42,7 @@ pleb - The EPTA Data Combination Pipeline
    release_notes
    faq
    gui
+   qc_review
 
 .. toctree::
    :maxdepth: 2
