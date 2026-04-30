@@ -73,6 +73,17 @@ def _resolve_repo_root(home_dir: Path | str) -> Path:
     return repo_root
 
 
+def _find_nearest_git_root(path: Path | str | None) -> Optional[Path]:
+    """Return the nearest ancestor containing ``.git``, if any."""
+    if path is None:
+        return None
+    cur = Path(path).expanduser().resolve()
+    for candidate in (cur, *cur.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
 def _resolve_dataset_root(repo_root: Path, dataset_name: Path | str) -> Path:
     """Resolve ``dataset_name`` as a repo-relative dataset path under ``repo_root``.
 
@@ -1280,6 +1291,17 @@ class PipelineConfig:
                 return [s.strip() for s in v.split(",") if s.strip()]
             return [str(x) for x in list(v)]
 
+        declared_repo_root = _find_nearest_git_root(base_dir)
+
+        def opt_repo_resource_str(key: str) -> Optional[str]:
+            v = d.get(key)
+            if v in (None, ""):
+                return None
+            resolved = _resolve_declared_path(
+                str(v), repo_root=declared_repo_root, base_dir=base_dir
+            )
+            return str(resolved) if resolved is not None else str(v)
+
         def list_default(key: str, default: List[str]) -> List[str]:
             v = d.get(key)
             if v in (None, ""):
@@ -1314,7 +1336,7 @@ class PipelineConfig:
             testing_mode=bool(d.get("testing_mode", False)),
             run_pqc=bool(d.get("run_pqc", False)),
             run_whitenoise=bool(d.get("run_whitenoise", False)),
-            whitenoise_source_path=opt_str("whitenoise_source_path"),
+            whitenoise_source_path=opt_repo_resource_str("whitenoise_source_path"),
             whitenoise_epoch_tolerance_seconds=float(
                 d.get("whitenoise_epoch_tolerance_seconds", 1.0)
             ),
@@ -1480,7 +1502,9 @@ class PipelineConfig:
             pqc_glitch_min_duration_days=float(
                 d.get("pqc_glitch_min_duration_days", 1000.0)
             ),
-            pqc_backend_profiles_path=opt_str("pqc_backend_profiles_path"),
+            pqc_backend_profiles_path=opt_repo_resource_str(
+                "pqc_backend_profiles_path"
+            ),
             pqc_run_variants=bool(d.get("pqc_run_variants", False)),
             pqc_keep_variant_tmp=bool(d.get("pqc_keep_variant_tmp", False)),
             pqc_auto_retry_failed=bool(d.get("pqc_auto_retry_failed", False)),
@@ -1563,22 +1587,32 @@ class PipelineConfig:
             fix_update_alltim_includes=bool(d.get("fix_update_alltim_includes", True)),
             fix_min_toas_per_backend_tim=int(d.get("fix_min_toas_per_backend_tim", 10)),
             fix_required_tim_flags=dict(d.get("fix_required_tim_flags", {})),
-            fix_system_flag_mapping_path=opt_str("fix_system_flag_mapping_path"),
+            fix_system_flag_mapping_path=opt_repo_resource_str(
+                "fix_system_flag_mapping_path"
+            ),
             fix_flag_sys_freq_rules_enabled=bool(
                 d.get("fix_flag_sys_freq_rules_enabled", False)
             ),
-            fix_flag_sys_freq_rules_path=opt_str("fix_flag_sys_freq_rules_path"),
-            fix_system_flag_table_path=opt_str("fix_system_flag_table_path"),
+            fix_flag_sys_freq_rules_path=opt_repo_resource_str(
+                "fix_flag_sys_freq_rules_path"
+            ),
+            fix_system_flag_table_path=opt_repo_resource_str(
+                "fix_system_flag_table_path"
+            ),
             fix_generate_alltim_variants=bool(
                 d.get("fix_generate_alltim_variants", False)
             ),
-            fix_backend_classifications_path=opt_str(
+            fix_backend_classifications_path=opt_repo_resource_str(
                 "fix_backend_classifications_path"
             ),
-            fix_alltim_variants_path=opt_str("fix_alltim_variants_path"),
-            fix_relabel_rules_path=opt_str("fix_relabel_rules_path"),
-            fix_overlap_rules_path=opt_str("fix_overlap_rules_path"),
-            fix_overlap_exact_catalog_path=opt_str("fix_overlap_exact_catalog_path"),
+            fix_alltim_variants_path=opt_repo_resource_str(
+                "fix_alltim_variants_path"
+            ),
+            fix_relabel_rules_path=opt_repo_resource_str("fix_relabel_rules_path"),
+            fix_overlap_rules_path=opt_repo_resource_str("fix_overlap_rules_path"),
+            fix_overlap_exact_catalog_path=opt_repo_resource_str(
+                "fix_overlap_exact_catalog_path"
+            ),
             fix_jump_reference_variants=bool(
                 d.get("fix_jump_reference_variants", False)
             ),
@@ -1700,7 +1734,7 @@ class PipelineConfig:
                 else None
             ),
             compare_public_providers_path=(
-                Path(d["compare_public_providers_path"])
+                Path(opt_repo_resource_str("compare_public_providers_path"))
                 if d.get("compare_public_providers_path")
                 else None
             ),

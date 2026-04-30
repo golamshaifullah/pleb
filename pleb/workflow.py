@@ -16,7 +16,7 @@ except Exception:  # pragma: no cover
 
 import pandas as pd
 
-from .config import PipelineConfig
+from .config import IngestConfig, PipelineConfig
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
@@ -74,6 +74,16 @@ def _load_workflow(path: Path) -> Dict[str, Any]:
             f"Unsupported workflow_version={wf_ver}. Supported: workflow_version=1."
         )
     return data
+
+
+def _resolve_config_path(config_arg: str | Path, *, base_dir: Path | None = None) -> Path:
+    """Resolve a workflow-referenced config path against the workflow directory."""
+    path = Path(config_arg).expanduser()
+    if not path.is_absolute() and base_dir is not None:
+        path = (base_dir / path).resolve()
+    else:
+        path = path.resolve()
+    return path
 
 
 def _normalize_step(step: Any) -> Dict[str, Any]:
@@ -155,10 +165,17 @@ def _apply_overrides(
 
 
 def _build_cfg(
-    base_dict: Dict[str, Any], set_list: List[str], overrides: Dict[str, Any]
-) -> PipelineConfig:
+    step_name: str,
+    base_dict: Dict[str, Any],
+    set_list: List[str],
+    overrides: Dict[str, Any],
+    *,
+    base_dir: Path | None = None,
+) -> PipelineConfig | IngestConfig:
     d = _apply_overrides(base_dict, set_list, overrides)
-    return PipelineConfig.from_dict(d)
+    if step_name == "ingest":
+        return IngestConfig.from_dict(d, base_dir=base_dir)
+    return PipelineConfig.from_dict(d, base_dir=base_dir)
 
 
 def _find_latest_fix_summary(out_paths: Dict[str, Path]) -> Optional[Path]:
@@ -235,14 +252,44 @@ def _run_step(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
-    config_base_dir: Path | None = None,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
 ) -> None:
     name = step["name"]
     step_cfg_path = step.get("config")
     step_base_dict = base_dict
+    step_cfg_base_dir = cfg_base_dir
+    resolved_step_cfg_path: Path | None = None
     if step_cfg_path:
-        step_base_dict = _load_config_dict(str(step_cfg_path), base_dir=config_base_dir)
-    cfg = _build_cfg(step_base_dict, step.get("set", []), step.get("overrides", {}))
+        resolved_step_cfg_path = _resolve_config_path(
+            str(step_cfg_path), base_dir=workflow_base_dir
+        )
+        if name == "optimize":
+            from .optimize.cli import load_optimization_config
+            from .optimize.optimizer import run_optimization
+
+            ocfg = load_optimization_config(resolved_step_cfg_path)
+            result = run_optimization(ocfg)
+            ctx.last_run_dir = result.out_dir
+            ctx.step_records.append(
+                {
+                    "step": name,
+                    "kind": name,
+                    "run_dir": str(result.out_dir),
+                    "fix_summary": "",
+                    "qc_summary": "",
+                }
+            )
+            return
+        step_base_dict = _load_config_dict(str(resolved_step_cfg_path))
+        step_cfg_base_dir = resolved_step_cfg_path.parent
+    cfg = _build_cfg(
+        name,
+        step_base_dict,
+        step.get("set", []),
+        step.get("overrides", {}),
+        base_dir=step_cfg_base_dir,
+    )
     if name in (
         "pipeline",
         "fix_dataset",
@@ -513,12 +560,19 @@ def _run_steps_serial(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
-    config_base_dir: Path | None = None,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
     label_prefix: str = "",
 ) -> None:
     for idx, s in enumerate(steps, start=1):
         logger.info("%sStep %s/%s: %s", label_prefix, idx, len(steps), s["name"])
-        _run_step(s, base_dict, ctx, config_base_dir=config_base_dir)
+        _run_step(
+            s,
+            base_dict,
+            ctx,
+            workflow_base_dir=workflow_base_dir,
+            cfg_base_dir=cfg_base_dir,
+        )
 
 
 def _run_steps_parallel(
@@ -526,7 +580,8 @@ def _run_steps_parallel(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
-    config_base_dir: Path | None = None,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
     workers: int = 0,
     label_prefix: str = "",
 ) -> None:
@@ -555,7 +610,13 @@ def _run_steps_parallel(
         logger.info(
             "%s[parallel %d/%d] %s", label_prefix, i + 1, len(steps), st["name"]
         )
-        _run_step(st, base_dict, local_ctx, config_base_dir=config_base_dir)
+        _run_step(
+            st,
+            base_dict,
+            local_ctx,
+            workflow_base_dir=workflow_base_dir,
+            cfg_base_dir=cfg_base_dir,
+        )
         return i, local_ctx
 
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -582,7 +643,8 @@ def _run_step_sequence(
     base_dict: Dict[str, Any],
     ctx: WorkflowContext,
     *,
-    config_base_dir: Path | None = None,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
     mode: str = "serial",
     parallel_workers: int = 0,
     label_prefix: str = "",
@@ -597,7 +659,8 @@ def _run_step_sequence(
             steps,
             base_dict,
             ctx,
-            config_base_dir=config_base_dir,
+            workflow_base_dir=workflow_base_dir,
+            cfg_base_dir=cfg_base_dir,
             label_prefix=label_prefix,
         )
         return
@@ -605,7 +668,8 @@ def _run_step_sequence(
         steps,
         base_dict,
         ctx,
-        config_base_dir=config_base_dir,
+        workflow_base_dir=workflow_base_dir,
+        cfg_base_dir=cfg_base_dir,
         workers=int(parallel_workers or 0),
         label_prefix=label_prefix,
     )
@@ -650,7 +714,11 @@ def run_workflow(path: Path) -> WorkflowContext:
     config_path = wf.get("config")
     if not config_path:
         raise ValueError("Workflow must specify 'config' (path to pipeline config).")
-    base_dict = _load_config_dict(str(config_path), base_dir=workflow_base_dir)
+    resolved_config_path = _resolve_config_path(
+        str(config_path), base_dir=workflow_base_dir
+    )
+    base_dict = _load_config_dict(str(resolved_config_path))
+    base_cfg_base_dir = resolved_config_path.parent
     base_dict = _apply_overrides(
         base_dict, list(wf.get("set", []) or []), dict(wf.get("overrides", {}) or {})
     )
@@ -668,7 +736,8 @@ def run_workflow(path: Path) -> WorkflowContext:
             norm_steps,
             base_dict,
             ctx,
-            config_base_dir=workflow_base_dir,
+            workflow_base_dir=workflow_base_dir,
+            cfg_base_dir=base_cfg_base_dir,
             mode=global_mode,
             parallel_workers=global_parallel_workers,
         )
@@ -684,7 +753,8 @@ def run_workflow(path: Path) -> WorkflowContext:
                 gp["steps"],
                 base_dict,
                 ctx,
-                config_base_dir=workflow_base_dir,
+                workflow_base_dir=workflow_base_dir,
+                cfg_base_dir=base_cfg_base_dir,
                 mode=str(gp.get("mode") or global_mode),
                 parallel_workers=int(
                     gp.get("parallel_workers") or global_parallel_workers
@@ -711,7 +781,8 @@ def run_workflow(path: Path) -> WorkflowContext:
                         gp["steps"],
                         loop_base,
                         ctx,
-                        config_base_dir=workflow_base_dir,
+                        workflow_base_dir=workflow_base_dir,
+                        cfg_base_dir=base_cfg_base_dir,
                         mode=str(gp.get("mode") or lp.get("mode") or "serial"),
                         parallel_workers=int(
                             gp.get("parallel_workers")
@@ -725,7 +796,8 @@ def run_workflow(path: Path) -> WorkflowContext:
                     lp["steps"],
                     loop_base,
                     ctx,
-                    config_base_dir=workflow_base_dir,
+                    workflow_base_dir=workflow_base_dir,
+                    cfg_base_dir=base_cfg_base_dir,
                     mode=str(lp.get("mode") or "serial"),
                     parallel_workers=int(lp.get("parallel_workers") or 0),
                     label_prefix="  ",
@@ -739,10 +811,11 @@ def run_workflow(path: Path) -> WorkflowContext:
     report_title = base_dict.get("consolidated_report_title", None)
     report_name = base_dict.get("consolidated_report_name", None)
 
-    if report_enabled and ctx.last_run_dir is not None:
+    report_run_dir = ctx.last_pipeline_run_dir or ctx.last_run_dir
+    if report_enabled and report_run_dir is not None:
         try:
             report_path = generate_run_report(
-                ctx.last_run_dir,
+                report_run_dir,
                 title=(
                     str(report_title)
                     if report_title not in (None, "")

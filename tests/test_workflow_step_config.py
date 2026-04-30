@@ -57,6 +57,38 @@ results_dir = "{tmp_path / "results_step"}"
     assert captured["home_dir"] == str(step_home.resolve())
 
 
+def test_workflow_step_uses_top_level_config_base_dir(
+    monkeypatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "configs" / "runs"
+    step_home = cfg_dir / "repo"
+    step_home.mkdir(parents=True, exist_ok=True)
+    image = tmp_path / "tempo2.sif"
+    image.write_text("", encoding="utf-8")
+
+    base_cfg = {
+        "home_dir": "repo",
+        "singularity_image": str(image),
+        "dataset_name": ".",
+        "results_dir": str(tmp_path / "results_base"),
+    }
+    captured = {}
+
+    def _fake_run_pipeline(cfg):
+        captured["home_dir"] = str(cfg.home_dir)
+        tag = tmp_path / "run_tag_base"
+        tag.mkdir(parents=True, exist_ok=True)
+        return {"tag": tag, "qc": tag / "qc", "fix_dataset": tag / "fix_dataset"}
+
+    monkeypatch.setattr("pleb.workflow.run_pipeline", _fake_run_pipeline)
+
+    step = {"name": "pipeline", "set": [], "overrides": {}}
+    ctx = WorkflowContext()
+    _run_step(step, base_cfg, ctx, cfg_base_dir=cfg_dir)
+
+    assert captured["home_dir"] == str(step_home.resolve())
+
+
 def test_workflow_whitenoise_step_dispatches_pipeline(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -124,6 +156,58 @@ def test_workflow_compare_public_step_dispatches(monkeypatch, tmp_path: Path) ->
 
     assert captured["out_dir"] == str(out_dir.resolve())
     assert captured["providers_path"] == str(providers.resolve())
+
+
+def test_workflow_optimize_step_dispatches(monkeypatch, tmp_path: Path) -> None:
+    workflow_dir = tmp_path / "configs" / "workflows"
+    optimize_cfg = tmp_path / "configs" / "optimize" / "runs" / "optimize.toml"
+    _write(
+        optimize_cfg,
+        """
+[optimize]
+base_config_path = "../base.toml"
+out_dir = "../results/out"
+""",
+    )
+
+    captured = {}
+
+    class _Result:
+        out_dir = tmp_path / "optimize_out"
+
+    def _fake_load_optimization_config(path: Path):
+        captured["config_path"] = str(path)
+        return object()
+
+    def _fake_run_optimization(cfg):
+        captured["cfg"] = cfg
+        _Result.out_dir.mkdir(parents=True, exist_ok=True)
+        return _Result()
+
+    monkeypatch.setattr(
+        "pleb.optimize.cli.load_optimization_config", _fake_load_optimization_config
+    )
+    monkeypatch.setattr(
+        "pleb.optimize.optimizer.run_optimization", _fake_run_optimization
+    )
+
+    step = {
+        "name": "optimize",
+        "config": "../optimize/runs/optimize.toml",
+        "set": [],
+        "overrides": {},
+    }
+    ctx = WorkflowContext()
+    _run_step(
+        step,
+        {},
+        ctx,
+        workflow_base_dir=workflow_dir,
+        cfg_base_dir=workflow_dir,
+    )
+
+    assert captured["config_path"] == str(optimize_cfg.resolve())
+    assert ctx.last_run_dir == _Result.out_dir
 
 
 def test_workflow_ingest_step_passes_report_metadata(
@@ -200,3 +284,81 @@ def test_workflow_ingest_step_passes_report_metadata(
         "ingest_commit_branch_name": "ingest/from-workflow",
         "ingest_commit_base_branch": "main",
     }
+
+
+def test_workflow_ingest_step_uses_its_own_config_file(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workflow_dir = tmp_path / "configs" / "workflows"
+    ingest_cfg_dir = tmp_path / "configs" / "runs" / "ingest"
+    mapping = ingest_cfg_dir / "mapping.json"
+    out_dir = tmp_path / "dataset"
+    mapping.parent.mkdir(parents=True, exist_ok=True)
+    mapping.write_text("{}", encoding="utf-8")
+
+    step_cfg_path = ingest_cfg_dir / "ingest.toml"
+    _write(
+        step_cfg_path,
+        f"""
+ingest_mapping_file = "mapping.json"
+ingest_output_dir = "{out_dir}"
+ingest_verify = true
+ingest_commit_branch_name = "ingest/from-step-config"
+ingest_commit_base_branch = "main"
+""",
+    )
+
+    captured = {}
+
+    def _fake_ingest_dataset(
+        mapping_file,
+        output_root,
+        *,
+        verify=False,
+        pulsars=None,
+        report_metadata=None,
+    ):
+        captured["mapping_file"] = str(mapping_file)
+        captured["output_root"] = str(output_root)
+        captured["verify"] = verify
+        captured["report_metadata"] = dict(report_metadata or {})
+        return {"output_root": str(output_root)}
+
+    def _fake_commit_ingest_changes(
+        output_root,
+        *,
+        branch_name=None,
+        base_branch=None,
+        commit_message=None,
+    ):
+        captured["commit_output_root"] = str(output_root)
+        captured["commit_branch_name"] = branch_name
+        captured["commit_base_branch"] = base_branch
+        captured["commit_message"] = commit_message
+        return branch_name or "ingest/generated"
+
+    monkeypatch.setattr("pleb.workflow.ingest_dataset", _fake_ingest_dataset)
+    monkeypatch.setattr(
+        "pleb.ingest.commit_ingest_changes", _fake_commit_ingest_changes
+    )
+
+    step = {
+        "name": "ingest",
+        "config": "../runs/ingest/ingest.toml",
+        "set": [],
+        "overrides": {},
+    }
+    ctx = WorkflowContext()
+    _run_step(
+        step,
+        {},
+        ctx,
+        workflow_base_dir=workflow_dir,
+        cfg_base_dir=workflow_dir,
+    )
+
+    assert captured["mapping_file"] == str(mapping.resolve())
+    assert captured["output_root"] == str(out_dir.resolve())
+    assert captured["verify"] is True
+    assert captured["commit_branch_name"] == "ingest/from-step-config"
+    assert captured["commit_base_branch"] == "main"

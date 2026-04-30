@@ -25,7 +25,7 @@ from .git_tools import checkout, require_clean_repo
 from .logging_utils import get_logger
 from .tempo2 import build_singularity_prefix, run_subprocess, tempo2_paths_in_container
 from .utils import (
-    which_or_raise,
+    container_runtime,
     discover_pulsars,
     safe_mkdir,
     cleanup_empty_dirs,
@@ -542,10 +542,7 @@ def run_param_scan(
             raise FileNotFoundError(
                 f"singularity_image does not exist: {cfg.singularity_image}"
             )
-        which_or_raise(
-            "singularity",
-            hint="Install Singularity/Apptainer or load it in your environment.",
-        )
+        container_runtime(require=True)
 
     # Allow config to set a default "typical" scan profile.
     scan_typical = bool(scan_typical or getattr(cfg, "param_scan_typical", False))

@@ -17,7 +17,7 @@ from typing import Dict, List, Tuple
 
 from .logging_utils import get_logger
 from .tim_utils import count_toa_lines, parse_include_lines
-from .utils import safe_mkdir
+from .utils import container_runtime, safe_mkdir
 
 logger = get_logger("pleb.tempo2")
 
@@ -56,7 +56,7 @@ def build_singularity_prefix(
     if native:
         return []
 
-    cmd: List[str] = ["singularity", "exec"]
+    cmd: List[str] = [container_runtime(), "exec"]
     binds: List[tuple[Path, str]] = [(home_dir / dataset_name, "/data")]
     if extra_binds:
         binds.extend(extra_binds)

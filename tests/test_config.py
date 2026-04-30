@@ -203,6 +203,38 @@ def test_pipeline_resolved_rejects_non_repo_home_dir(tmp_path: Path) -> None:
         raise AssertionError("expected ValueError for non-repo home_dir")
 
 
+def test_pipeline_config_repo_resources_resolve_from_declared_config_repo(
+    tmp_path: Path,
+) -> None:
+    tool_repo = _make_git_root(tmp_path / "tool-repo")
+    cfg_base_dir = tool_repo / "configs" / "runs" / "pqc"
+    cfg_base_dir.mkdir(parents=True, exist_ok=True)
+    resource = (
+        tool_repo
+        / "configs"
+        / "rules"
+        / "pqc"
+        / "epta_dr_optimize_single_pulsar_backend_profiles.toml"
+    )
+    resource.parent.mkdir(parents=True, exist_ok=True)
+    resource.write_text("[backend_profiles]\n", encoding="utf-8")
+
+    data_repo = _make_git_root(tmp_path / "data-repo")
+    cfg = PipelineConfig.from_dict(
+        {
+            "home_dir": str(data_repo),
+            "dataset_name": "EPTA-DR3/epta-dr3-data",
+            "singularity_image": str(tmp_path / "tempo2.sif"),
+            "results_dir": "results",
+            "pqc_backend_profiles_path": "configs/rules/pqc/epta_dr_optimize_single_pulsar_backend_profiles.toml",
+        },
+        base_dir=cfg_base_dir,
+    )
+
+    resolved = cfg.resolved()
+    assert Path(str(resolved.pqc_backend_profiles_path)) == resource.resolve()
+
+
 def test_ingest_resolved_output_root_uses_repo_relative_dataset_path(tmp_path: Path) -> None:
     repo_root = _make_git_root(tmp_path / "repo")
     cfg = IngestConfig(

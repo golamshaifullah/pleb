@@ -11,6 +11,7 @@ from pleb.tim_utils import is_toa_line
 from pleb.system_flag_inference import parse_tim_toa_table
 from pleb.dataset_fix import (
     FixDatasetConfig,
+    _count_fit_enabled_parameters,
     _find_qc_csvs,
     _rank_reference_system_rows,
     _variant_name_from_alltim,
@@ -547,6 +548,84 @@ def test_build_variant_reference_jump_pars_uses_underscore_outputs(
     assert par_out.exists()
     assert variant["par_out"] == str(par_out)
     assert Path(str(variant["csv"])).name == f"{psr}_jump_reference_legacy.csv"
+
+
+def test_count_fit_enabled_parameters_counts_trailing_fit_flags() -> None:
+    n_fit = _count_fit_enabled_parameters(
+        [
+            "PSRJ J0000+0000",
+            "RAJ 00:00:00 1 0.1",
+            "DECJ 00:00:00 1 0.2",
+            "F0 100 1 1e-9",
+            "DM 10 1 0.1",
+            "JUMP -sys SYSA 0 1",
+            "CLK TT(BIPM2024)",
+        ]
+    )
+    assert n_fit == 4
+
+
+def test_build_variant_reference_jump_pars_skips_underdetermined_tempo2_slices(
+    tmp_path: Path, monkeypatch
+) -> None:
+    psr = "J0000+0001"
+    psr_dir = tmp_path / psr
+    psr_dir.mkdir(parents=True)
+    _write(
+        psr_dir / f"{psr}.par",
+        "\n".join(
+            [
+                "PSRJ J0000+0001",
+                "RAJ 00:00:00 1 0.1",
+                "DECJ 00:00:00 1 0.1",
+                "F0 100 1 0.1",
+                "F1 0 1 0.1",
+                "DM 10 1 0.1",
+            ]
+        )
+        + "\n",
+    )
+    _write(
+        psr_dir / f"{psr}_legacy_all.tim",
+        "FORMAT 1\nINCLUDE tims/BACKEND.tim\n",
+    )
+    _write(
+        psr_dir / "tims" / "BACKEND.tim",
+        "toa 1400 55000 1 1 -sys SYSA\n",
+    )
+
+    calls = {"n": 0}
+
+    monkeypatch.setattr("pleb.dataset_fix.build_singularity_prefix", lambda *a, **k: [])
+
+    def _fake_run_subprocess(*args, **kwargs):
+        calls["n"] += 1
+        return 0
+
+    monkeypatch.setattr("pleb.dataset_fix.run_subprocess", _fake_run_subprocess)
+    monkeypatch.setattr("pleb.dataset_fix._parse_tempo2_redchisq", lambda *a, **k: 1.0)
+    monkeypatch.setattr(
+        "pleb.dataset_fix._parse_tempo2_timing_rms_us", lambda *a, **k: 2.0
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        dry_run=False,
+        backup=False,
+        tempo2_home_dir=tmp_path,
+        tempo2_dataset_name=".",
+        tempo2_singularity_image=tmp_path / "tempo2.sif",
+    )
+    (tmp_path / "tempo2.sif").write_text("", encoding="utf-8")
+
+    rep = build_variant_reference_jump_pars(psr_dir, cfg)
+    variant = rep["variants"]["legacy"]
+    system = variant["systems"][0]
+
+    assert calls["n"] == 0
+    assert system["system"] == "SYSA"
+    assert system["reduced_chisq"] is None
+    assert system["timing_rms_us"] is None
 
 
 def test_rank_reference_system_rows_prefers_lower_timing_rms() -> None:

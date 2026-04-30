@@ -103,6 +103,40 @@ variant_strategy = "consensus"
     assert cfg.variant_strategy == "consensus"
 
 
+def test_load_optimization_config_resolves_repo_relative_paths(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".git").mkdir(parents=True)
+    optimize_dir = repo_root / "configs" / "optimize" / "runs"
+    optimize_dir.mkdir(parents=True)
+    optimize_cfg = optimize_dir / "optimize.toml"
+    optimize_cfg.write_text(
+        """
+[optimize]
+base_config_path = "configs/runs/pqc/base.toml"
+search_space_path = "configs/optimize/search_spaces/space.toml"
+objective_path = "configs/optimize/objectives/objective.toml"
+folds_path = "configs/optimize/folds/folds.toml"
+out_dir = "results/optimize/example"
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_optimization_config(optimize_cfg)
+
+    assert cfg.base_config_path == (repo_root / "configs" / "runs" / "pqc" / "base.toml").resolve()
+    assert cfg.search_space_path == (
+        repo_root / "configs" / "optimize" / "search_spaces" / "space.toml"
+    ).resolve()
+    assert cfg.objective_path == (
+        repo_root / "configs" / "optimize" / "objectives" / "objective.toml"
+    ).resolve()
+    assert cfg.folds_path == (
+        repo_root / "configs" / "optimize" / "folds" / "folds.toml"
+    ).resolve()
+    assert cfg.out_dir == (repo_root / "results" / "optimize" / "example").resolve()
+
+
 def test_score_run_dir_reads_qc_outputs(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     qc_dir = run_dir / "qc"

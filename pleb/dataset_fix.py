@@ -334,6 +334,31 @@ def _to_c_comment_line(text: str) -> str:
     return f"C {s}".rstrip()
 
 
+def _count_fit_enabled_parameters(par_lines: Sequence[str]) -> int:
+    """Count fit-enabled parameter lines in a TEMPO/TEMPO2 parfile.
+
+    This is intentionally conservative and only counts lines whose third token is
+    the canonical TEMPO2 fit flag ``1``. Standard parameter rows are typically
+    ``PARAM VALUE FITFLAG [ERROR]``; command-style rows such as ``JUMP -sys ...``
+    are ignored because jump-reference scoring removes them before calling this
+    helper. The result is used to avoid invoking tempo2 on underdetermined
+    one-system slices during jump-reference scoring.
+    """
+    n_fit = 0
+    for raw in par_lines:
+        s = cleanline(raw).strip()
+        if not s:
+            continue
+        if s.startswith(("#", "C ", "c ")):
+            continue
+        parts = s.split()
+        if not parts:
+            continue
+        if len(parts) >= 3 and parts[2] == "1":
+            n_fit += 1
+    return n_fit
+
+
 def update_alltim_includes(
     psr_dir: Path,
     min_toas: int = 10,
@@ -904,6 +929,7 @@ def build_variant_reference_jump_pars(
         no_jump_lines.append(ln)
     no_jump_par = tmp_root / f"{psr}.nojump.par"
     no_jump_par.write_text("\n".join(no_jump_lines) + "\n", encoding="utf-8")
+    n_fit_params = _count_fit_enabled_parameters(no_jump_lines)
 
     prefix = build_singularity_prefix(
         Path(str(cfg.tempo2_home_dir)),
@@ -962,6 +988,21 @@ def build_variant_reference_jump_pars(
             for f in files:
                 lines.append(f"INCLUDE {f.name}")
             sys_all.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            n_toa = int(system_rows.get(sysv, {}).get("n_toa", 0) or 0)
+            if n_fit_params > 0 and n_toa <= n_fit_params:
+                logger.info(
+                    "%s/%s/%s: skipping tempo2 reference metrics for underdetermined "
+                    "slice (%d TOAs <= %d fit params)",
+                    psr,
+                    vname,
+                    sysv,
+                    n_toa,
+                    n_fit_params,
+                )
+                system_rows[sysv]["reduced_chisq"] = None
+                system_rows[sysv]["timing_rms_us"] = None
+                continue
 
             if bool(cfg.tempo2_native):
                 par_target = str(no_jump_par)

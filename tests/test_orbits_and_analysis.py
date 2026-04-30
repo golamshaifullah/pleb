@@ -16,6 +16,7 @@ from pleb.kepler_orbits import (
 )
 from pleb.pulsar_analysis import read_parfile, analyse_binary_from_par
 from pleb.tempo2 import build_singularity_prefix, tempo2_paths_in_container
+from pleb.utils import container_runtime
 
 
 def _write(path: Path, text: str) -> None:
@@ -87,7 +88,7 @@ def test_tempo2_command_helpers(tmp_path: Path) -> None:
     prefix = build_singularity_prefix(
         tmp_path / "repo", "test_dataset", tmp_path / "tempo2.sif"
     )
-    assert prefix[:2] == ["singularity", "exec"]
+    assert prefix[:2] == [container_runtime(), "exec"]
     assert "/data" in " ".join(prefix)
 
     par, tim = tempo2_paths_in_container("J0000+0000")

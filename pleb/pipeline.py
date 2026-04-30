@@ -53,9 +53,9 @@ from .run_report import generate_run_report
 from .tempo2 import run_tempo2_for_pulsar
 from .tim_utils import count_toa_lines, parse_include_lines, list_backend_timfiles
 from .utils import (
+    container_runtime,
     discover_pulsars,
     make_output_tree,
-    which_or_raise,
     cleanup_empty_dirs,
     remove_tree_if_exists,
 )
@@ -1175,10 +1175,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 f"singularity_image does not exist: {cfg.singularity_image}"
             )
 
-        which_or_raise(
-            "singularity",
-            hint="Install Singularity/Apptainer or load it in your environment.",
-        )
+        container_runtime(require=True)
 
     try:
         from git import Repo  # type: ignore

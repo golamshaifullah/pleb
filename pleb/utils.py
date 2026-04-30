@@ -6,10 +6,10 @@ used across pipeline modules.
 
 from __future__ import annotations
 
-import shutil
 import os
+import shutil
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 from datetime import datetime
 
 
@@ -39,6 +39,32 @@ def which_or_raise(cmd: str, hint: str = "") -> str:
             f"Required executable not found on PATH: {cmd}. {hint}".strip()
         )
     return path
+
+
+def first_available_executable(cmds: Sequence[str]) -> Optional[str]:
+    """Return the first executable name found on PATH."""
+    for cmd in cmds:
+        if shutil.which(cmd):
+            return cmd
+    return None
+
+
+def container_runtime(*, require: bool = False) -> str:
+    """Return ``singularity`` or ``apptainer`` depending on PATH.
+
+    When ``require`` is ``False``, fall back to ``"singularity"`` so pure
+    command-construction callers can still build a prefix in unit tests. Callers
+    that need an actual runnable binary should pass ``require=True``.
+    """
+    runtime = first_available_executable(("singularity", "apptainer"))
+    if runtime is not None:
+        return runtime
+    if require:
+        raise RuntimeError(
+            "Required executable not found on PATH: singularity/apptainer. "
+            "Install Singularity/Apptainer or load it in your environment."
+        )
+    return "singularity"
 
 
 def safe_mkdir(p: Path) -> None:

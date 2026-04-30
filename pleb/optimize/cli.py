@@ -10,6 +10,7 @@ try:
 except Exception:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
+from ..config import _find_nearest_git_root, _resolve_declared_path
 from .models import OptimizationConfig
 
 
@@ -18,22 +19,21 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(str(path))
-    base_dir = path.expanduser().resolve().parent
+    resolved_path = path.expanduser().resolve()
+    base_dir = resolved_path.parent
+    repo_root = _find_nearest_git_root(base_dir)
 
     def _path(raw):
         if raw in (None, ""):
             return None
-        p = Path(str(raw)).expanduser()
-        if not p.is_absolute():
-            p = base_dir / p
-        return p.resolve()
+        return _resolve_declared_path(str(raw), base_dir=base_dir, repo_root=repo_root)
 
-    if path.suffix.lower() == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
-    elif path.suffix.lower() in (".toml", ".tml"):
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    if resolved_path.suffix.lower() == ".json":
+        data = json.loads(resolved_path.read_text(encoding="utf-8"))
+    elif resolved_path.suffix.lower() in (".toml", ".tml"):
+        data = tomllib.loads(resolved_path.read_text(encoding="utf-8"))
     else:
-        raise ValueError(f"Unsupported config file type: {path.suffix}")
+        raise ValueError(f"Unsupported config file type: {resolved_path.suffix}")
     if "optimize" in data and isinstance(data["optimize"], dict):
         data = data["optimize"]
     return OptimizationConfig(
