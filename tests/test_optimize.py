@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from pleb.config import PipelineConfig
 from pleb.optimize.cli import load_optimization_config
 from pleb.optimize.fold_datasets import build_fold_dataset
 from pleb.optimize.folds import FoldConfig, load_fold_config
 from pleb.optimize.models import OptimizationConfig, OptimizationResult, TrialResult
 from pleb.optimize.objectives import compute_score, load_objective_config
-from pleb.optimize.optimizer import run_optimization
+from pleb.optimize.optimizer import _run_true_fold_reruns, run_optimization
 from pleb.optimize.report import write_pdf_report
 from pleb.optimize.scorers import score_run_dir
 from pleb.optimize.search_space import (
@@ -285,6 +286,84 @@ jobs = 1
     assert result.best_trial is not None
     assert (cfg.out_dir / "trials.csv").exists()
     assert (cfg.out_dir / "best_overrides.toml").exists()
+
+
+def test_true_fold_reruns_keep_repo_root_as_home_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".git").mkdir(parents=True)
+    dataset_root = repo_root / "dataset"
+    (dataset_root / "J0000+0000").mkdir(parents=True)
+    pipeline_cfg = PipelineConfig(
+        home_dir=repo_root,
+        singularity_image=repo_root / "tempo2.sif",
+        dataset_name="dataset",
+        results_dir=repo_root / "results",
+        branches=["main"],
+        reference_branch="main",
+        pulsars=["J0000+0000"],
+        run_tempo2=True,
+        run_pqc=True,
+    )
+    cfg = OptimizationConfig(
+        base_config_path=repo_root / "base.toml",
+        out_dir=repo_root / "results" / "optimize" / "study",
+        study_name="study",
+    )
+    trial = TrialResult(
+        trial_id=1,
+        status="ok",
+        params={"pqc_fdr_q": 0.01},
+        score=1.0,
+        metrics={},
+        run_dir=repo_root / "results" / "optimize" / "study" / "trial_0001",
+    )
+    fold_cfg = FoldConfig(mode="time_blocks", n_splits=1, time_col="mjd", backend_col="sys")
+    seen: dict[str, object] = {}
+
+    def fake_build_fold_dataset(*_args, **kwargs):
+        out_root = Path(kwargs["out_root"])
+        tmp_home = out_root / "fold_00"
+        tmp_dataset = tmp_home / dataset_root.name
+        tmp_dataset.mkdir(parents=True, exist_ok=True)
+        return tmp_home, "held_out"
+
+    def fake_run_fold_trial(*_args, **kwargs):
+        seen["home_dir"] = kwargs["home_dir"]
+        seen["dataset_name"] = kwargs["dataset_name"]
+        return repo_root / "results" / "optimize" / "study" / "trial_0001_fold_00"
+
+    def fake_score_run_dir(*_args, **_kwargs):
+        return {"n_toas": 1.0}, []
+
+    monkeypatch.setattr(
+        "pleb.optimize.optimizer.build_fold_dataset", fake_build_fold_dataset
+    )
+    monkeypatch.setattr("pleb.optimize.optimizer.run_fold_trial", fake_run_fold_trial)
+    monkeypatch.setattr("pleb.optimize.optimizer.score_run_dir", fake_score_run_dir)
+
+    folds = _run_true_fold_reruns(
+        cfg,
+        trial,
+        pipeline_cfg,
+        fold_cfg,
+        load_search_space(
+            Path("/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml")
+        ),
+        load_objective_config(
+            Path(
+                "/work/git_projects/pleb/configs/optimize/objectives/single_pulsar_variant_consensus_production.toml"
+            )
+        ),
+        selected_variant=None,
+        variant_strategy="single",
+        backend_col="sys",
+    )
+
+    assert len(folds) == 1
+    assert seen["home_dir"] == repo_root.resolve()
+    assert seen["dataset_name"] == ".pleb_optimize_fold_datasets/study/trial_0001/fold_00/dataset"
 
 
 def test_parameter_override_helpers() -> None:

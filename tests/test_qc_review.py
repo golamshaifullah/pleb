@@ -28,6 +28,24 @@ def _write_qc(path: Path) -> None:
     ).to_csv(path, index=False)
 
 
+def _write_general2(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "Starting general2 plugin",
+                "sat freq pre post err",
+                "58000.0 1400.0 1.0e-06 5.0e-07 1.0e-07",
+                "58000.0 1400.0 2.0e-06 6.0e-07 1.1e-07",
+                "58001.0 800.0 3.0e-06 -7.0e-07 2.0e-07",
+                "Finished general2 plugin",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_manual_override_targets_one_duplicate_mjd_row(tmp_path: Path) -> None:
     qc_path = tmp_path / "J0000+0000_qc.csv"
     _write_qc(qc_path)
@@ -106,3 +124,20 @@ def test_load_qc_frames_rejects_explicit_reviewed_qc_csv(tmp_path: Path) -> None
         assert "Refusing to load reviewed QC artifact" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected reviewed_qc.csv to be rejected")
+
+
+def test_load_qc_frames_attaches_tempo2_general2_postfit_columns(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    qc_path = run_dir / "qc" / "step2_detect" / "J0000+0000_qc.csv"
+    qc_path.parent.mkdir(parents=True)
+    _write_qc(qc_path)
+    _write_general2(run_dir / "general2" / "J0000+0000_step2_detect.general2")
+
+    qc = load_qc_frames(run_dir)
+
+    assert "tempo2_post" in qc.columns
+    assert "tempo2_post_us" in qc.columns
+    assert "tempo2_pre" in qc.columns
+    assert list(qc["tempo2_post"].round(12)) == [5.0e-07, 6.0e-07, -7.0e-07]
+    assert list(qc["tempo2_pre"].round(12)) == [1.0e-06, 2.0e-06, 3.0e-06]
+    assert list(qc["tempo2_post_us"].round(3)) == [0.5, 0.6, -0.7]

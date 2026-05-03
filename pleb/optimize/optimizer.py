@@ -327,13 +327,20 @@ def _run_true_fold_reruns(
     backend_col: str,
 ) -> List[FoldSummary]:
     del objective
-    dataset_name = Path(pipeline_cfg.resolved().dataset_name).name
-    work_root = Path(cfg.out_dir) / "_fold_datasets" / f"trial_{trial.trial_id:04d}"
+    resolved_cfg = pipeline_cfg.resolved()
+    repo_root = Path(resolved_cfg.home_dir).resolve()
+    dataset_root = Path(resolved_cfg.dataset_name).resolve()
+    work_root = (
+        repo_root
+        / ".pleb_optimize_fold_datasets"
+        / str(cfg.study_name)
+        / f"trial_{trial.trial_id:04d}"
+    )
     out: List[FoldSummary] = []
     try:
         for fold_index in range(int(fold_cfg.n_splits)):
             tmp_home, held_out_label = build_fold_dataset(
-                pipeline_cfg.resolved(),
+                resolved_cfg,
                 fold_cfg=fold_cfg,
                 fold_index=fold_index,
                 out_root=work_root,
@@ -341,13 +348,15 @@ def _run_true_fold_reruns(
                     selected_variant if variant_strategy == "select_best" else None
                 ),
             )
+            fold_dataset_root = (tmp_home / dataset_root.name).resolve()
+            fold_dataset_name = fold_dataset_root.relative_to(repo_root).as_posix()
             fold_run_dir = run_fold_trial(
                 cfg,
                 trial.trial_id,
                 trial.params,
                 fold_label=f"fold_{fold_index:02d}",
-                home_dir=tmp_home,
-                dataset_name=dataset_name,
+                home_dir=repo_root,
+                dataset_name=fold_dataset_name,
                 selected_variant=(
                     selected_variant if variant_strategy == "select_best" else None
                 ),

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from functools import lru_cache
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,8 @@ from typing import Iterable, Mapping, Sequence
 from uuid import uuid4
 
 import pandas as pd
+
+from .parsers import read_general2
 
 REVIEW_ACTIONS = (
     "mark_bad",
@@ -117,6 +120,17 @@ TIMFILE_COLUMNS = (
     "timfile",
     "filename",
     "file",
+)
+
+TEMPO2_REVIEW_COLUMNS = (
+    "tempo2_pre",
+    "tempo2_pre_us",
+    "tempo2_post",
+    "tempo2_post_us",
+    "tempo2_postfit",
+    "tempo2_postfit_us",
+    "tempo2_err",
+    "tempo2_err_us",
 )
 
 
@@ -277,6 +291,224 @@ def _series_or_default(df: pd.DataFrame, col: str | None, default: object = "") 
     return df[col]
 
 
+def _guess_general2_branch_hint(path: Path) -> str | None:
+    try:
+        parent = path.parent
+        if parent.parent.name.lower() == "qc" and parent.name:
+            return parent.name
+    except Exception:
+        pass
+    return None
+
+
+def _guess_general2_variant_hint(path: Path, pulsar: str) -> str | None:
+    stem = path.stem
+    for suffix in ("_qc",):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+    prefixes = (f"{pulsar}.", f"{pulsar}_")
+    for prefix in prefixes:
+        if stem.startswith(prefix):
+            variant = stem[len(prefix) :].strip("._")
+            if variant and variant.lower() != "qc":
+                return variant
+    return None
+
+
+def _candidate_general2_roots(path: Path, root: Path | None) -> list[Path]:
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in [root, *path.parents]:
+        if candidate is None:
+            continue
+        try:
+            resolved = candidate.expanduser().resolve()
+        except Exception:
+            resolved = candidate.expanduser()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if (resolved / "general2").is_dir():
+            roots.append(resolved)
+    return roots
+
+
+def _find_general2_file(
+    qc_path: Path,
+    *,
+    root: Path | None = None,
+    pulsar: str | None = None,
+) -> Path | None:
+    psr = str(pulsar or _guess_pulsar_from_path(qc_path)).strip()
+    if not psr:
+        return None
+    branch_hint = _guess_general2_branch_hint(qc_path)
+    variant_hint = _guess_general2_variant_hint(qc_path, psr)
+
+    candidates: list[Path] = []
+    for base in _candidate_general2_roots(qc_path, root):
+        gdir = base / "general2"
+        exact = gdir / f"{psr}_{branch_hint}.general2" if branch_hint else None
+        if exact is not None and exact.exists():
+            return exact
+        candidates.extend(sorted(gdir.glob(f"{psr}_*.general2")))
+        plain = gdir / f"{psr}.general2"
+        if plain.exists():
+            candidates.append(plain)
+
+    if not candidates:
+        return None
+
+    if branch_hint:
+        branch_hits = [
+            p
+            for p in candidates
+            if p.stem == f"{psr}_{branch_hint}" or p.stem.endswith(f"_{branch_hint}")
+        ]
+        if len(branch_hits) == 1:
+            return branch_hits[0]
+        if branch_hits:
+            candidates = branch_hits
+
+    if variant_hint:
+        variant_text = variant_hint.lower()
+        non_variant_hits = [p for p in candidates if variant_text not in p.stem.lower()]
+        if len(non_variant_hits) == 1:
+            return non_variant_hits[0]
+        if non_variant_hits:
+            candidates = non_variant_hits
+
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _general2_cache_key(path: Path) -> tuple[str, int, int] | None:
+    try:
+        stat = path.stat()
+    except Exception:
+        return None
+    return (str(path.resolve()), int(stat.st_mtime_ns), int(stat.st_size))
+
+
+@lru_cache(maxsize=256)
+def _read_general2_cached(
+    path_str: str,
+    mtime_ns: int,
+    size_bytes: int,
+) -> pd.DataFrame:
+    del mtime_ns, size_bytes  # cache key only
+    return read_general2(Path(path_str))
+
+
+def available_tempo2_general2_columns(
+    qc_path: str | Path,
+    *,
+    root: str | Path | None = None,
+    pulsar: str | None = None,
+) -> list[str]:
+    """Return virtual TEMPO2 residual columns available for one QC CSV."""
+
+    g2 = _find_general2_file(
+        Path(qc_path).expanduser(),
+        root=(Path(root).expanduser() if root is not None else None),
+        pulsar=pulsar,
+    )
+    if g2 is None:
+        return []
+    cache_key = _general2_cache_key(g2)
+    if cache_key is None:
+        return []
+    try:
+        df = _read_general2_cached(*cache_key)
+    except Exception:
+        return []
+    if not {"sat", "freq", "post", "err"}.issubset(df.columns):
+        return []
+    cols = ["tempo2_post", "tempo2_post_us", "tempo2_postfit", "tempo2_postfit_us"]
+    if "pre" in df.columns:
+        cols = ["tempo2_pre", "tempo2_pre_us", *cols]
+    cols.extend(["tempo2_err", "tempo2_err_us"])
+    return cols
+
+
+def attach_tempo2_general2_residuals(
+    df: pd.DataFrame,
+    qc_path: str | Path,
+    *,
+    root: str | Path | None = None,
+    pulsar: str | None = None,
+) -> pd.DataFrame:
+    """Attach explicit TEMPO2 general2 residual columns to a QC dataframe.
+
+    The join is deterministic and uses rounded ``(mjd, freq, duplicate_index)``
+    keys so duplicate TOAs at the same epoch/frequency remain stable.
+    """
+
+    if df.empty or "mjd" not in df.columns or "freq" not in df.columns:
+        return df
+    g2 = _find_general2_file(
+        Path(qc_path).expanduser(),
+        root=(Path(root).expanduser() if root is not None else None),
+        pulsar=pulsar,
+    )
+    if g2 is None:
+        return df
+    cache_key = _general2_cache_key(g2)
+    if cache_key is None:
+        return df
+    try:
+        gen = _read_general2_cached(*cache_key)
+    except Exception:
+        return df
+    required = {"sat", "freq", "post", "err"}
+    if not required.issubset(gen.columns):
+        return df
+
+    q = df.copy()
+    g = gen.copy()
+
+    # QC CSV MJDs and tempo2 ``sat`` values can differ at sub-millisecond level
+    # after separate text round-trips, so use a slightly coarser deterministic key.
+    q["_tempo2_mjd_key"] = pd.to_numeric(q["mjd"], errors="coerce").round(8)
+    q["_tempo2_freq_key"] = pd.to_numeric(q["freq"], errors="coerce").round(6)
+    g["_tempo2_mjd_key"] = pd.to_numeric(g["sat"], errors="coerce").round(8)
+    g["_tempo2_freq_key"] = pd.to_numeric(g["freq"], errors="coerce").round(6)
+
+    q["_tempo2_dup_index"] = q.groupby(
+        ["_tempo2_mjd_key", "_tempo2_freq_key"], dropna=False
+    ).cumcount()
+    g["_tempo2_dup_index"] = g.groupby(
+        ["_tempo2_mjd_key", "_tempo2_freq_key"], dropna=False
+    ).cumcount()
+
+    keep_cols = ["_tempo2_mjd_key", "_tempo2_freq_key", "_tempo2_dup_index", "post", "err"]
+    if "pre" in g.columns:
+        keep_cols.append("pre")
+    merged = q.merge(g[keep_cols], on=["_tempo2_mjd_key", "_tempo2_freq_key", "_tempo2_dup_index"], how="left")
+
+    if "pre" in merged.columns:
+        merged["tempo2_pre"] = pd.to_numeric(merged["pre"], errors="coerce")
+        merged["tempo2_pre_us"] = merged["tempo2_pre"] * 1.0e6
+    merged["tempo2_post"] = pd.to_numeric(merged["post"], errors="coerce")
+    merged["tempo2_post_us"] = merged["tempo2_post"] * 1.0e6
+    merged["tempo2_postfit"] = merged["tempo2_post"]
+    merged["tempo2_postfit_us"] = merged["tempo2_post_us"]
+    merged["tempo2_err"] = pd.to_numeric(merged["err"], errors="coerce")
+    merged["tempo2_err_us"] = merged["tempo2_err"] * 1.0e6
+    return merged.drop(
+        columns=[
+            "_tempo2_mjd_key",
+            "_tempo2_freq_key",
+            "_tempo2_dup_index",
+            "pre",
+            "post",
+            "err",
+        ],
+        errors="ignore",
+    )
+
+
 def load_qc_csv(path: str | Path, *, root: str | Path | None = None) -> pd.DataFrame:
     """Load a single QC CSV and attach review metadata."""
 
@@ -305,6 +537,12 @@ def load_qc_csv(path: str | Path, *, root: str | Path | None = None) -> pd.DataF
     out["freq"] = pd.to_numeric(_series_or_default(out, cols.frequency), errors="coerce")
     out["backend"] = _series_or_default(out, cols.backend).fillna("").astype(str)
     out["timfile"] = _series_or_default(out, cols.timfile).fillna("").astype(str)
+    out = attach_tempo2_general2_residuals(
+        out,
+        path,
+        root=root,
+        pulsar=str(out["pulsar"].iloc[0]) if len(out) else None,
+    )
 
     # Use row-wise apply here for clarity; QC review tables are interactive-sized
     # after filtering, and this is not part of the tempo-fitting hot path.

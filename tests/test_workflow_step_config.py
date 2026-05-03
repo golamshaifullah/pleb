@@ -89,6 +89,61 @@ def test_workflow_step_uses_top_level_config_base_dir(
     assert captured["home_dir"] == str(step_home.resolve())
 
 
+def test_workflow_step_loads_override_toml_from_workflow_dir(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workflow_dir = tmp_path / "output_repo" / "workflows"
+    step_cfg = tmp_path / "pleb_repo" / "configs" / "runs" / "pipeline.toml"
+    repo_home = tmp_path / "dataset_repo"
+    repo_home.mkdir(parents=True, exist_ok=True)
+    (repo_home / ".git").mkdir()
+    image = tmp_path / "tempo2.sif"
+    image.write_text("", encoding="utf-8")
+
+    _write(
+        step_cfg,
+        f"""
+home_dir = "{repo_home}"
+singularity_image = "{image}"
+dataset_name = "."
+results_dir = "{tmp_path / "results"}"
+pqc_delta_chi2_thresh = 25.0
+pqc_glitch_enabled = true
+""",
+    )
+    _write(
+        workflow_dir / "artifacts" / "best_overrides.toml",
+        """
+pqc_delta_chi2_thresh = 17.0
+pqc_glitch_enabled = false
+""",
+    )
+
+    captured = {}
+
+    def _fake_run_pipeline(cfg):
+        captured["delta_chi2"] = float(getattr(cfg, "pqc_delta_chi2_thresh"))
+        captured["glitch_enabled"] = bool(getattr(cfg, "pqc_glitch_enabled"))
+        tag = tmp_path / "run_tag_override_file"
+        tag.mkdir(parents=True, exist_ok=True)
+        return {"tag": tag, "qc": tag / "qc", "fix_dataset": tag / "fix_dataset"}
+
+    monkeypatch.setattr("pleb.workflow.run_pipeline", _fake_run_pipeline)
+
+    step = {
+        "name": "pipeline",
+        "config": str(step_cfg),
+        "set_from_toml": ["artifacts/best_overrides.toml"],
+        "set": ["pqc_delta_chi2_thresh=19.0"],
+        "overrides": {"pqc_delta_chi2_thresh": 23.0},
+    }
+    ctx = WorkflowContext()
+    _run_step(step, {}, ctx, workflow_base_dir=workflow_dir, cfg_base_dir=workflow_dir)
+
+    assert captured["delta_chi2"] == 23.0
+    assert captured["glitch_enabled"] is False
+
+
 def test_workflow_whitenoise_step_dispatches_pipeline(
     monkeypatch, tmp_path: Path
 ) -> None:

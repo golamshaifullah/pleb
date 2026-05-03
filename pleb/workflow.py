@@ -87,8 +87,17 @@ def _resolve_config_path(config_arg: str | Path, *, base_dir: Path | None = None
 
 
 def _normalize_step(step: Any) -> Dict[str, Any]:
+    def _normalize_set_from_toml(raw: Any) -> List[str]:
+        if raw in (None, ""):
+            return []
+        if isinstance(raw, str):
+            return [raw]
+        if isinstance(raw, list):
+            return [str(item) for item in raw if item not in (None, "")]
+        raise ValueError(f"Invalid set_from_toml value: {raw!r}")
+
     if isinstance(step, str):
-        return {"name": step, "set": [], "overrides": {}}
+        return {"name": step, "set": [], "overrides": {}, "set_from_toml": []}
     if isinstance(step, dict):
         if "name" in step:
             return {
@@ -97,6 +106,7 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "overrides": dict(step.get("overrides", {}) or {}),
                 "run_dir": step.get("run_dir"),
                 "config": step.get("config"),
+                "set_from_toml": _normalize_set_from_toml(step.get("set_from_toml")),
             }
         if "step" in step:
             return {
@@ -105,6 +115,7 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "overrides": dict(step.get("overrides", {}) or {}),
                 "run_dir": step.get("run_dir"),
                 "config": step.get("config"),
+                "set_from_toml": _normalize_set_from_toml(step.get("set_from_toml")),
             }
         if len(step) == 1:
             name, payload = next(iter(step.items()))
@@ -115,6 +126,9 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "overrides": dict(payload.get("overrides", {}) or {}),
                 "run_dir": payload.get("run_dir"),
                 "config": payload.get("config"),
+                "set_from_toml": _normalize_set_from_toml(
+                    payload.get("set_from_toml")
+                ),
             }
     raise ValueError(f"Invalid step format: {step!r}")
 
@@ -150,9 +164,16 @@ def _normalize_group(group: Any) -> Dict[str, Any]:
 
 
 def _apply_overrides(
-    cfg_dict: Dict[str, Any], set_list: List[str], overrides: Dict[str, Any]
+    cfg_dict: Dict[str, Any],
+    set_list: List[str],
+    overrides: Dict[str, Any],
+    *,
+    file_overrides: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     d = copy.deepcopy(cfg_dict)
+    for mapping in file_overrides or []:
+        for k, v in mapping.items():
+            _set_dotted_key(d, k, v)
     for item in set_list or []:
         if "=" not in item:
             raise ValueError(f"workflow set expects KEY=VALUE, got: {item!r}")
@@ -169,13 +190,80 @@ def _build_cfg(
     base_dict: Dict[str, Any],
     set_list: List[str],
     overrides: Dict[str, Any],
+    file_overrides: List[Dict[str, Any]] | None = None,
     *,
     base_dir: Path | None = None,
 ) -> PipelineConfig | IngestConfig:
-    d = _apply_overrides(base_dict, set_list, overrides)
+    d = _apply_overrides(
+        base_dict,
+        set_list,
+        overrides,
+        file_overrides=file_overrides,
+    )
     if step_name == "ingest":
         return IngestConfig.from_dict(d, base_dir=base_dir)
     return PipelineConfig.from_dict(d, base_dir=base_dir)
+
+
+def _resolve_step_artifact_path(
+    path_arg: str | Path,
+    *,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
+) -> Path:
+    path = Path(path_arg).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    candidates: List[Path] = []
+    if workflow_base_dir is not None:
+        candidates.append((workflow_base_dir / path).resolve())
+    if cfg_base_dir is not None:
+        candidate = (cfg_base_dir / path).resolve()
+        if candidate not in candidates:
+            candidates.append(candidate)
+    if not candidates:
+        return path.resolve()
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _flatten_override_mapping(
+    data: Dict[str, Any], prefix: str = ""
+) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key, value in data.items():
+        dotted = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, dict):
+            out.update(_flatten_override_mapping(value, dotted))
+        else:
+            out[dotted] = value
+    return out
+
+
+def _load_step_override_file(
+    path_arg: str | Path,
+    *,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
+) -> Dict[str, Any]:
+    path = _resolve_step_artifact_path(
+        path_arg,
+        workflow_base_dir=workflow_base_dir,
+        cfg_base_dir=cfg_base_dir,
+    )
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    if path.suffix.lower() == ".json":
+        data = json.loads(path.read_text(encoding="utf-8"))
+    elif path.suffix.lower() in (".toml", ".tml"):
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    else:
+        raise ValueError(f"Unsupported override file type: {path.suffix}")
+    if not isinstance(data, dict):
+        raise ValueError(f"Override file must contain a top-level table/object: {path}")
+    return _flatten_override_mapping(data)
 
 
 def _find_latest_fix_summary(out_paths: Dict[str, Path]) -> Optional[Path]:
@@ -259,6 +347,7 @@ def _run_step(
     step_cfg_path = step.get("config")
     step_base_dict = base_dict
     step_cfg_base_dir = cfg_base_dir
+    file_overrides: List[Dict[str, Any]] = []
     resolved_step_cfg_path: Path | None = None
     if step_cfg_path:
         resolved_step_cfg_path = _resolve_config_path(
@@ -283,11 +372,20 @@ def _run_step(
             return
         step_base_dict = _load_config_dict(str(resolved_step_cfg_path))
         step_cfg_base_dir = resolved_step_cfg_path.parent
+    for override_path in step.get("set_from_toml", []) or []:
+        file_overrides.append(
+            _load_step_override_file(
+                override_path,
+                workflow_base_dir=workflow_base_dir,
+                cfg_base_dir=step_cfg_base_dir,
+            )
+        )
     cfg = _build_cfg(
         name,
         step_base_dict,
         step.get("set", []),
         step.get("overrides", {}),
+        file_overrides=file_overrides,
         base_dir=step_cfg_base_dir,
     )
     if name in (

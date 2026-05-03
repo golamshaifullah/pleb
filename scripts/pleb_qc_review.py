@@ -57,6 +57,12 @@ IMPORTANT_DECISIONS = {"BAD_TOA", "REVIEW_EVENT", "EVENT"}
 
 # Prefer fitted/postfit residuals first. Raw-ish residual columns are fallback.
 RESIDUAL_PREFERENCE = (
+    "tempo2_post_us",
+    "tempo2_postfit_us",
+    "tempo2_post",
+    "tempo2_postfit",
+    "tempo2_pre_us",
+    "tempo2_pre",
     "postfit_us",
     "post_fit_us",
     "postfit_resid_us",

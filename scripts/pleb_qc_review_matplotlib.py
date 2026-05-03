@@ -43,6 +43,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from pleb.qc_review import (
+    attach_tempo2_general2_residuals,
+    available_tempo2_general2_columns,
+)
+
 
 REVIEW_ACTIONS = (
     "mark_bad",
@@ -81,6 +86,12 @@ TIME_COLUMNS = (
 
 # Prefer post-fit/JUMP-fitted residuals first. Raw-ish residuals are fallback.
 RESIDUAL_PREFERENCE = (
+    "tempo2_post_us",
+    "tempo2_postfit_us",
+    "tempo2_post",
+    "tempo2_postfit",
+    "tempo2_pre_us",
+    "tempo2_pre",
     "postfit_us",
     "post_fit_us",
     "postfit_resid_us",
@@ -291,6 +302,15 @@ def residual_column_options(columns: Sequence[str]) -> list[str]:
     return options
 
 
+def _header_with_virtual_tempo2_columns(csv_path: Path, root_dir: Path, header: Sequence[str]) -> list[str]:
+    extra = available_tempo2_general2_columns(csv_path, root=root_dir)
+    out = [str(c) for c in header]
+    for col in extra:
+        if col not in out:
+            out.append(col)
+    return out
+
+
 def _read_header(path: Path) -> list[str]:
     return list(pd.read_csv(path, nrows=0).columns)
 
@@ -408,6 +428,14 @@ def load_qc_narrow(
     out["freq"] = pd.to_numeric(_series_or_default(out, freq_col), errors="coerce")
     out["backend"] = _series_or_default(out, backend_col).fillna("").astype(str)
     out["timfile"] = _series_or_default(out, timfile_col).fillna("").astype(str)
+    out = attach_tempo2_general2_residuals(
+        out,
+        path,
+        root=root,
+        pulsar=str(out["pulsar"].iloc[0]) if len(out) else None,
+    )
+    if residual_col in out.columns:
+        out["residual"] = pd.to_numeric(out[residual_col], errors="coerce")
 
     # Vectorizing the hash is awkward; this still avoids the old full-row dict
     # conversion and hashes only narrow identity fields.
@@ -817,7 +845,9 @@ def main() -> None:
         st.error(f"Failed to read CSV header: {csv_path}: {e}")
         return
 
-    residual_options = residual_column_options(header)
+    residual_options = residual_column_options(
+        _header_with_virtual_tempo2_columns(csv_path, root_dir, header)
+    )
     if not residual_options:
         st.error("No residual-like column found in this QC CSV.")
         st.write("Columns:", header)
