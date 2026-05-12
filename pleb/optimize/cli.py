@@ -14,6 +14,25 @@ from ..config import _find_nearest_git_root, _resolve_declared_path
 from .models import OptimizationConfig
 
 
+def _normalize_fixed_overrides(
+    raw: object,
+    *,
+    base_dir: Path,
+    repo_root: Path | None,
+) -> dict[str, object] | None:
+    if not isinstance(raw, dict):
+        return None
+    out = dict(raw)
+    home_dir = out.get("home_dir")
+    if home_dir not in (None, ""):
+        resolved_home = _resolve_declared_path(
+            str(home_dir), base_dir=base_dir, repo_root=None
+        )
+        if resolved_home is not None:
+            out["home_dir"] = str(resolved_home)
+    return out
+
+
 def load_optimization_config(path: Path) -> OptimizationConfig:
     """Load optimization settings from TOML or JSON."""
     path = Path(path)
@@ -74,9 +93,19 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
         fail_fast=bool(data.get("fail_fast", False)),
         write_best_config=bool(data.get("write_best_config", True)),
         variant_strategy=str(data.get("variant_strategy", "auto")),
-        fixed_overrides=(
-            dict(data.get("fixed_overrides", {}))
-            if isinstance(data.get("fixed_overrides"), dict)
-            else None
+        fixed_overrides=_normalize_fixed_overrides(
+            data.get("fixed_overrides"), base_dir=base_dir, repo_root=repo_root
         ),
+        post_apply_eval=bool(data.get("post_apply_eval", False)),
+        post_apply_source_branch=(
+            None
+            if data.get("post_apply_source_branch") in (None, "")
+            else str(data.get("post_apply_source_branch"))
+        ),
+        post_apply_qc_branch=(
+            None
+            if data.get("post_apply_qc_branch") in (None, "")
+            else str(data.get("post_apply_qc_branch"))
+        ),
+        post_apply_qc_action=str(data.get("post_apply_qc_action", "delete")),
     )

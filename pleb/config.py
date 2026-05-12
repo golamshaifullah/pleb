@@ -702,6 +702,8 @@ class PipelineConfig:
         ingest_commit_message: Commit message for ingest.
         compare_public_out_dir: Optional output directory for public-release
             comparisons.
+        compare_public_cache_dir: Optional shared cache directory for
+            public-release downloads/extractions.
         compare_public_providers_path: Optional providers catalog path for
             public-release comparisons.
     """
@@ -732,6 +734,11 @@ class PipelineConfig:
 
     # Output directory name: None -> timestamped
     outdir_name: Optional[str] = None
+
+    # When true, dataset_name already points at a pre-materialized on-disk dataset
+    # and read-only branch stages should use it directly instead of re-snapshotting
+    # from Git. This is primarily used by optimize trial/fold runners.
+    readonly_materialized_dataset: bool = False
 
     # Remove empty output folders after a run
     cleanup_output_tree: bool = True
@@ -1038,6 +1045,7 @@ class PipelineConfig:
     ingest_commit_message: Optional[str] = None
     ingest_verify: bool = False
     compare_public_out_dir: Optional[Path] = None
+    compare_public_cache_dir: Optional[Path] = None
     compare_public_providers_path: Optional[Path] = None
 
     def resolved(self) -> "PipelineConfig":
@@ -1176,6 +1184,11 @@ class PipelineConfig:
                 _resolve_declared_path(c.compare_public_out_dir, repo_root=c.home_dir)
                 or Path(c.compare_public_out_dir)
             )
+        if c.compare_public_cache_dir is not None:
+            c.compare_public_cache_dir = (
+                _resolve_declared_path(c.compare_public_cache_dir, repo_root=c.home_dir)
+                or Path(c.compare_public_cache_dir)
+            )
         if c.compare_public_providers_path is not None:
             c.compare_public_providers_path = (
                 _resolve_declared_path(
@@ -1242,6 +1255,8 @@ class PipelineConfig:
             d["ingest_output_dir"] = str(d["ingest_output_dir"])
         if d.get("compare_public_out_dir") is not None:
             d["compare_public_out_dir"] = str(d["compare_public_out_dir"])
+        if d.get("compare_public_cache_dir") is not None:
+            d["compare_public_cache_dir"] = str(d["compare_public_cache_dir"])
         if d.get("compare_public_providers_path") is not None:
             d["compare_public_providers_path"] = str(d["compare_public_providers_path"])
         return d
@@ -1320,6 +1335,9 @@ class PipelineConfig:
             pulsars=d.get("pulsars", "ALL"),
             outdir_name=(
                 None if d.get("outdir_name") in (None, "") else d.get("outdir_name")
+            ),
+            readonly_materialized_dataset=bool(
+                d.get("readonly_materialized_dataset", False)
             ),
             epoch=str(d.get("epoch", "55000")),
             force_rerun=bool(d.get("force_rerun", False)),
@@ -1731,6 +1749,11 @@ class PipelineConfig:
             compare_public_out_dir=(
                 Path(d["compare_public_out_dir"])
                 if d.get("compare_public_out_dir")
+                else None
+            ),
+            compare_public_cache_dir=(
+                Path(d["compare_public_cache_dir"])
+                if d.get("compare_public_cache_dir")
                 else None
             ),
             compare_public_providers_path=(

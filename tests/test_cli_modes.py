@@ -43,6 +43,25 @@ def test_compare_public_parser_accepts_required_arguments() -> None:
     assert str(ns.out_dir).endswith("public_compare")
 
 
+def test_compare_public_parser_accepts_local_branch_argument() -> None:
+    p = build_compare_public_parser()
+    ns = p.parse_args(["--out-dir", "results/public_compare", "--local-branch", "step6"])
+    assert ns.local_branch == "step6"
+
+
+def test_compare_public_parser_accepts_cache_dir_argument() -> None:
+    p = build_compare_public_parser()
+    ns = p.parse_args(
+        [
+            "--out-dir",
+            "results/public_compare",
+            "--cache-dir",
+            "/tmp/public_release_cache",
+        ]
+    )
+    assert str(ns.cache_dir) == "/tmp/public_release_cache"
+
+
 def test_optimize_parser_accepts_config_argument() -> None:
     p = build_optimize_parser()
     ns = p.parse_args(["--config", "configs/optimize/runs/example_pipeline.toml"])

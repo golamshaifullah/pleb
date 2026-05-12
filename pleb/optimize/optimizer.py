@@ -7,11 +7,12 @@ from random import Random
 from typing import Any, Dict, List
 
 from ..config import PipelineConfig
-from ..config_io import _load_config_dict, _set_dotted_key
+from ..config_io import _dump_toml_no_nulls, _load_config_dict, _set_dotted_key
 from .folds import load_fold_config
 from .fold_datasets import build_fold_dataset
 from .models import OptimizationConfig, OptimizationResult, TrialResult
 from .objectives import compute_score, load_objective_config, violated_constraints
+from .post_apply import run_post_apply_evaluation
 from .results import write_results
 from .report import write_markdown_report, write_pdf_report
 from .models import FoldSummary
@@ -27,9 +28,16 @@ from .scorers import (
 from .search_space import (
     active_parameter_count,
     load_search_space,
+    split_backend_profile_parameters,
     sample_parameters,
 )
-from .trial_runner import run_fold_trial, run_trial
+from .trial_runner import (
+    _load_backend_profile_doc,
+    _prepare_materialized_trial_dataset,
+    _profile_source_path,
+    run_fold_trial,
+    run_trial,
+)
 from ..utils import remove_tree_if_exists
 
 
@@ -68,7 +76,7 @@ def run_optimization(cfg: OptimizationConfig) -> OptimizationResult:
     write_markdown_report(result)
     write_pdf_report(result)
     if cfg.write_best_config and best is not None:
-        write_best_overrides(result.out_dir / "best_overrides.toml", best.params)
+        write_best_outputs(cfg, result.out_dir, best.params)
     return result
 
 
@@ -76,6 +84,72 @@ def write_best_overrides(path: Path, params: Dict[str, Any]) -> None:
     """Write best parameters as a flat TOML snippet."""
     lines = [f"{key} = {_toml_literal(value)}" for key, value in sorted(params.items())]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_best_outputs(
+    cfg: OptimizationConfig, out_dir: Path, params: Dict[str, Any]
+) -> None:
+    """Write reusable best-trial outputs for downstream workflow steps."""
+    best_overrides = _best_override_dict(cfg, out_dir, params)
+    write_best_overrides(out_dir / "best_overrides.toml", best_overrides)
+
+
+def _best_override_dict(
+    cfg: OptimizationConfig, out_dir: Path, params: Dict[str, Any]
+) -> Dict[str, Any]:
+    flat_best, sampled_backend_profiles = split_backend_profile_parameters(params)
+    raw = _load_best_export_base_config(cfg)
+    fixed_flat, fixed_backend_profiles = split_backend_profile_parameters(
+        cfg.fixed_overrides or {}
+    )
+
+    best_overrides = dict(flat_best)
+    source_path = _profile_source_path(raw)
+    needs_generated_profile = bool(sampled_backend_profiles or fixed_backend_profiles)
+
+    if needs_generated_profile:
+        profile_doc = _load_backend_profile_doc(source_path)
+        profile_root = profile_doc.setdefault("backend_profiles", {})
+        for profiles in (fixed_backend_profiles, sampled_backend_profiles):
+            for pattern, values in profiles.items():
+                existing = profile_root.get(pattern, {})
+                if not isinstance(existing, dict):
+                    existing = {}
+                merged = dict(existing)
+                merged.update(values)
+                profile_root[pattern] = merged
+        profile_path = out_dir / "best_backend_profiles.toml"
+        profile_path.write_text(_dump_toml_no_nulls(profile_doc), encoding="utf-8")
+        best_overrides["pqc_backend_profiles_path"] = _best_profile_override_path(
+            profile_path, raw
+        )
+        return best_overrides
+
+    if "pqc_backend_profiles_path" in fixed_flat and source_path is not None:
+        best_overrides["pqc_backend_profiles_path"] = _best_profile_override_path(
+            source_path, raw
+        )
+    return best_overrides
+
+
+def _load_best_export_base_config(cfg: OptimizationConfig) -> Dict[str, Any]:
+    raw = _load_config_dict(str(cfg.base_config_path))
+    flat_fixed, _ = split_backend_profile_parameters(cfg.fixed_overrides or {})
+    for key, value in flat_fixed.items():
+        _set_dotted_key(raw, str(key), value)
+    return raw
+
+
+def _best_profile_override_path(path: Path, raw: Dict[str, Any]) -> str:
+    home_dir = raw.get("home_dir")
+    if home_dir not in (None, ""):
+        try:
+            return path.resolve().relative_to(
+                Path(str(home_dir)).expanduser().resolve()
+            ).as_posix()
+        except Exception:
+            pass
+    return str(path.resolve())
 
 
 def _run_random_trials(cfg, space, objective, fold_cfg) -> List[TrialResult]:
@@ -168,7 +242,9 @@ def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
     pipeline_cfg = None
     backend_col = _resolve_trial_backend_col(None, fold_cfg)
     try:
-        pipeline_cfg = _build_pipeline_config_for_trial(cfg, trial.params)
+        pipeline_cfg = _build_pipeline_config_for_trial(
+            cfg, trial.trial_id, trial.params
+        )
     except Exception:
         if fold_cfg.mode != "none" and fold_cfg.n_splits > 1:
             raise
@@ -202,6 +278,14 @@ def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
             parameter_complexity_penalty=parameter_complexity_penalty,
             backend_col=backend_col,
         )
+    if cfg.post_apply_eval and pipeline_cfg is not None:
+        post_apply_metrics = run_post_apply_evaluation(
+            cfg,
+            trial,
+            pipeline_cfg=pipeline_cfg,
+            backend_col=backend_col,
+        )
+        full_metrics.update(post_apply_metrics)
     if fold_cfg.mode != "none" and fold_cfg.n_splits > 1:
         fold_summaries = _run_true_fold_reruns(
             cfg,
@@ -217,6 +301,10 @@ def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
         averaged = _average_fold_metrics(fold_summaries)
         for key, value in full_metrics.items():
             averaged[f"full_{key}"] = value
+        if cfg.post_apply_eval:
+            for key, value in full_metrics.items():
+                if key.startswith("post_apply_"):
+                    averaged[key] = value
         averaged["stability"] = _fold_metric_stability(fold_summaries, "bad_fraction")
         averaged["event_stability"] = _fold_metric_stability(
             fold_summaries, "event_fraction"
@@ -415,13 +503,18 @@ def _fold_metric_stability(folds: List[FoldSummary], key: str) -> float:
 
 
 def _build_pipeline_config_for_trial(
-    cfg: OptimizationConfig, params: Dict[str, Any]
+    cfg: OptimizationConfig, trial_id: int, params: Dict[str, Any]
 ) -> PipelineConfig:
     raw = _load_config_dict(str(cfg.base_config_path))
     for key, value in params.items():
         _set_dotted_key(raw, str(key), value)
     for key, value in (cfg.fixed_overrides or {}).items():
         _set_dotted_key(raw, str(key), value)
+    _prepare_materialized_trial_dataset(
+        raw,
+        study_name=cfg.study_name,
+        label=f"trial_{trial_id:04d}",
+    )
     return PipelineConfig.from_dict(raw)
 
 

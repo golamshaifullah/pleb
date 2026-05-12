@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from random import Random
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 import math
+import re
 
 try:
     import tomllib  # py3.11+
@@ -15,6 +16,7 @@ except Exception:  # pragma: no cover
 from .models import ParameterSpec, SearchSpace
 
 _VALID_KINDS = {"float", "int", "bool", "categorical", "fixed"}
+_BACKEND_PROFILE_PARAM_RE = re.compile(r"^backend_profile::(.+?)::([A-Za-z0-9_]+)$")
 
 
 def load_search_space(path: Path) -> SearchSpace:
@@ -141,7 +143,44 @@ def _sample_int(spec: ParameterSpec, rng: Random) -> int:
 
 def parameters_to_set_overrides(params: Dict[str, Any]) -> List[str]:
     """Convert sampled parameters to workflow-style KEY=VALUE overrides."""
-    return [f"{key}={_to_toml_literal(value)}" for key, value in params.items()]
+    flat, _ = split_backend_profile_parameters(params)
+    return [f"{key}={_to_toml_literal(value)}" for key, value in flat.items()]
+
+
+def parse_backend_profile_parameter_name(name: str) -> Tuple[str, str] | None:
+    """Return ``(pattern, key)`` for backend-profile parameters.
+
+    Supported syntax::
+
+        backend_profile::NRT.NUPPI.*::robust_z_thresh
+
+    The returned key is the raw ``PTAQCConfig`` field name used by backend
+    profiles, not the top-level pipeline ``pqc_*`` config key.
+    """
+    match = _BACKEND_PROFILE_PARAM_RE.match(str(name).strip())
+    if not match:
+        return None
+    pattern = str(match.group(1)).strip()
+    key = str(match.group(2)).strip()
+    if not pattern or not key:
+        return None
+    return pattern, key
+
+
+def split_backend_profile_parameters(
+    params: Dict[str, Any],
+) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+    """Split a sampled parameter vector into flat and backend-profile overrides."""
+    flat: Dict[str, Any] = {}
+    profiles: Dict[str, Dict[str, Any]] = {}
+    for name, value in params.items():
+        parsed = parse_backend_profile_parameter_name(str(name))
+        if parsed is None:
+            flat[str(name)] = value
+            continue
+        pattern, key = parsed
+        profiles.setdefault(pattern, {})[key] = value
+    return flat, profiles
 
 
 def _to_toml_literal(value: Any) -> str:

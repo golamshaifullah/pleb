@@ -6,9 +6,10 @@ from pathlib import Path
 import math
 
 import numpy as np
+import pandas as pd
 
 from pleb.parsers import read_plklog, read_general2
-from pleb.reports import compare_plk, summarize_run
+from pleb.reports import compare_plk, summarize_run, write_outlier_tables
 
 
 def _write(path: Path, text: str) -> None:
@@ -142,3 +143,30 @@ Some trailer that should also be ignored
     assert summary["n_toas"] in (2.0, 2)  # parsed as float sometimes
     assert summary["wrms_post"] is not None
     assert np.isfinite(summary["wrms_post"])
+
+
+def test_write_outlier_tables_reads_timfiles_from_dataset_root(
+    monkeypatch, tmp_path: Path
+) -> None:
+    home_dir = tmp_path / "home"
+    dataset_name = Path("dataset")
+    timfile = home_dir / dataset_name / "J0000+0000" / "tims" / "A.tim"
+    _write(timfile, "FORMAT 1\n")
+
+    seen: dict[str, str] = {}
+
+    def _fake_read_tim_file(path: Path) -> pd.DataFrame:
+        seen["path"] = str(path)
+        return pd.DataFrame({2: [58000.0]})
+
+    monkeypatch.setattr("pleb.reports.read_tim_file", _fake_read_tim_file)
+
+    write_outlier_tables(
+        home_dir,
+        dataset_name,
+        {"outliers": tmp_path / "outliers", "general2": tmp_path / "general2"},
+        ["J0000+0000"],
+        ["main"],
+    )
+
+    assert seen["path"] == str(timfile)

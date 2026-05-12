@@ -370,6 +370,34 @@ def test_find_qc_csvs_prefers_consensus_qc_artifact_when_present(
     assert [p.name for p in found] == [f"{psr}.consensus_qc.csv"]
 
 
+def test_find_qc_csvs_resolves_nested_run_layout(tmp_path: Path) -> None:
+    psr = "J1909-3744"
+    declared_qc_root = tmp_path / "results" / "j1909_step4_detect_selected" / "qc"
+    actual_qc_root = (
+        tmp_path
+        / "results"
+        / "j1909_step4_detect_selected"
+        / "j1909_step4_detect_selected"
+        / "qc"
+    )
+    _write(
+        actual_qc_root
+        / "j1909_step4_detect_selected"
+        / f"{psr}.combined_qc.csv",
+        "_timfile,mjd,bad_point\nBACKEND.tim,55000,False\n",
+    )
+
+    cfg = FixDatasetConfig(
+        qc_results_dir=declared_qc_root,
+        qc_branch="j1909_step4_detect_selected",
+        qc_remove_outliers=True,
+        qc_require_csv=True,
+    )
+
+    found = _find_qc_csvs(psr, cfg)
+    assert [p.name for p in found] == [f"{psr}.combined_qc.csv"]
+
+
 def test_apply_pqc_outliers_can_merge_variant_specific_qc_csvs(
     tmp_path: Path,
 ) -> None:

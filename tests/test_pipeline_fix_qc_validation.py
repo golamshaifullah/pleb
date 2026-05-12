@@ -115,3 +115,31 @@ def test_validate_fixdataset_qc_inputs_allows_success_even_if_combined_failed(
     )
 
     _validate_fixdataset_qc_inputs([psr], cfg, branch="step3_apply")
+
+
+def test_validate_fixdataset_qc_inputs_resolves_nested_run_layout(tmp_path) -> None:
+    psr = "J1909-3744"
+    declared_qc_root = tmp_path / "results" / "j1909_step4_detect_selected" / "qc"
+    actual_qc_root = (
+        tmp_path
+        / "results"
+        / "j1909_step4_detect_selected"
+        / "j1909_step4_detect_selected"
+        / "qc"
+    )
+    actual_qc_root.mkdir(parents=True, exist_ok=True)
+    (actual_qc_root / "qc_summary.tsv").write_text(
+        "pulsar\tvariant\tbranch\tqc_status\tqc_csv\tqc_error\n"
+        f"{psr}\tcombined\tj1909_step4_detect_selected\t"
+        "success\t/path/J1909-3744.combined_qc.csv\t\n",
+        encoding="utf-8",
+    )
+    cfg = FixDatasetConfig(
+        apply=True,
+        qc_results_dir=declared_qc_root,
+        qc_branch="j1909_step4_detect_selected",
+        qc_remove_outliers=True,
+        qc_require_csv=True,
+    )
+
+    _validate_fixdataset_qc_inputs([psr], cfg, branch="step5_apply_comments")

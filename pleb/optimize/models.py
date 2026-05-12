@@ -75,6 +75,10 @@ class OptimizationConfig:
     write_best_config: bool = True
     variant_strategy: str = "auto"
     fixed_overrides: Dict[str, Any] | None = None
+    post_apply_eval: bool = False
+    post_apply_source_branch: Optional[str] = None
+    post_apply_qc_branch: Optional[str] = None
+    post_apply_qc_action: str = "delete"
 
 
 @dataclass(slots=True)

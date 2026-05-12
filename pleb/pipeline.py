@@ -35,7 +35,13 @@ except Exception:  # pragma: no cover
 
 
 from .config import PipelineConfig
-from .git_tools import checkout, require_clean_repo
+from .git_tools import (
+    branch_checked_out_in_worktree,
+    checkout,
+    current_branch_name,
+    require_clean_repo,
+    temporary_detached_worktree,
+)
 from .logging_utils import get_logger, set_log_dir
 from .plotting import (
     plot_covmat_heatmaps,
@@ -64,6 +70,7 @@ from .utils import (
 from .dataset_fix import (
     FixDatasetConfig,
     _find_qc_csv,
+    _load_qc_manifest_rows,
     apply_fixdataset_branch,
     fix_pulsar_dataset,
     write_fix_report,
@@ -107,6 +114,88 @@ def _git_add_pathspecs(repo_root: Path, paths: list[str]) -> None:
             Path(path_file).unlink()
         except Exception:
             pass
+
+
+def _path_in_repo_required(repo_root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except Exception as exc:
+        raise RuntimeError(f"Path {path} is not under repo root {repo_root}.") from exc
+
+
+def _git_ls_files_at_ref(repo_root: Path, ref: str, prefix: str) -> List[str]:
+    res = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", ref, "--", prefix],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        return []
+    return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+
+
+def _git_show_file(repo_root: Path, ref: str, path_in_repo: str) -> bytes | None:
+    res = subprocess.run(
+        ["git", "show", f"{ref}:{path_in_repo}"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=False,
+        check=False,
+    )
+    if res.returncode != 0:
+        return None
+    return res.stdout
+
+
+def _discover_pulsars_at_ref(repo_root: Path, dataset_root: Path, ref: str) -> List[str]:
+    dataset_rel = _path_in_repo_required(repo_root, dataset_root)
+    files = _git_ls_files_at_ref(repo_root, ref, dataset_rel)
+    out: List[str] = []
+    seen: set[str] = set()
+    for rel_path in files:
+        try:
+            first = Path(rel_path).relative_to(dataset_rel).parts[0]
+        except Exception:
+            continue
+        if first and first not in seen:
+            out.append(first)
+            seen.add(first)
+    return out
+
+
+def _materialize_pulsar_snapshot(
+    repo_root: Path,
+    dataset_root: Path,
+    *,
+    ref: str,
+    pulsar: str,
+    snapshot_dataset_root: Path,
+) -> Path:
+    psr_dir = snapshot_dataset_root / pulsar
+    parfile = psr_dir / f"{pulsar}.par"
+    timfile = psr_dir / f"{pulsar}_all.tim"
+    if parfile.exists() and timfile.exists():
+        return psr_dir
+
+    dataset_rel = _path_in_repo_required(repo_root, dataset_root)
+    prefix = f"{dataset_rel}/{pulsar}"
+    files = _git_ls_files_at_ref(repo_root, ref, prefix)
+    if not files:
+        raise FileNotFoundError(
+            f"No dataset files found for {pulsar} on branch {ref} under {dataset_rel}."
+        )
+    snapshot_dataset_root.mkdir(parents=True, exist_ok=True)
+    for rel_path in files:
+        data = _git_show_file(repo_root, ref, rel_path)
+        if data is None:
+            raise FileNotFoundError(f"Unable to read {rel_path} from branch {ref}.")
+        rel_to_dataset = Path(rel_path).relative_to(dataset_rel)
+        dest = snapshot_dataset_root / rel_to_dataset
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+    return psr_dir
 
 
 def _discover_pqc_variants(psr_dir: Path, psr: str) -> List[str]:
@@ -730,21 +819,7 @@ def _validate_fixdataset_qc_inputs(
     errors = []
     for psr in pulsars:
         try:
-            manifest_rows: List[Dict[str, object]] = []
-            if cfg.qc_results_dir is not None:
-                summary_path = Path(cfg.qc_results_dir) / "qc_summary.tsv"
-                if not summary_path.exists():
-                    summary_path = Path(cfg.qc_results_dir).parent / "qc_summary.tsv"
-                if summary_path.exists():
-                    try:
-                        df = pd.read_csv(summary_path, sep="\t")
-                        if "pulsar" in df.columns:
-                            df = df[df["pulsar"].astype(str) == psr]
-                        if "branch" in df.columns:
-                            df = df[df["branch"].astype(str) == str(cfg.qc_branch or "")]
-                        manifest_rows = df.to_dict(orient="records")
-                    except Exception:
-                        manifest_rows = []
+            manifest_rows = _load_qc_manifest_rows(psr, cfg)
             if manifest_rows:
                 statuses = {
                     str(r.get("qc_status", "")).strip() or (
@@ -798,25 +873,32 @@ def _warn_backend_tim_drift(
     dataset_root = Path(cfg.dataset_name)
     baseline: Dict[str, set[str]] = {}
     compare: Dict[str, set[str]] = {}
+    repo_root = Path(cfg.home_dir).resolve()
 
-    try:
-        checkout(repo, baseline_branch)
-        for psr in pulsars:
-            psr_dir = dataset_root / psr
-            if not psr_dir.exists():
-                baseline[psr] = set()
-                continue
-            baseline[psr] = {t.name for t in list_backend_timfiles(psr_dir)}
+    def _collect_backend_tims(ref: str) -> Dict[str, set[str]]:
+        out: Dict[str, set[str]] = {}
+        snapshot_root = Path(tempfile.mkdtemp(prefix="pleb_backend_drift_"))
+        try:
+            snapshot_dataset_root = snapshot_root / dataset_root.name
+            for psr in pulsars:
+                try:
+                    psr_dir = _materialize_pulsar_snapshot(
+                        repo_root,
+                        dataset_root,
+                        ref=ref,
+                        pulsar=psr,
+                        snapshot_dataset_root=snapshot_dataset_root,
+                    )
+                except FileNotFoundError:
+                    out[psr] = set()
+                    continue
+                out[psr] = {t.name for t in list_backend_timfiles(psr_dir)}
+        finally:
+            shutil.rmtree(snapshot_root, ignore_errors=True)
+        return out
 
-        checkout(repo, compare_branch)
-        for psr in pulsars:
-            psr_dir = dataset_root / psr
-            if not psr_dir.exists():
-                compare[psr] = set()
-                continue
-            compare[psr] = {t.name for t in list_backend_timfiles(psr_dir)}
-    finally:
-        checkout(repo, return_branch)
+    baseline = _collect_backend_tims(baseline_branch)
+    compare = _collect_backend_tims(compare_branch)
 
     drift_msgs: List[str] = []
     for psr in pulsars:
@@ -857,7 +939,7 @@ def _apply_fixdataset_and_commit(
     new_branch: str,
     commit_message: str,
 ) -> str:
-    """Create a new branch, apply FixDataset, and commit changes.
+    """Create a new branch, apply FixDataset, and commit changes in a temp worktree.
 
     Args:
         repo: GitPython repository object rooted at ``cfg.home_dir``.
@@ -875,17 +957,12 @@ def _apply_fixdataset_and_commit(
         RuntimeError: If the branch already exists.
     """
     require_clean_repo(repo)
-    checkout(repo, base_branch)
-    logger.info("Checked out branch %s", base_branch)
-
+    repo_root = Path(repo.working_tree_dir).resolve()
     existing = {h.name for h in getattr(repo, "heads", [])}
     if new_branch in existing:
         raise RuntimeError(
             f"Requested fix branch '{new_branch}' already exists. Choose a different name."
         )
-
-    repo.git.checkout("-b", new_branch)
-    logger.info("Checked out branch %s", new_branch)
 
     qc_results_dir = _cfg_get(cfg, "fix_qc_results_dir", None)
     qc_branch = _cfg_get(cfg, "fix_qc_branch", None)
@@ -905,95 +982,111 @@ def _apply_fixdataset_and_commit(
     )
     _validate_fixdataset_qc_inputs(pulsars, fcfg, branch=new_branch)
 
-    dataset_root = Path(cfg.dataset_name)
-    n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
-    if fcfg.infer_system_flags:
-        reports = apply_fixdataset_branch(
-            dataset_root,
-            pulsars,
-            fcfg,
-            branch=new_branch,
-            jobs=n_jobs,
+    if branch_checked_out_in_worktree(repo_root, new_branch) is not None:
+        raise RuntimeError(
+            f"Requested fix branch '{new_branch}' is already checked out in another worktree."
         )
-    else:
-        reports = []
-        if n_jobs == 1:
-            for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
-                rep = fix_pulsar_dataset(dataset_root / pulsar, fcfg)
-                rep["branch"] = new_branch
-                reports.append(rep)
-        else:
 
-            def _run_fix(p: str) -> Dict[str, object]:
-                try:
-                    rep = fix_pulsar_dataset(dataset_root / p, fcfg)
-                    rep["branch"] = new_branch
-                    return rep
-                except Exception as e:
-                    return {"psr": p, "branch": new_branch, "error": str(e)}
+    with temporary_detached_worktree(repo_root, base_branch) as worktree_root:
+        from git import Repo  # type: ignore
 
-            futures = []
-            with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-                for pulsar in pulsars:
-                    futures.append(ex.submit(_run_fix, pulsar))
-                for fut in tqdm(
-                    as_completed(futures),
-                    total=len(futures),
-                    desc=f"fix-dataset (apply on {new_branch})",
-                ):
-                    reports.append(fut.result())
+        wt_repo = Repo(str(worktree_root), search_parent_directories=False)
+        wt_repo.git.checkout("-b", new_branch)
+        logger.info(
+            "Created temporary worktree %s for FixDataset branch %s (base: %s).",
+            worktree_root,
+            new_branch,
+            base_branch,
+        )
 
-    write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
-    _raise_if_fixdataset_failed(reports, stage="apply", branch=new_branch)
+        cfg_work = PipelineConfig.from_dict(cfg.to_dict())
+        dataset_root = Path(cfg.dataset_name)
+        dataset_prefix = ""
+        try:
+            dataset_prefix = dataset_root.relative_to(cfg.home_dir).as_posix().strip("/")
+        except Exception:
+            if not dataset_root.exists():
+                logger.warning(
+                    "Dataset path %s does not exist; staging changes from repo root.",
+                    dataset_root,
+                )
+                dataset_prefix = ""
+        cfg_work.home_dir = worktree_root.resolve()
+        cfg_work.dataset_name = (
+            cfg_work.home_dir
+            if not dataset_prefix
+            else (cfg_work.home_dir / dataset_prefix)
+        )
 
-    dataset_prefix = ""
-    try:
-        dataset_prefix = dataset_root.relative_to(cfg.home_dir).as_posix().strip("/")
-    except Exception:
-        if not dataset_root.exists():
-            logger.warning(
-                "Dataset path %s does not exist; staging changes from repo root.",
-                dataset_root,
+        fcfg_work = _build_fixdataset_config(
+            cfg_work, apply=True, qc_results_dir=qc_results_dir, qc_branch=qc_branch
+        )
+        dataset_root_work = Path(cfg_work.dataset_name)
+        n_jobs = max(1, int(getattr(cfg_work, "jobs", 1) or 1))
+        if fcfg_work.infer_system_flags:
+            reports = apply_fixdataset_branch(
+                dataset_root_work,
+                pulsars,
+                fcfg_work,
+                branch=new_branch,
+                jobs=n_jobs,
             )
-            dataset_prefix = ""
+        else:
+            reports = []
+            if n_jobs == 1:
+                for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
+                    rep = fix_pulsar_dataset(dataset_root_work / pulsar, fcfg_work)
+                    rep["branch"] = new_branch
+                    reports.append(rep)
+            else:
 
-    changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
-    untracked = list(getattr(repo, "untracked_files", []) or [])
-    paths = list(dict.fromkeys(changed + untracked))
+                def _run_fix(p: str) -> Dict[str, object]:
+                    try:
+                        rep = fix_pulsar_dataset(dataset_root_work / p, fcfg_work)
+                        rep["branch"] = new_branch
+                        return rep
+                    except Exception as e:
+                        return {"psr": p, "branch": new_branch, "error": str(e)}
 
-    def _want(p: str) -> bool:
-        pp = p.replace("\\", "/")
-        if dataset_prefix and not pp.startswith(dataset_prefix + "/"):
+                futures = []
+                with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+                    for pulsar in pulsars:
+                        futures.append(ex.submit(_run_fix, pulsar))
+                    for fut in tqdm(
+                        as_completed(futures),
+                        total=len(futures),
+                        desc=f"fix-dataset (apply on {new_branch})",
+                    ):
+                        reports.append(fut.result())
+
+        write_fix_report(reports, out_paths["fix_dataset"] / new_branch)
+        _raise_if_fixdataset_failed(reports, stage="apply", branch=new_branch)
+
+        changed = [p for p in wt_repo.git.diff("--name-only").splitlines() if p.strip()]
+        untracked = list(getattr(wt_repo, "untracked_files", []) or [])
+        paths = list(dict.fromkeys(changed + untracked))
+
+        def _want(p: str) -> bool:
+            pp = p.replace("\\", "/")
+            if dataset_prefix and not pp.startswith(dataset_prefix + "/"):
+                return False
+            if pp.endswith(".orig"):
+                return False
+            if pp.endswith(".par") or pp.endswith(".tim"):
+                return True
+            if pp.endswith("system_flag_table.json") or pp.endswith(
+                "system_flag_table.toml"
+            ):
+                return True
             return False
-        # Backups / scratch artifacts should not block cleanliness checks:
-        if pp.endswith(".orig"):
-            return False
-        if pp.endswith(".par") or pp.endswith(".tim"):
-            return True
-        # system flag table (if created/updated)
-        if pp.endswith("system_flag_table.json") or pp.endswith(
-            "system_flag_table.toml"
-        ):
-            return True
-        return False
 
-    to_stage = [p for p in paths if _want(p)]
+        to_stage = [p for p in paths if _want(p)]
+        if to_stage:
+            _git_add_pathspecs(worktree_root.resolve(), to_stage)
+            wt_repo.index.commit(commit_message)
+        else:
+            wt_repo.git.commit("--allow-empty", "-m", commit_message + " (no changes)")
 
-    if to_stage:
-        _git_add_pathspecs(Path(cfg.home_dir).resolve(), to_stage)
-        repo.index.commit(commit_message)
-    else:
-        repo.git.commit("--allow-empty", "-m", commit_message + " (no changes)")
-
-    # If backups were produced anyway, they will keep the repo dirty. Delete them to preserve pipeline invariants.
-    for p in list(getattr(repo, "untracked_files", []) or []):
-        if p.endswith(".orig"):
-            try:
-                (cfg.home_dir / p).unlink()
-            except Exception:
-                pass
-
-    require_clean_repo(repo)
     return new_branch
 
 
@@ -1027,9 +1120,12 @@ def _commit_branch_artifacts(
     for p in (
         out_paths.get("base"),
         out_paths.get("tag"),
-        getattr(cfg, "results_dir", None),
+        out_paths.get("fix_dataset"),
+        out_paths.get("binary_analysis"),
+        out_paths.get("param_scan"),
+        out_paths.get("qc"),
+        out_paths.get("whitenoise"),
         getattr(cfg, "qc_report_dir", None),
-        getattr(cfg, "fix_jump_reference_csv_dir", None),
     ):
         rel = _rel_if_within_repo(p) if p is not None else None
         if rel:
@@ -1086,12 +1182,30 @@ def _commit_branch_artifacts(
     if not to_stage:
         return
 
-    _git_add_pathspecs(repo_root, to_stage)
-    if repo.is_dirty(untracked_files=True):
-        repo.index.commit(f"{commit_message} [artifacts]")
-        logger.info(
-            "Committed run artifacts on branch %s (%d paths).", branch, len(to_stage)
+    checked_out = branch_checked_out_in_worktree(repo_root, branch)
+    if checked_out is not None:
+        raise RuntimeError(
+            f"Cannot commit artifacts onto branch '{branch}' because it is checked out in {checked_out}."
         )
+
+    with temporary_detached_worktree(repo_root, branch) as worktree_root:
+        from git import Repo  # type: ignore
+
+        wt_repo = Repo(str(worktree_root), search_parent_directories=False)
+        checkout(wt_repo, branch)
+        for rel_path in to_stage:
+            src = repo_root / rel_path
+            if not src.exists() or src.is_dir():
+                continue
+            dst = worktree_root / rel_path
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        _git_add_pathspecs(worktree_root.resolve(), to_stage)
+        if wt_repo.is_dirty(untracked_files=True):
+            wt_repo.index.commit(f"{commit_message} [artifacts]")
+            logger.info(
+                "Committed run artifacts on branch %s (%d paths).", branch, len(to_stage)
+            )
 
 
 def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
@@ -1145,6 +1259,10 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     fix_apply = _cfg_get_bool(cfg, "fix_apply", False)
     run_pqc = bool(getattr(cfg, "run_pqc", False))
     run_whitenoise = bool(getattr(cfg, "run_whitenoise", False))
+    materialized_readonly_dataset = bool(
+        getattr(cfg, "readonly_materialized_dataset", False)
+    )
+    readonly_snapshot_branches = not fix_apply
 
     logger.info(
         "Config flags: run_fix_dataset=%s fix_apply=%s run_pqc=%s run_whitenoise=%s",
@@ -1177,17 +1295,25 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
         container_runtime(require=True)
 
-    try:
-        from git import Repo  # type: ignore
-    except Exception as e:  # pragma: no cover
-        raise RuntimeError(
-            "GitPython is required to run the pipeline (branch checkouts). Install GitPython."
-        ) from e
+    repo = None
+    current_branch = ""
+    branch_snapshot_reads = True
+    if fix_apply:
+        try:
+            from git import Repo  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError(
+                "GitPython is required for fix-apply pipelines. Install GitPython."
+            ) from e
 
-    repo = Repo(str(cfg.home_dir))
-    require_clean_repo(repo)
-    current_branch = repo.active_branch.name
-    logger.info("Current git branch: %s", current_branch)
+        repo = Repo(str(cfg.home_dir))
+        require_clean_repo(repo)
+        current_branch = current_branch_name(repo)
+        logger.info("Current git branch: %s", current_branch)
+    else:
+        logger.info(
+            "Running read-only branch stages in snapshot mode; live git checkout is disabled."
+        )
 
     # Branch selection
     compare_branches: List[str] = [
@@ -1233,22 +1359,34 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
     # Pulsar selection
     if cfg.pulsars == "ALL":
-        discovery_branch = base_branch if fix_apply and base_branch else current_branch
-        if discovery_branch != current_branch:
-            checkout(repo, discovery_branch)
-            logger.info(
-                "Temporarily checked out branch %s to discover pulsars.",
-                discovery_branch,
-            )
-        try:
+        if materialized_readonly_dataset:
             pulsars = discover_pulsars(dataset_root)
-        finally:
+        elif branch_snapshot_reads:
+            discovery_branch = (
+                base_branch if fix_apply and base_branch else branches_to_run[0]
+            ) if branches_to_run else reference_branch
+            if not discovery_branch:
+                raise RuntimeError(
+                    "Snapshot mode requires at least one branch in cfg.branches or cfg.reference_branch."
+                )
+            pulsars = _discover_pulsars_at_ref(Path(cfg.home_dir), dataset_root, discovery_branch)
+        else:
+            discovery_branch = base_branch if fix_apply and base_branch else current_branch
             if discovery_branch != current_branch:
-                checkout(repo, current_branch)
-        if not pulsars and fix_apply and base_branch and base_branch != current_branch:
-            raise RuntimeError(
-                f"No pulsars found under {dataset_root} on base branch '{base_branch}'."
-            )
+                checkout(repo, discovery_branch)
+                logger.info(
+                    "Temporarily checked out branch %s to discover pulsars.",
+                    discovery_branch,
+                )
+            try:
+                pulsars = discover_pulsars(dataset_root)
+            finally:
+                if discovery_branch != current_branch:
+                    checkout(repo, current_branch)
+            if not pulsars and fix_apply and base_branch and base_branch != current_branch:
+                raise RuntimeError(
+                    f"No pulsars found under {dataset_root} on base branch '{base_branch}'."
+                )
     else:
         pulsars = list(cfg.pulsars)  # type: ignore[arg-type]
     if not pulsars:
@@ -1308,7 +1446,35 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
     try:
         for branch in branches_to_run:
             logger.info("=== Branch: %s ===", branch)
-            checkout(repo, branch)
+            branch_home_dir = Path(cfg.home_dir)
+            branch_dataset_root = dataset_root
+            branch_dataset_name = dataset_root
+            if materialized_readonly_dataset:
+                pass
+            elif branch_snapshot_reads:
+                branch_snapshot_home = out_paths["work"] / "__branch_snapshot" / branch
+                branch_home_dir = branch_snapshot_home
+                branch_dataset_root = branch_snapshot_home / Path(dataset_root).name
+                branch_dataset_name = branch_dataset_root
+
+            def _branch_psr_dir(p: str) -> Path:
+                if materialized_readonly_dataset:
+                    return branch_dataset_root / p
+                if branch_snapshot_reads:
+                    return _materialize_pulsar_snapshot(
+                        Path(cfg.home_dir),
+                        dataset_root,
+                        ref=branch,
+                        pulsar=p,
+                        snapshot_dataset_root=branch_dataset_root,
+                    )
+                return branch_dataset_root / p
+
+            def _ensure_branch_snapshot_for_all() -> None:
+                if not branch_snapshot_reads:
+                    return
+                for p in pulsars:
+                    _branch_psr_dir(p)
 
             # Forced fix_dataset reporting per branch (report-only; never modifies the repo in this loop)
             fcfg = _build_fixdataset_config(
@@ -1317,16 +1483,18 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             reports = []
             if run_fix_dataset and not fix_apply:
                 n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+                if readonly_snapshot_branches:
+                    _ensure_branch_snapshot_for_all()
                 if n_jobs == 1:
                     for pulsar in tqdm(pulsars, desc=f"fix-dataset ({branch})"):
-                        rep = fix_pulsar_dataset(dataset_root / pulsar, fcfg)
+                        rep = fix_pulsar_dataset(_branch_psr_dir(pulsar), fcfg)
                         rep["branch"] = branch
                         reports.append(rep)
                 else:
 
                     def _run_fix(p: str) -> Dict[str, object]:
                         try:
-                            rep = fix_pulsar_dataset(dataset_root / p, fcfg)
+                            rep = fix_pulsar_dataset(_branch_psr_dir(p), fcfg)
                             rep["branch"] = branch
                             return rep
                         except Exception as e:
@@ -1363,12 +1531,15 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     and len(branches_to_run) == 1
                     and bool(getattr(cfg, "run_fix_dataset", True))
                 )
+                if branch_snapshot_reads:
+                    _ensure_branch_snapshot_for_all()
 
                 if n_jobs == 1:
                     for pulsar in tqdm(pulsars, desc=f"tempo2 ({branch})"):
+                        _branch_psr_dir(pulsar)
                         run_tempo2_for_pulsar(
-                            home_dir=cfg.home_dir,
-                            dataset_name=cfg.dataset_name,
+                            home_dir=branch_home_dir,
+                            dataset_name=branch_dataset_name,
                             singularity_image=cfg.singularity_image,
                             native=bool(getattr(cfg, "tempo2_native", False)),
                             out_paths=out_paths,
@@ -1381,11 +1552,12 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     futures = []
                     with ThreadPoolExecutor(max_workers=n_jobs) as ex:
                         for pulsar in pulsars:
+                            _branch_psr_dir(pulsar)
                             futures.append(
                                 ex.submit(
                                     run_tempo2_for_pulsar,
-                                    home_dir=cfg.home_dir,
-                                    dataset_name=cfg.dataset_name,
+                                    home_dir=branch_home_dir,
+                                    dataset_name=branch_dataset_name,
                                     singularity_image=cfg.singularity_image,
                                     native=bool(getattr(cfg, "tempo2_native", False)),
                                     out_paths=out_paths,
@@ -1426,7 +1598,17 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
 
                 def _run_whitenoise(p: str) -> Dict[str, object]:
-                    psr_dir = dataset_root / p
+                    try:
+                        psr_dir = _branch_psr_dir(p)
+                    except FileNotFoundError as e:
+                        return {
+                            "pulsar": p,
+                            "branch": branch,
+                            "parfile": "",
+                            "timfile": "",
+                            "success": False,
+                            "error": str(e),
+                        }
                     parfile = psr_dir / f"{p}.par"
                     timfile = resolve_timfile_for_pulsar(
                         psr_dir, p, wn_cfg.timfile_name
@@ -1713,7 +1895,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
 
                 tasks: List[tuple[str, str, Path, Path, Path]] = []
                 for pulsar in pulsars:
-                    psr_dir = dataset_root / pulsar
+                    psr_dir = _branch_psr_dir(pulsar)
                     if run_variants:
                         variants = _discover_pqc_variants(psr_dir, pulsar)
                         if variants:
@@ -1940,17 +2122,18 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             # Branch-level plots and tables (only for compare_branches, not the optional reference-only branch)
             if branch in compare_branches:
                 if cfg.make_toa_coverage_plots:
+                    _ensure_branch_snapshot_for_all()
                     plot_systems_per_pulsar(
-                        cfg.home_dir,
-                        dataset_root,
+                        branch_home_dir,
+                        branch_dataset_name,
                         out_paths,
                         pulsars,
                         branch,
                         dpi=int(cfg.dpi),
                     )
                     plot_pulsars_per_system(
-                        cfg.home_dir,
-                        dataset_root,
+                        branch_home_dir,
+                        branch_dataset_name,
                         out_paths,
                         pulsars,
                         branch,
@@ -1958,15 +2141,20 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     )
 
                 if cfg.make_outlier_reports:
+                    _ensure_branch_snapshot_for_all()
                     write_outlier_tables(
-                        cfg.home_dir, dataset_root, out_paths, pulsars, [branch]
+                        branch_home_dir,
+                        branch_dataset_name,
+                        out_paths,
+                        pulsars,
+                        [branch],
                     )
 
             # Binary analysis per branch
             if cfg.make_binary_analysis:
                 bcfg = BinaryAnalysisConfig(only_models=cfg.binary_only_models)
                 for pulsar in pulsars:
-                    parfile = dataset_root / pulsar / f"{pulsar}.par"
+                    parfile = _branch_psr_dir(pulsar) / f"{pulsar}.par"
                     row = analyse_binary_from_par(parfile)
                     if bcfg.only_models and row.get("BINARY") not in set(
                         bcfg.only_models
@@ -2123,7 +2311,8 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
         return out_paths
 
     finally:
-        try:
-            checkout(repo, current_branch)
-        except Exception:
-            pass
+        if repo is not None and current_branch:
+            try:
+                checkout(repo, current_branch)
+            except Exception:
+                pass

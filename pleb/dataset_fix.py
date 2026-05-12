@@ -1971,7 +1971,7 @@ def _find_qc_csvs(psr: str, cfg: FixDatasetConfig) -> List[Path]:
                 f"QC application for {psr} requires qc_results_dir, but none was set."
             )
         return []
-    base = Path(cfg.qc_results_dir)
+    base = _resolve_qc_results_dir(Path(cfg.qc_results_dir))
     if not base.exists():
         if cfg.qc_require_csv:
             raise FileNotFoundError(
@@ -2014,7 +2014,7 @@ def _find_qc_csvs(psr: str, cfg: FixDatasetConfig) -> List[Path]:
 def _load_qc_manifest_rows(psr: str, cfg: FixDatasetConfig) -> List[Dict[str, object]]:
     if cfg.qc_results_dir is None:
         return []
-    base = Path(cfg.qc_results_dir)
+    base = _resolve_qc_results_dir(Path(cfg.qc_results_dir))
     candidates = [base / "qc_summary.tsv", base.parent / "qc_summary.tsv"]
     for summary_path in candidates:
         if not summary_path.exists():
@@ -2034,6 +2034,32 @@ def _load_qc_manifest_rows(psr: str, cfg: FixDatasetConfig) -> List[Dict[str, ob
 def _find_qc_csv(psr: str, cfg: FixDatasetConfig) -> Optional[Path]:
     matches = _find_qc_csvs(psr, cfg)
     return matches[0] if matches else None
+
+
+def _resolve_qc_results_dir(base: Path) -> Path:
+    """Resolve common workflow QC directory layouts.
+
+    Historically some generated workflows pointed FixDataset at:
+
+    ``results/<run>/qc``
+
+    while the actual pipeline output tree was:
+
+    ``results/<run>/<run>/qc``
+
+    Accept the declared path when it exists. Otherwise, try the nested
+    ``<run>/<run>/qc`` form before failing.
+    """
+    base = Path(base)
+    if base.exists():
+        return base
+    parent = base.parent
+    run_name = str(parent.name).strip()
+    if run_name:
+        nested = parent / run_name / base.name
+        if nested.exists():
+            return nested
+    return base
 
 
 def _collect_qc_mjds(

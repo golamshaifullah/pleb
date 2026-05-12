@@ -78,6 +78,12 @@ policy.compare_public
   Modes: ``workflow``
   Level: ``full``
 
+``compare_public_cache_dir``
+  Type: ``Optional[Path]``
+  Default: None
+  Modes: ``workflow``
+  Level: ``full``
+
 ``compare_public_providers_path``
   Type: ``Optional[Path]``
   Default: None
@@ -1638,4 +1644,3 @@ workflow
   Default: ``""``
   Modes: ``workflow``
   Level: ``minimal``
-

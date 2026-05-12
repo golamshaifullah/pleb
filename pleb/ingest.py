@@ -28,7 +28,13 @@ import math
 from textwrap import wrap
 
 from .logging_utils import get_logger
-from .git_tools import checkout, require_clean_repo
+from .git_tools import (
+    branch_checked_out_in_worktree,
+    checkout,
+    current_branch_name,
+    require_clean_repo,
+    temporary_detached_worktree,
+)
 
 try:
     import matplotlib
@@ -395,6 +401,7 @@ def verify_ingest_tims(
     *,
     check_git: bool = True,
     check_all_tim: bool = True,
+    pulsars: Optional[Iterable[str]] = None,
 ) -> None:
     """Validate ingest completeness against mapping expectations.
 
@@ -416,6 +423,9 @@ def verify_ingest_tims(
     from the ingest manifest. It raises only if the post-rewrite includes still
     do not match the copied timfiles.
     """
+    allowed_pulsars: Optional[Set[str]] = None
+    if pulsars is not None:
+        allowed_pulsars = {str(p).strip() for p in pulsars if str(p).strip()}
     manifest = output_root / "ingest_reports" / "ingest_manifest_tim.csv"
     manifest_srcs: Set[str] = set()
     manifest_rows: List[Dict[str, str]] = []
@@ -456,6 +466,8 @@ def verify_ingest_tims(
         if not psr_dir.is_dir():
             continue
         psr = psr_dir.name
+        if allowed_pulsars is not None and psr not in allowed_pulsars:
+            continue
         expected_by_root = _collect_expected_tim_paths(psr, mapping)
         all_tim = psr_dir / f"{psr}_all.tim"
 
@@ -1677,14 +1689,36 @@ def ingest_dataset(
     rep_dir = output_root / "ingest_reports"
     rep_dir.mkdir(parents=True, exist_ok=True)
     _write_ingest_breakdown_csv(report, rep_dir)
+    _write_ingest_commit_manifest(output_root, report)
     pdf_path = _write_ingest_pdf_report(output_root, report)
     if pdf_path is not None:
         report["pdf_report"] = str(pdf_path)
 
     if verify:
-        verify_ingest_tims(output_root, mapping)
+        verify_ingest_tims(output_root, mapping, pulsars=pulsar_set)
 
     return report
+
+
+def _write_ingest_commit_manifest(output_root: Path, report: Dict[str, Any]) -> Path:
+    """Persist the current ingest selection for isolated commit staging."""
+    paths: List[str] = []
+    for psr in report.get("pulsars", []) or []:
+        psr_name = str(psr).strip()
+        if psr_name:
+            paths.append(psr_name)
+    if report.get("clockfiles"):
+        paths.append("clockfiles")
+    paths.append("ingest_reports")
+    payload = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "paths": sorted(dict.fromkeys(paths)),
+        "pulsars": list(report.get("pulsars", []) or []),
+        "clockfiles": list(report.get("clockfiles", []) or []),
+    }
+    path = output_root / "ingest_reports" / "ingest_commit_manifest.json"
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def commit_ingest_changes(
@@ -1694,7 +1728,7 @@ def commit_ingest_changes(
     base_branch: Optional[str] = None,
     commit_message: Optional[str] = None,
 ) -> str:
-    """Create/switch branch and commit ingest outputs in the enclosing repo.
+    """Commit ingest outputs on an isolated temporary worktree branch.
 
     Parameters
     ----------
@@ -1718,9 +1752,8 @@ def commit_ingest_changes(
     root), adds a minimal ``.gitignore`` for runtime products, and creates a
     read-only ``raw`` snapshot branch when absent.
 
-    The repository is left checked out on ``new_branch``. For staged campaign
-    handoff, downstream steps need the returned worktree to reflect the branch
-    that actually received the ingest commit.
+    The commit happens in a detached temporary worktree so the caller's main
+    working tree is not switched to the ingest branch.
     """
     try:
         from git import Repo, InvalidGitRepositoryError  # type: ignore
@@ -1744,10 +1777,10 @@ def commit_ingest_changes(
         rel_output = "."
 
     require_clean_repo(repo)
-    current = repo.active_branch.name if repo.head.is_valid() else ""
+    current = current_branch_name(repo) if repo.head.is_valid() else ""
     base = (base_branch or current).strip() or current
-    # Default ingest branch is "main" unless explicitly overridden.
-    new_branch = (branch_name or "main").strip() or "main"
+    # Default ingest branch is "raw_ingest" unless explicitly overridden.
+    new_branch = (branch_name or "raw_ingest").strip() or "raw_ingest"
 
     existing = {h.name for h in getattr(repo, "heads", [])}
     if base and base not in existing:
@@ -1760,64 +1793,192 @@ def commit_ingest_changes(
         )
         base = fallback
     if not repo.head.is_valid():
-        # First commit in a new repo: create branch directly.
-        repo.git.checkout("-b", new_branch)
-    else:
-        if new_branch in existing:
-            checkout(repo, new_branch)
-        else:
-            checkout(repo, base or current)
-            repo.git.checkout("-b", new_branch)
+        init_branch = base or new_branch
+        repo.git.checkout("-b", init_branch)
+        try:
+            repo.git.commit("--allow-empty", "-m", "Initialize ingest repository")
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to create initial ingest repository commit. "
+                "Configure git user.name/user.email and retry."
+            ) from e
+        current = init_branch
+        existing = {h.name for h in getattr(repo, "heads", [])}
+        if not base:
+            base = init_branch
 
-    # Ensure logs do not keep the repo dirty after ingest.
-    gitignore = output_root / ".gitignore"
-    ignore_lines = ["logs/", "results/"]
-    if gitignore.exists():
-        gitignore_existing = set(gitignore.read_text(encoding="utf-8").splitlines())
-        to_add = [ln for ln in ignore_lines if ln not in gitignore_existing]
-        if to_add:
-            gitignore.write_text(
-                "\n".join([*gitignore_existing, *to_add]) + "\n", encoding="utf-8"
-            )
-    else:
-        gitignore.write_text("\n".join(ignore_lines) + "\n", encoding="utf-8")
-
-    repo.git.add("-A", "--", rel_output)
-    msg = (commit_message or "Ingest: collected files").strip()
-    staged = [
-        p
-        for p in repo.git.diff("--cached", "--name-only", "--", rel_output).splitlines()
-        if p.strip()
-    ]
-    if staged:
-        repo.index.commit(msg)
-    else:
-        repo.git.commit("--allow-empty", "-m", msg + " (no changes)")
-
-    # Create a read-only snapshot branch for the ingest baseline.
-    # We intentionally do not check it out or modify it.
-    raw_branch = "raw"
-    if raw_branch not in existing:
-        repo.git.branch(raw_branch, new_branch)
-
-    dirty_paths = [
-        p
-        for p in repo.git.status("--porcelain", "--", rel_output).splitlines()
-        if p.strip()
-    ]
-    dirty = bool(dirty_paths)
-    if dirty:
-        untracked = [
-            p for p in getattr(repo, "untracked_files", []) if p.startswith(rel_output)
-        ]
-        changed = [
-            p
-            for p in repo.git.diff("--name-only", "--", rel_output).splitlines()
-            if p.strip()
-        ]
+    checked_out = branch_checked_out_in_worktree(repo_root, new_branch)
+    if checked_out is not None and new_branch != current:
         raise IngestError(
-            "Ingest commit left untracked/modified files. "
-            f"Untracked={len(untracked)} Changed={len(changed)}"
+            f"Cannot update ingest branch '{new_branch}' because it is checked out in {checked_out}."
+        )
+    if checked_out is not None and new_branch == current:
+        raise IngestError(
+            f"Cannot update ingest branch '{new_branch}' in an isolated worktree while it is checked out in the main worktree."
         )
 
+    start_ref = new_branch if new_branch in existing else (base or current or "HEAD")
+    with temporary_detached_worktree(repo_root, start_ref) as worktree_root:
+        wt_repo = Repo(str(worktree_root), search_parent_directories=False)
+        if new_branch in existing:
+            checkout(wt_repo, new_branch)
+        else:
+            wt_repo.git.checkout("-b", new_branch)
+
+        wt_output_root = (
+            worktree_root if rel_output == "." else (worktree_root / rel_output)
+        )
+        selected_paths = _load_ingest_commit_paths(output_root)
+        if rel_output != ".":
+            wt_output_root.mkdir(parents=True, exist_ok=True)
+            if selected_paths:
+                _clear_selected_tree_entries(wt_output_root, selected_paths)
+                _copy_selected_tree_entries(output_root, wt_output_root, selected_paths)
+            else:
+                _clear_tree_contents(wt_output_root)
+                _copy_tree_contents(output_root, wt_output_root)
+        else:
+            if selected_paths:
+                _clear_selected_tree_entries(wt_output_root, selected_paths)
+                _copy_selected_tree_entries(output_root, wt_output_root, selected_paths)
+            else:
+                _copy_tree_contents(output_root, wt_output_root)
+
+        gitignore = wt_output_root / ".gitignore"
+        _ensure_ingest_gitignore(gitignore)
+
+        wt_repo.git.add("-A", "--", rel_output)
+        msg = (commit_message or "Ingest: collected files").strip()
+        staged = [
+            p
+            for p in wt_repo.git.diff("--cached", "--name-only", "--", rel_output).splitlines()
+            if p.strip()
+        ]
+        if staged:
+            wt_repo.index.commit(msg)
+        else:
+            wt_repo.git.commit("--allow-empty", "-m", msg + " (no changes)")
+
+        raw_branch = "raw"
+        updated_existing = {h.name for h in getattr(wt_repo, "heads", [])}
+        if raw_branch not in updated_existing:
+            wt_repo.git.branch(raw_branch, new_branch)
+
+        dirty_paths = [
+            p
+            for p in wt_repo.git.status("--porcelain", "--", rel_output).splitlines()
+            if p.strip()
+        ]
+        if dirty_paths:
+            untracked = [
+                p
+                for p in getattr(wt_repo, "untracked_files", [])
+                if rel_output == "." or p.startswith(rel_output)
+            ]
+            changed = [
+                p
+                for p in wt_repo.git.diff("--name-only", "--", rel_output).splitlines()
+                if p.strip()
+            ]
+            raise IngestError(
+                "Ingest commit left untracked/modified files. "
+                f"Untracked={len(untracked)} Changed={len(changed)}"
+            )
+
     return new_branch
+
+
+def _ensure_ingest_gitignore(path: Path) -> None:
+    ignore_lines = ["logs/", "results/"]
+    if path.exists():
+        existing_lines = path.read_text(encoding="utf-8").splitlines()
+        existing = set(existing_lines)
+        to_add = [ln for ln in ignore_lines if ln not in existing]
+        if to_add:
+            path.write_text("\n".join([*existing_lines, *to_add]) + "\n", encoding="utf-8")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(ignore_lines) + "\n", encoding="utf-8")
+
+
+def _load_ingest_commit_paths(output_root: Path) -> List[str]:
+    manifest = output_root / "ingest_reports" / "ingest_commit_manifest.json"
+    if not manifest.exists():
+        return []
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    out: List[str] = []
+    for raw in data.get("paths", []) or []:
+        p = str(raw).strip().replace("\\", "/").strip("/")
+        if p:
+            out.append(p)
+    return list(dict.fromkeys(out))
+
+
+def _copy_tree_contents(src_root: Path, dst_root: Path) -> None:
+    src_root = Path(src_root)
+    dst_root = Path(dst_root)
+    dst_root.mkdir(parents=True, exist_ok=True)
+    for src in sorted(src_root.rglob("*")):
+        rel = src.relative_to(src_root)
+        dst = dst_root / rel
+        if src.is_dir():
+            dst.mkdir(parents=True, exist_ok=True)
+        else:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+
+
+def _remove_tree_if_exists(path: Path) -> None:
+    path = Path(path)
+    if not path.exists():
+        return
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+        return
+    _clear_tree_contents(path)
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+
+
+def _copy_selected_tree_entries(src_root: Path, dst_root: Path, rel_paths: List[str]) -> None:
+    src_root = Path(src_root)
+    dst_root = Path(dst_root)
+    dst_root.mkdir(parents=True, exist_ok=True)
+    for rel_str in rel_paths:
+        rel = Path(rel_str)
+        src = src_root / rel
+        if not src.exists():
+            continue
+        dst = dst_root / rel
+        if src.is_dir():
+            _copy_tree_contents(src, dst)
+        else:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+
+
+def _clear_selected_tree_entries(root: Path, rel_paths: List[str]) -> None:
+    root = Path(root)
+    for rel_str in rel_paths:
+        _remove_tree_if_exists(root / rel_str)
+
+
+def _clear_tree_contents(root: Path) -> None:
+    root = Path(root)
+    if not root.exists():
+        return
+    for child in sorted(root.rglob("*"), reverse=True):
+        try:
+            if child.is_symlink() or child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                child.rmdir()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue

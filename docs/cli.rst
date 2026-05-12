@@ -186,6 +186,13 @@ Optional provider catalog override:
    pleb compare-public --out-dir results/public_release_compare \
      --providers configs/catalogs/public_releases/providers.toml
 
+Optional shared cache override:
+
+.. code-block:: bash
+
+   pleb compare-public --out-dir results/public_release_compare \
+     --cache-dir /work/git_projects/pleb/public_release_cache
+
 Outputs include:
 
 - resolved assets table

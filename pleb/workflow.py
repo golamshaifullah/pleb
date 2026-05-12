@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dataclass_fields
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
 import copy
+import shutil
+import subprocess
 
 try:
     import tomllib  # py3.11+
@@ -17,11 +19,13 @@ except Exception:  # pragma: no cover
 import pandas as pd
 
 from .config import IngestConfig, PipelineConfig
-from .pipeline import run_pipeline
+from .pipeline import run_pipeline, _git_add_pathspecs
 from .param_scan import run_param_scan
 from .qc_report import generate_qc_report
 from .public_release_compare import compare_public_releases
+from .review_synthesis import run_review_synthesis
 from .ingest import ingest_dataset
+from .git_tools import branch_checked_out_in_worktree, temporary_detached_worktree
 from .logging_utils import get_logger, set_log_dir
 from .run_report import generate_run_report
 from .config_io import _load_config_dict, _parse_value_as_toml_literal, _set_dotted_key
@@ -56,6 +60,389 @@ class WorkflowContext:
     last_qc_summary: Optional[Path] = None
     last_fix_summary: Optional[Path] = None
     step_records: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _WorktreePlan:
+    start_ref: str
+    commit_branch: Optional[str]
+    commit_message: Optional[str]
+
+
+def _git_branch_exists(repo_root: Path, branch: str) -> bool:
+    branch = str(branch or "").strip()
+    if not branch:
+        return False
+    res = subprocess.run(
+        ["git", "rev-parse", "--verify", f"refs/heads/{branch}"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return res.returncode == 0
+
+
+def _is_git_repo_root(repo_root: Path) -> bool:
+    if not repo_root.exists() or not repo_root.is_dir():
+        return False
+    res = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        return False
+    try:
+        return Path((res.stdout or "").strip()).resolve() == repo_root.resolve()
+    except Exception:
+        return False
+
+
+def _path_rel_to_repo(path: Path, repo_root: Path) -> Optional[Path]:
+    try:
+        return path.expanduser().resolve().relative_to(repo_root.expanduser().resolve())
+    except Exception:
+        return None
+
+
+def _remap_repo_local_path(path: Path, old_repo_root: Path, new_repo_root: Path) -> Path:
+    rel = _path_rel_to_repo(path, old_repo_root)
+    if rel is None:
+        return path.expanduser().resolve()
+    return (new_repo_root / rel).resolve()
+
+
+def _remap_repo_local_string_path(
+    raw: Any, old_repo_root: Path, new_repo_root: Path
+) -> Any:
+    if raw in (None, ""):
+        return raw
+    text = str(raw).strip()
+    if not text:
+        return raw
+    try:
+        p = Path(text).expanduser()
+    except Exception:
+        return raw
+    if not p.is_absolute():
+        return raw
+    rel = _path_rel_to_repo(p, old_repo_root)
+    if rel is None:
+        return raw
+    return str((new_repo_root / rel).resolve())
+
+
+def _rebase_cfg_for_worktree(cfg: PipelineConfig | IngestConfig, worktree_root: Path) -> None:
+    old_repo_root = Path(cfg.home_dir).expanduser().resolve() if getattr(cfg, "home_dir", None) not in (None, "") else None
+    if old_repo_root is None:
+        return
+    new_repo_root = Path(worktree_root).expanduser().resolve()
+    for fld in dataclass_fields(cfg):
+        name = fld.name
+        value = getattr(cfg, name)
+        if name == "home_dir":
+            setattr(cfg, name, new_repo_root)
+            continue
+        if name == "dataset_name" and value not in (None, ""):
+            p = Path(value).expanduser()
+            if p.is_absolute():
+                rel = _path_rel_to_repo(p, old_repo_root)
+                if rel is not None:
+                    setattr(cfg, name, rel)
+            continue
+        if name == "compare_public_cache_dir":
+            continue
+        if isinstance(value, Path) and value.is_absolute():
+            rel = _path_rel_to_repo(value, old_repo_root)
+            if rel is None:
+                continue
+            setattr(cfg, name, (new_repo_root / rel).resolve())
+
+
+def _rebase_workflow_overrides_for_worktree(
+    step_effective_dict: Dict[str, Any],
+    old_repo_root: Path,
+    new_repo_root: Path,
+) -> Dict[str, Any]:
+    out = copy.deepcopy(step_effective_dict)
+    for key in ("review_out_dir", "review_overrides", "compare_public_out_dir"):
+        if key in out:
+            out[key] = _remap_repo_local_string_path(
+                out.get(key), old_repo_root, new_repo_root
+            )
+    if "review_stage_run" in out and isinstance(out["review_stage_run"], list):
+        remapped: list[str] = []
+        for item in out["review_stage_run"]:
+            text = str(item)
+            if "=" not in text:
+                remapped.append(text)
+                continue
+            k, v = text.split("=", 1)
+            remapped.append(
+                f"{k}={_remap_repo_local_string_path(v, old_repo_root, new_repo_root)}"
+            )
+        out["review_stage_run"] = remapped
+    return out
+
+
+def _map_ctx_paths_from_worktree(
+    ctx: WorkflowContext,
+    *,
+    worktree_root: Path,
+    repo_root: Path,
+    record_start: int,
+) -> None:
+    def _map_path_obj(path: Optional[Path]) -> Optional[Path]:
+        if path is None:
+            return None
+        rel = _path_rel_to_repo(path, worktree_root)
+        if rel is None:
+            return path
+        return (repo_root / rel).resolve()
+
+    def _map_path_text(text: Any) -> Any:
+        if text in (None, ""):
+            return text
+        try:
+            p = Path(str(text)).expanduser()
+        except Exception:
+            return text
+        rel = _path_rel_to_repo(p, worktree_root)
+        if rel is None:
+            return text
+        return str((repo_root / rel).resolve())
+
+    ctx.last_run_dir = _map_path_obj(ctx.last_run_dir)
+    ctx.last_pipeline_run_dir = _map_path_obj(ctx.last_pipeline_run_dir)
+    ctx.last_qc_summary = _map_path_obj(ctx.last_qc_summary)
+    ctx.last_fix_summary = _map_path_obj(ctx.last_fix_summary)
+    for rec in ctx.step_records[record_start:]:
+        for key in ("run_dir", "fix_summary", "qc_summary"):
+            if key in rec:
+                rec[key] = _map_path_text(rec.get(key))
+
+
+def _copy_tree_without_git(src: Path, dst: Path) -> None:
+    dst.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        if child.name == ".git":
+            continue
+        target = dst / child.name
+        if child.is_dir() and not child.is_symlink():
+            _copy_tree_without_git(child, target)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(child, target)
+
+
+def _collect_changed_and_untracked_paths(repo_root: Path) -> List[str]:
+    def _run(*args: str) -> List[str]:
+        res = subprocess.run(
+            ["git", *args],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=False,
+            check=False,
+        )
+        if res.returncode != 0:
+            return []
+        return [
+            item.decode("utf-8", errors="replace")
+            for item in res.stdout.split(b"\0")
+            if item
+        ]
+
+    changed = _run("diff", "--name-only", "-z")
+    untracked = _run("ls-files", "--others", "--exclude-standard", "-z")
+    out: List[str] = []
+    seen: set[str] = set()
+    for item in [*changed, *untracked]:
+        text = item.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _commit_generated_changes_to_branch(
+    *,
+    source_worktree_root: Path,
+    repo_root: Path,
+    branch: str,
+    commit_message: str,
+) -> None:
+    changed_paths = _collect_changed_and_untracked_paths(source_worktree_root)
+    if not changed_paths:
+        return
+    checked_out = branch_checked_out_in_worktree(repo_root, branch)
+    if checked_out is not None:
+        raise RuntimeError(
+            f"Cannot commit generated outputs onto branch '{branch}' because it is checked out in {checked_out}."
+        )
+    with temporary_detached_worktree(repo_root, branch) as target_root:
+        if Repo is None:
+            raise RuntimeError("GitPython is required for branch-owned workflow commits.")
+        wt_repo = Repo(str(target_root), search_parent_directories=False)
+        wt_repo.git.checkout(branch)
+        to_stage: List[str] = []
+        for rel_path in changed_paths:
+            src = source_worktree_root / rel_path
+            dst = target_root / rel_path
+            if src.is_dir():
+                _copy_tree_without_git(src, dst)
+                to_stage.append(rel_path)
+            elif src.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                to_stage.append(rel_path)
+        if not to_stage:
+            return
+        _git_add_pathspecs(target_root.resolve(), to_stage)
+        if wt_repo.is_dirty(untracked_files=True):
+            wt_repo.index.commit(commit_message)
+
+
+def _single_branch_from_cfg(cfg: PipelineConfig) -> Optional[str]:
+    branches = [
+        str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()
+    ]
+    branches = list(dict.fromkeys(branches))
+    return branches[0] if len(branches) == 1 else None
+
+
+def _single_source_branch_from_cfg(cfg: PipelineConfig) -> Optional[str]:
+    branches = [
+        str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()
+    ]
+    reference = str(getattr(cfg, "reference_branch", "") or "").strip()
+    branch_set = list(dict.fromkeys([*branches, *([reference] if reference else [])]))
+    return branch_set[0] if len(branch_set) == 1 else None
+
+
+def _apply_optimize_fixed_overrides(
+    target: Dict[str, Any], overrides: Dict[str, Any] | None
+) -> None:
+    if not overrides:
+        return
+    for key, value in overrides.items():
+        dotted = str(key).strip()
+        if not dotted:
+            continue
+        if dotted.startswith("backend_profile.") or dotted.startswith(
+            "backend_profiles."
+        ):
+            continue
+        _set_dotted_key(target, dotted, value)
+
+
+def _infer_optimize_worktree_plan(
+    optimize_cfg_path: Path,
+) -> tuple[_WorktreePlan, Path]:
+    from .optimize.cli import load_optimization_config
+
+    ocfg = load_optimization_config(optimize_cfg_path)
+    raw = _load_config_dict(str(ocfg.base_config_path))
+    _apply_optimize_fixed_overrides(raw, ocfg.fixed_overrides)
+    pcfg = PipelineConfig.from_dict(raw, base_dir=ocfg.base_config_path.parent)
+    resolved = pcfg.resolved()
+    repo_root = Path(resolved.home_dir).expanduser().resolve()
+    branch = _single_source_branch_from_cfg(resolved)
+    if not branch:
+        raise RuntimeError(
+            "Workflow optimize step requires a single source branch in the base "
+            "pipeline config."
+        )
+    if not _git_branch_exists(repo_root, branch):
+        raise RuntimeError(
+            f"Workflow optimize step source branch does not exist: {branch}"
+        )
+    return (
+        _WorktreePlan(
+            start_ref=branch,
+            commit_branch=branch,
+            commit_message="Workflow optimize: generated outputs",
+        ),
+        repo_root,
+    )
+
+
+def _infer_worktree_plan(
+    name: str,
+    cfg: PipelineConfig | IngestConfig,
+    step_effective_dict: Dict[str, Any],
+    *,
+    workflow_path: Path | None = None,
+) -> Optional[_WorktreePlan]:
+    home_dir = getattr(cfg, "home_dir", None)
+    if home_dir in (None, ""):
+        return None
+    repo_root = Path(home_dir).expanduser().resolve()
+    if not _is_git_repo_root(repo_root):
+        return None
+
+    if name == "ingest":
+        target = str(getattr(cfg, "ingest_commit_branch_name", "") or "raw_ingest").strip() or "raw_ingest"
+        base = str(getattr(cfg, "ingest_commit_base_branch", "") or "main").strip() or "main"
+        start_ref = target if _git_branch_exists(repo_root, target) else base
+        return _WorktreePlan(start_ref=start_ref, commit_branch=None, commit_message=None)
+
+    if name in {"pipeline", "fix_dataset", "fix_apply"}:
+        if bool(getattr(cfg, "fix_apply", False)):
+            base = str(getattr(cfg, "fix_base_branch", "") or getattr(cfg, "reference_branch", "") or "").strip()
+            if not base:
+                return None
+            return _WorktreePlan(start_ref=base, commit_branch=None, commit_message=None)
+        branch = _single_branch_from_cfg(cfg)
+        if not branch:
+            return None
+        return _WorktreePlan(
+            start_ref=branch,
+            commit_branch=branch,
+            commit_message=f"Workflow {name}: generated outputs",
+        )
+
+    if name in {"param_scan", "whitenoise"}:
+        branch = str(getattr(cfg, "reference_branch", "") or "").strip() or (_single_branch_from_cfg(cfg) or "")
+        if not branch:
+            return None
+        return _WorktreePlan(
+            start_ref=branch,
+            commit_branch=branch,
+            commit_message=f"Workflow {name}: generated outputs",
+        )
+
+    if name == "compare_public":
+        branch = str(step_effective_dict.get("compare_public_local_branch", "") or "").strip()
+        if not branch:
+            branch = str(getattr(cfg, "reference_branch", "") or "").strip()
+        if not branch:
+            branch = _single_branch_from_cfg(cfg) or ""
+        if not branch:
+            return None
+        return _WorktreePlan(
+            start_ref=branch,
+            commit_branch=branch,
+            commit_message="Workflow compare_public: generated outputs",
+        )
+
+    if name == "review_synthesis":
+        review_final_branch = (
+            str(step_effective_dict.get("review_final_branch", "") or "").strip()
+            or f"{_infer_review_slug(step_effective_dict.get('review_slug'), step_effective_dict.get('review_final_branch'), workflow_path)}_step6_apply_delete"
+        )
+        if not review_final_branch.strip():
+            return None
+        return _WorktreePlan(
+            start_ref=review_final_branch,
+            commit_branch=review_final_branch,
+            commit_message="Workflow review_synthesis: generated outputs",
+        )
+
+    return None
 
 
 def _load_workflow(path: Path) -> Dict[str, Any]:
@@ -335,59 +722,65 @@ def _should_stop(stop_if: List[Any], ctx: WorkflowContext) -> bool:
     return False
 
 
-def _run_step(
-    step: Dict[str, Any],
-    base_dict: Dict[str, Any],
-    ctx: WorkflowContext,
-    *,
-    workflow_base_dir: Path | None = None,
-    cfg_base_dir: Path | None = None,
-) -> None:
-    name = step["name"]
-    step_cfg_path = step.get("config")
-    step_base_dict = base_dict
-    step_cfg_base_dir = cfg_base_dir
-    file_overrides: List[Dict[str, Any]] = []
-    resolved_step_cfg_path: Path | None = None
-    if step_cfg_path:
-        resolved_step_cfg_path = _resolve_config_path(
-            str(step_cfg_path), base_dir=workflow_base_dir
-        )
-        if name == "optimize":
-            from .optimize.cli import load_optimization_config
-            from .optimize.optimizer import run_optimization
+def _normalize_step_values(raw: Any) -> List[str]:
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    text = str(raw).strip()
+    return [text] if text else []
 
-            ocfg = load_optimization_config(resolved_step_cfg_path)
-            result = run_optimization(ocfg)
-            ctx.last_run_dir = result.out_dir
-            ctx.step_records.append(
-                {
-                    "step": name,
-                    "kind": name,
-                    "run_dir": str(result.out_dir),
-                    "fix_summary": "",
-                    "qc_summary": "",
-                }
-            )
-            return
-        step_base_dict = _load_config_dict(str(resolved_step_cfg_path))
-        step_cfg_base_dir = resolved_step_cfg_path.parent
-    for override_path in step.get("set_from_toml", []) or []:
-        file_overrides.append(
-            _load_step_override_file(
-                override_path,
-                workflow_base_dir=workflow_base_dir,
-                cfg_base_dir=step_cfg_base_dir,
-            )
-        )
-    cfg = _build_cfg(
-        name,
-        step_base_dict,
-        step.get("set", []),
-        step.get("overrides", {}),
-        file_overrides=file_overrides,
-        base_dir=step_cfg_base_dir,
-    )
+
+def _select_single_pulsar(raw: Any) -> Optional[str]:
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text or text.upper() == "ALL":
+            return None
+        return text
+    if isinstance(raw, (list, tuple)):
+        items = [str(item).strip() for item in raw if str(item).strip()]
+        return items[0] if len(items) == 1 else None
+    return None
+
+
+def _resolve_repo_path(home_dir: Path, raw: Any) -> Optional[Path]:
+    if raw in (None, ""):
+        return None
+    path = Path(str(raw)).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (home_dir / path).resolve()
+
+
+def _infer_review_slug(
+    explicit_slug: Any,
+    explicit_final_branch: Any,
+    workflow_path: Path | None,
+) -> str:
+    slug = str(explicit_slug or "").strip()
+    if slug:
+        return slug
+    final_branch = str(explicit_final_branch or "").strip()
+    if final_branch.endswith("_step6_apply_delete"):
+        return final_branch[: -len("_step6_apply_delete")]
+    if workflow_path is not None:
+        stem = workflow_path.stem.strip()
+        if stem:
+            return stem.split("_", 1)[0]
+    return ""
+
+
+def _execute_step_body(
+    *,
+    name: str,
+    cfg: PipelineConfig | IngestConfig,
+    step_effective_dict: Dict[str, Any],
+    ctx: WorkflowContext,
+    step_run_dir: Any = None,
+    workflow_path: Path | None = None,
+) -> None:
     if name in (
         "pipeline",
         "fix_dataset",
@@ -395,6 +788,7 @@ def _run_step(
         "param_scan",
         "whitenoise",
         "compare_public",
+        "review_synthesis",
     ):
         try:
             home_dir = Path(cfg.home_dir)
@@ -440,6 +834,7 @@ def _run_step(
             Path(cfg.ingest_mapping_file),
             Path(cfg.ingest_output_dir),
             verify=bool(getattr(cfg, "ingest_verify", False)),
+            pulsars=step_effective_dict.get("pulsars"),
             report_metadata={
                 "fix_ensure_ephem": getattr(cfg, "fix_ensure_ephem", None),
                 "fix_ensure_clk": getattr(cfg, "fix_ensure_clk", None),
@@ -490,7 +885,6 @@ def _run_step(
 
     if name == "fix_dataset":
         cfg.run_fix_dataset = True
-        # Honor fix_apply/fix_* settings provided in the config/overrides.
         cfg.fix_apply = bool(getattr(cfg, "fix_apply", False))
         out_paths = run_pipeline(cfg)
         ctx.last_run_dir = out_paths.get("tag")
@@ -550,12 +944,13 @@ def _run_step(
         return
 
     if name == "whitenoise":
-        # Whitenoise-only step: run pipeline harness with only white-noise stage enabled.
         cfg.run_whitenoise = True
         cfg.run_tempo2 = False
         cfg.run_pqc = False
         cfg.qc_report = False
         cfg.run_fix_dataset = False
+        cfg.fix_apply = False
+        cfg.make_binary_analysis = False
         cfg.make_plots = False
         cfg.make_reports = False
         cfg.make_covmat = False
@@ -581,9 +976,32 @@ def _run_step(
             else:
                 out_dir = Path(cfg.results_dir) / "public_release_compare"
         providers_path = getattr(cfg, "compare_public_providers_path", None)
+        local_dataset_root = None
+        if getattr(cfg, "dataset_name", None):
+            local_dataset_root = Path(cfg.dataset_name)
+            if not local_dataset_root.is_absolute():
+                local_dataset_root = Path(cfg.home_dir) / local_dataset_root
+        local_branch = str(
+            step_effective_dict.get("compare_public_local_branch", "") or ""
+        ).strip()
+        if not local_branch:
+            local_branch = str(getattr(cfg, "reference_branch", "") or "").strip()
+        if not local_branch:
+            branches = [str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()]
+            if len(branches) == 1:
+                local_branch = branches[0]
         out = compare_public_releases(
             out_dir=Path(out_dir),
             providers_path=(Path(providers_path) if providers_path else None),
+            cache_dir=(
+                Path(cfg.compare_public_cache_dir)
+                if getattr(cfg, "compare_public_cache_dir", None)
+                else None
+            ),
+            local_dataset_root=local_dataset_root,
+            local_branch=(local_branch or None),
+            local_pulsars=getattr(cfg, "pulsars", None),
+            alias_mapping_path=(Path(cfg.ingest_mapping_file) if getattr(cfg, "ingest_mapping_file", None) else None),
         )
         ctx.last_run_dir = Path(out["out_dir"])
         ctx.step_records.append(
@@ -597,12 +1015,86 @@ def _run_step(
         )
         return
 
+    if name == "review_synthesis":
+        home_dir = Path(cfg.home_dir).resolve()
+        dataset_name = getattr(cfg, "dataset_name", None)
+        if dataset_name in (None, ""):
+            raise RuntimeError(
+                "review_synthesis step requires dataset_name in the base pipeline config."
+            )
+        dataset_root = (home_dir / str(dataset_name)).resolve()
+        results_root = Path(cfg.results_dir).resolve()
+        review_psr = str(step_effective_dict.get("review_psr", "") or "").strip()
+        if not review_psr:
+            review_psr = _select_single_pulsar(getattr(cfg, "pulsars", None)) or ""
+        if not review_psr:
+            raise RuntimeError(
+                "review_synthesis step requires review_psr, or cfg.pulsars must select a single pulsar."
+            )
+        review_slug = _infer_review_slug(
+            step_effective_dict.get("review_slug"),
+            step_effective_dict.get("review_final_branch"),
+            workflow_path,
+        )
+        if not review_slug:
+            raise RuntimeError(
+                "review_synthesis step requires review_slug, review_final_branch, or a workflow filename that starts with the slug."
+            )
+        review_final_branch = (
+            str(step_effective_dict.get("review_final_branch", "") or "").strip()
+            or f"{review_slug}_step6_apply_delete"
+        )
+        review_workflow_config = (
+            str(step_effective_dict.get("review_workflow_config", "") or "").strip()
+            or (str(workflow_path.resolve()) if workflow_path is not None else "")
+        )
+        review_out_dir = _resolve_repo_path(
+            home_dir, step_effective_dict.get("review_out_dir")
+        )
+        if review_out_dir is None:
+            package_name = (
+                Path(review_workflow_config).stem if review_workflow_config else review_slug
+            )
+            review_out_dir = (
+                results_root / "review_packages" / review_psr / package_name
+            ).resolve()
+        review_overrides = _resolve_repo_path(
+            home_dir, step_effective_dict.get("review_overrides")
+        )
+        result = run_review_synthesis(
+            psr=review_psr,
+            slug=review_slug,
+            workflow_config=review_workflow_config or None,
+            repo_root=home_dir,
+            dataset_root=dataset_root,
+            results_root=results_root,
+            final_branch=review_final_branch,
+            out=review_out_dir,
+            overrides=review_overrides,
+            max_keep_points=int(step_effective_dict.get("review_max_keep_points", 4000)),
+            top_n_rows=int(step_effective_dict.get("review_top_n_rows", 50)),
+            stage_branch=_normalize_step_values(
+                step_effective_dict.get("review_stage_branch")
+            ),
+            stage_run=_normalize_step_values(step_effective_dict.get("review_stage_run")),
+        )
+        ctx.last_run_dir = result.out_dir
+        ctx.last_pipeline_run_dir = result.out_dir
+        ctx.step_records.append(
+            {
+                "step": name,
+                "kind": name,
+                "run_dir": str(result.out_dir),
+                "fix_summary": "",
+                "qc_summary": "",
+            }
+        )
+        return
+
     if name == "qc_report":
-        run_dir = step.get("run_dir")
-        if run_dir:
-            run_dir = Path(run_dir)
-        else:
-            run_dir = ctx.last_pipeline_run_dir or ctx.last_run_dir
+        run_dir = Path(step_run_dir) if step_run_dir not in (None, "") else (
+            ctx.last_pipeline_run_dir or ctx.last_run_dir
+        )
         if not run_dir:
             raise RuntimeError(
                 "qc_report step requires a prior pipeline run or explicit run_dir."
@@ -640,6 +1132,186 @@ def _run_step(
     raise ValueError(f"Unknown workflow step: {name}")
 
 
+def _run_step(
+    step: Dict[str, Any],
+    base_dict: Dict[str, Any],
+    ctx: WorkflowContext,
+    *,
+    workflow_base_dir: Path | None = None,
+    cfg_base_dir: Path | None = None,
+    workflow_path: Path | None = None,
+) -> None:
+    name = step["name"]
+    step_cfg_path = step.get("config")
+    step_base_dict = base_dict
+    step_cfg_base_dir = cfg_base_dir
+    resolved_step_cfg_path: Path | None = None
+    if step_cfg_path:
+        resolved_step_cfg_path = _resolve_config_path(
+            str(step_cfg_path), base_dir=workflow_base_dir
+        )
+        if name == "optimize":
+            from .optimize.cli import load_optimization_config
+            from .optimize.optimizer import run_optimization
+
+            worktree_plan, original_repo_root = _infer_optimize_worktree_plan(
+                resolved_step_cfg_path
+            )
+            with temporary_detached_worktree(
+                original_repo_root, worktree_plan.start_ref
+            ) as worktree_root:
+                worktree_cfg_path = _remap_repo_local_path(
+                    resolved_step_cfg_path, original_repo_root, worktree_root
+                )
+                ocfg = load_optimization_config(worktree_cfg_path)
+                result = run_optimization(ocfg)
+                if worktree_plan.commit_branch:
+                    _commit_generated_changes_to_branch(
+                        source_worktree_root=worktree_root,
+                        repo_root=original_repo_root,
+                        branch=worktree_plan.commit_branch,
+                        commit_message=str(
+                            worktree_plan.commit_message
+                            or "Workflow optimize: generated outputs"
+                        ),
+                    )
+                mapped_out_dir = _remap_repo_local_path(
+                    result.out_dir, worktree_root, original_repo_root
+                )
+                ctx.last_run_dir = mapped_out_dir
+                ctx.step_records.append(
+                    {
+                        "step": name,
+                        "kind": name,
+                        "run_dir": str(mapped_out_dir),
+                        "fix_summary": "",
+                        "qc_summary": "",
+                    }
+                )
+            return
+        step_base_dict = _load_config_dict(str(resolved_step_cfg_path))
+        step_cfg_base_dir = resolved_step_cfg_path.parent
+    provisional_effective_dict = _apply_overrides(
+        step_base_dict,
+        step.get("set", []),
+        step.get("overrides", {}),
+        file_overrides=None,
+    )
+    provisional_cfg = _build_cfg(
+        name,
+        step_base_dict,
+        step.get("set", []),
+        step.get("overrides", {}),
+        file_overrides=None,
+        base_dir=step_cfg_base_dir,
+    )
+    worktree_plan = _infer_worktree_plan(
+        name, provisional_cfg, provisional_effective_dict, workflow_path=workflow_path
+    )
+    if worktree_plan is not None:
+        original_repo_root = Path(getattr(provisional_cfg, "home_dir")).expanduser().resolve()
+        with temporary_detached_worktree(
+            original_repo_root, worktree_plan.start_ref
+        ) as worktree_root:
+            cfg = copy.deepcopy(provisional_cfg)
+            worktree_base_dict = step_base_dict
+            worktree_cfg_base_dir = step_cfg_base_dir
+            if resolved_step_cfg_path is not None:
+                worktree_cfg_path = _remap_repo_local_path(
+                    resolved_step_cfg_path, original_repo_root, worktree_root
+                )
+                worktree_base_dict = _load_config_dict(str(worktree_cfg_path))
+                worktree_cfg_base_dir = worktree_cfg_path.parent
+            worktree_workflow_base_dir = workflow_base_dir
+            if workflow_base_dir is not None:
+                worktree_workflow_base_dir = _remap_repo_local_path(
+                    Path(workflow_base_dir), original_repo_root, worktree_root
+                )
+            file_overrides: List[Dict[str, Any]] = []
+            for override_path in step.get("set_from_toml", []) or []:
+                file_overrides.append(
+                    _load_step_override_file(
+                        override_path,
+                        workflow_base_dir=worktree_workflow_base_dir,
+                        cfg_base_dir=worktree_cfg_base_dir,
+                    )
+                )
+            step_effective_dict = _apply_overrides(
+                worktree_base_dict,
+                step.get("set", []),
+                step.get("overrides", {}),
+                file_overrides=file_overrides,
+            )
+            cfg = _build_cfg(
+                name,
+                worktree_base_dict,
+                step.get("set", []),
+                step.get("overrides", {}),
+                file_overrides=file_overrides,
+                base_dir=worktree_cfg_base_dir,
+            )
+            step_effective_dict = _rebase_workflow_overrides_for_worktree(
+                step_effective_dict,
+                original_repo_root,
+                worktree_root,
+            )
+            _rebase_cfg_for_worktree(cfg, worktree_root)
+            record_start = len(ctx.step_records)
+            _execute_step_body(
+                name=name,
+                cfg=cfg,
+                step_effective_dict=step_effective_dict,
+                ctx=ctx,
+                step_run_dir=step.get("run_dir"),
+                workflow_path=workflow_path,
+            )
+            if worktree_plan.commit_branch:
+                _commit_generated_changes_to_branch(
+                    source_worktree_root=worktree_root,
+                    repo_root=original_repo_root,
+                    branch=worktree_plan.commit_branch,
+                    commit_message=str(worktree_plan.commit_message or f"Workflow {name}: generated outputs"),
+                )
+            _map_ctx_paths_from_worktree(
+                ctx,
+                worktree_root=worktree_root,
+                repo_root=original_repo_root,
+                record_start=record_start,
+            )
+            return
+    file_overrides: List[Dict[str, Any]] = []
+    for override_path in step.get("set_from_toml", []) or []:
+        file_overrides.append(
+            _load_step_override_file(
+                override_path,
+                workflow_base_dir=workflow_base_dir,
+                cfg_base_dir=step_cfg_base_dir,
+            )
+        )
+    step_effective_dict = _apply_overrides(
+        step_base_dict,
+        step.get("set", []),
+        step.get("overrides", {}),
+        file_overrides=file_overrides,
+    )
+    cfg = _build_cfg(
+        name,
+        step_base_dict,
+        step.get("set", []),
+        step.get("overrides", {}),
+        file_overrides=file_overrides,
+        base_dir=step_cfg_base_dir,
+    )
+    _execute_step_body(
+        name=name,
+        cfg=cfg,
+        step_effective_dict=step_effective_dict,
+        ctx=ctx,
+        step_run_dir=step.get("run_dir"),
+        workflow_path=workflow_path,
+    )
+
+
 def _merge_context(dst: WorkflowContext, src: WorkflowContext) -> None:
     if src.last_run_dir is not None:
         dst.last_run_dir = src.last_run_dir
@@ -660,6 +1332,7 @@ def _run_steps_serial(
     *,
     workflow_base_dir: Path | None = None,
     cfg_base_dir: Path | None = None,
+    workflow_path: Path | None = None,
     label_prefix: str = "",
 ) -> None:
     for idx, s in enumerate(steps, start=1):
@@ -670,6 +1343,7 @@ def _run_steps_serial(
             ctx,
             workflow_base_dir=workflow_base_dir,
             cfg_base_dir=cfg_base_dir,
+            workflow_path=workflow_path,
         )
 
 
@@ -680,6 +1354,7 @@ def _run_steps_parallel(
     *,
     workflow_base_dir: Path | None = None,
     cfg_base_dir: Path | None = None,
+    workflow_path: Path | None = None,
     workers: int = 0,
     label_prefix: str = "",
 ) -> None:
@@ -714,6 +1389,7 @@ def _run_steps_parallel(
             local_ctx,
             workflow_base_dir=workflow_base_dir,
             cfg_base_dir=cfg_base_dir,
+            workflow_path=workflow_path,
         )
         return i, local_ctx
 
@@ -743,6 +1419,7 @@ def _run_step_sequence(
     *,
     workflow_base_dir: Path | None = None,
     cfg_base_dir: Path | None = None,
+    workflow_path: Path | None = None,
     mode: str = "serial",
     parallel_workers: int = 0,
     label_prefix: str = "",
@@ -759,6 +1436,7 @@ def _run_step_sequence(
             ctx,
             workflow_base_dir=workflow_base_dir,
             cfg_base_dir=cfg_base_dir,
+            workflow_path=workflow_path,
             label_prefix=label_prefix,
         )
         return
@@ -768,6 +1446,7 @@ def _run_step_sequence(
         ctx,
         workflow_base_dir=workflow_base_dir,
         cfg_base_dir=cfg_base_dir,
+        workflow_path=workflow_path,
         workers=int(parallel_workers or 0),
         label_prefix=label_prefix,
     )
@@ -836,6 +1515,7 @@ def run_workflow(path: Path) -> WorkflowContext:
             ctx,
             workflow_base_dir=workflow_base_dir,
             cfg_base_dir=base_cfg_base_dir,
+            workflow_path=path,
             mode=global_mode,
             parallel_workers=global_parallel_workers,
         )
@@ -853,6 +1533,7 @@ def run_workflow(path: Path) -> WorkflowContext:
                 ctx,
                 workflow_base_dir=workflow_base_dir,
                 cfg_base_dir=base_cfg_base_dir,
+                workflow_path=path,
                 mode=str(gp.get("mode") or global_mode),
                 parallel_workers=int(
                     gp.get("parallel_workers") or global_parallel_workers
@@ -881,6 +1562,7 @@ def run_workflow(path: Path) -> WorkflowContext:
                         ctx,
                         workflow_base_dir=workflow_base_dir,
                         cfg_base_dir=base_cfg_base_dir,
+                        workflow_path=path,
                         mode=str(gp.get("mode") or lp.get("mode") or "serial"),
                         parallel_workers=int(
                             gp.get("parallel_workers")
@@ -896,6 +1578,7 @@ def run_workflow(path: Path) -> WorkflowContext:
                     ctx,
                     workflow_base_dir=workflow_base_dir,
                     cfg_base_dir=base_cfg_base_dir,
+                    workflow_path=path,
                     mode=str(lp.get("mode") or "serial"),
                     parallel_workers=int(lp.get("parallel_workers") or 0),
                     label_prefix="  ",

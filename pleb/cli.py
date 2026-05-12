@@ -391,7 +391,16 @@ def build_compare_public_parser() -> argparse.ArgumentParser:
         "--out-dir",
         type=Path,
         required=True,
-        help="Output directory for downloaded assets and comparison tables.",
+        help="Output directory for generated comparison tables.",
+    )
+    p.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional shared cache directory for public-release downloads and "
+            "extractions."
+        ),
     )
     p.add_argument(
         "--providers",
@@ -401,6 +410,29 @@ def build_compare_public_parser() -> argparse.ArgumentParser:
             "Provider TOML catalog (default: "
             "configs/catalogs/public_releases/providers.toml)."
         ),
+    )
+    p.add_argument(
+        "--local-dataset-root",
+        type=Path,
+        default=None,
+        help="Optional local dataset root; if set, compare local variant .par files against public releases.",
+    )
+    p.add_argument(
+        "--local-branch",
+        default=None,
+        help="Optional git branch/commit-ish to read local variant .par files from instead of the live worktree.",
+    )
+    p.add_argument(
+        "--pulsar",
+        action="append",
+        default=[],
+        help="Pulsar to include from the local dataset root. May be repeated.",
+    )
+    p.add_argument(
+        "--alias-mapping",
+        type=Path,
+        default=None,
+        help="Optional ingest mapping JSON/TOML used for B->J pulsar alias canonicalization.",
     )
     return p
 
@@ -547,6 +579,11 @@ def run_compare_public(argv: list[str] | None) -> int:
     out = compare_public_releases(
         out_dir=Path(args.out_dir),
         providers_path=Path(args.providers) if args.providers else None,
+        cache_dir=Path(args.cache_dir) if args.cache_dir else None,
+        local_dataset_root=Path(args.local_dataset_root) if args.local_dataset_root else None,
+        local_branch=str(args.local_branch).strip() if args.local_branch else None,
+        local_pulsars=args.pulsar or None,
+        alias_mapping_path=Path(args.alias_mapping) if args.alias_mapping else None,
     )
     _write_run_settings(Path(out["out_dir"]), argv, None)
     print(str(out["out_dir"]))

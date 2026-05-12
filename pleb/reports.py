@@ -687,7 +687,7 @@ def write_outlier_tables(
     """
     safe_mkdir(out_paths["outliers"])
     for pulsar in pulsars:
-        tim_dir = home_dir / pulsar / "tims"
+        tim_dir = home_dir / dataset_name / pulsar / "tims"
         tim_lookup = []
         if tim_dir.exists():
             for timfile in sorted(tim_dir.glob("*.tim")):

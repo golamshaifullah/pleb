@@ -91,6 +91,7 @@ Primary keys:
 - ``run_whitenoise``
 - ``whitenoise_*``
 - ``compare_public_out_dir``
+- ``compare_public_cache_dir``
 - ``compare_public_providers_path``
 
 See also

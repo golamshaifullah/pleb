@@ -15,18 +15,17 @@ from .compat import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 import re
+import subprocess
 
 import pandas as pd
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .config import PipelineConfig
-from .git_tools import checkout, require_clean_repo
 from .logging_utils import get_logger
 from .tempo2 import build_singularity_prefix, run_subprocess, tempo2_paths_in_container
 from .utils import (
     container_runtime,
-    discover_pulsars,
     safe_mkdir,
     cleanup_empty_dirs,
     remove_tree_if_exists,
@@ -56,6 +55,88 @@ class Candidate:
 
 
 _SAFE_LABEL_RX = re.compile(r"[^A-Za-z0-9._+-]+")
+
+
+def _path_in_repo_required(repo_root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except Exception as exc:
+        raise RuntimeError(f"Path {path} is not under repo root {repo_root}.") from exc
+
+
+def _git_ls_files_at_ref(repo_root: Path, ref: str, prefix: str) -> List[str]:
+    res = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", ref, "--", prefix],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        return []
+    return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+
+
+def _git_show_file(repo_root: Path, ref: str, path_in_repo: str) -> bytes | None:
+    res = subprocess.run(
+        ["git", "show", f"{ref}:{path_in_repo}"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=False,
+        check=False,
+    )
+    if res.returncode != 0:
+        return None
+    return res.stdout
+
+
+def _discover_pulsars_at_ref(repo_root: Path, dataset_root: Path, ref: str) -> List[str]:
+    dataset_rel = _path_in_repo_required(repo_root, dataset_root)
+    files = _git_ls_files_at_ref(repo_root, ref, dataset_rel)
+    out: List[str] = []
+    seen: set[str] = set()
+    for rel_path in files:
+        try:
+            first = Path(rel_path).relative_to(dataset_rel).parts[0]
+        except Exception:
+            continue
+        if first and first not in seen:
+            out.append(first)
+            seen.add(first)
+    return out
+
+
+def _materialize_pulsar_snapshot(
+    repo_root: Path,
+    dataset_root: Path,
+    *,
+    ref: str,
+    pulsar: str,
+    snapshot_dataset_root: Path,
+) -> Path:
+    psr_dir = snapshot_dataset_root / pulsar
+    parfile = psr_dir / f"{pulsar}.par"
+    timfile = psr_dir / f"{pulsar}_all.tim"
+    if parfile.exists() and timfile.exists():
+        return psr_dir
+
+    dataset_rel = _path_in_repo_required(repo_root, dataset_root)
+    prefix = f"{dataset_rel}/{pulsar}"
+    files = _git_ls_files_at_ref(repo_root, ref, prefix)
+    if not files:
+        raise FileNotFoundError(
+            f"No dataset files found for {pulsar} on branch {ref} under {dataset_rel}."
+        )
+    snapshot_dataset_root.mkdir(parents=True, exist_ok=True)
+    for rel_path in files:
+        data = _git_show_file(repo_root, ref, rel_path)
+        if data is None:
+            raise FileNotFoundError(f"Unable to read {rel_path} from branch {ref}.")
+        rel_to_dataset = Path(rel_path).relative_to(dataset_rel)
+        dest = snapshot_dataset_root / rel_to_dataset
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+    return psr_dir
 
 
 def _safe_label(s: str) -> str:
@@ -334,15 +415,20 @@ def _run_fit_only_plk(
     par_host_path: Path,
     work_dir: Path,
     plk_out: Path,
+    fit_home_dir: Path | None = None,
+    fit_dataset_name: Path | None = None,
 ) -> None:
     """Run tempo2 in 'fit-only' mode (plk stdout capture) for a given par file."""
 
+    data_home = Path(fit_home_dir).resolve() if fit_home_dir is not None else cfg.home_dir
+    data_name = Path(fit_dataset_name) if fit_dataset_name is not None else Path(cfg.dataset_name)
     par_container = f"/work/{par_host_path.name}"
     _, tim_container = tempo2_paths_in_container(pulsar)
     prefix = build_singularity_prefix(
-        cfg.home_dir,
-        cfg.dataset_name,
+        data_home,
+        data_name,
         cfg.singularity_image,
+        native=bool(getattr(cfg, "tempo2_native", False)),
         extra_binds=[(work_dir, "/work")],
     )
 
@@ -357,6 +443,19 @@ def _run_fit_only_plk(
         "-epoch",
         str(cfg.epoch),
     ]
+    if bool(getattr(cfg, "tempo2_native", False)):
+        psr_dir = data_home / data_name / pulsar
+        cmd = [
+            "tempo2",
+            "-f",
+            str(par_host_path),
+            str(psr_dir / f"{pulsar}_all.tim"),
+            "-showchisq",
+            "-colour",
+            "-sys",
+            "-epoch",
+            str(cfg.epoch),
+        ]
     run_subprocess(cmd, plk_out, cwd=work_dir)
 
 
@@ -553,10 +652,13 @@ def run_param_scan(
             "No branch provided for param scan (and config.reference_branch is empty)."
         )
 
+    repo_root = cfg.home_dir.resolve()
+    dataset_root = Path(cfg.dataset_name)
+
     # Pulsar selection
     if pulsars is None:
         if cfg.pulsars == "ALL":
-            pulsar_list = discover_pulsars(cfg.home_dir / cfg.dataset_name)
+            pulsar_list = _discover_pulsars_at_ref(repo_root, dataset_root, scan_branch)
         else:
             pulsar_list = list(cfg.pulsars)  # type: ignore[arg-type]
     else:
@@ -604,24 +706,24 @@ def run_param_scan(
     safe_mkdir(out_paths["base"])
     safe_mkdir(out_paths["tag"])
     safe_mkdir(out_paths["logs"])
-
-    try:
-        from git import Repo  # type: ignore
-    except Exception as e:  # pragma: no cover
-        raise RuntimeError(
-            "GitPython is required to run --param-scan (branch checkouts). Install GitPython."
-        ) from e
-
-    repo = Repo(str(cfg.home_dir))
-    require_clean_repo(repo)
-    current_branch = repo.active_branch.name
+    snapshot_home = out_paths["work"] / "__branch_snapshot" / _safe_label(scan_branch)
+    snapshot_dataset_name = Path(dataset_root.name)
+    snapshot_dataset_root = snapshot_home / snapshot_dataset_name
 
     def _scan_one(pulsar: str) -> List[Dict[str, object]]:
         # One worker per pulsar: runs baseline + all candidates sequentially.
-        parfile = cfg.home_dir / cfg.dataset_name / pulsar / f"{pulsar}.par"
-        if not parfile.exists():
-            logger.warning("Missing par file: %s", parfile)
+        try:
+            psr_dir = _materialize_pulsar_snapshot(
+                repo_root,
+                dataset_root,
+                ref=scan_branch,
+                pulsar=pulsar,
+                snapshot_dataset_root=snapshot_dataset_root,
+            )
+        except FileNotFoundError as e:
+            logger.warning("%s", e)
             return []
+        parfile = psr_dir / f"{pulsar}.par"
 
         base_text = parfile.read_text(encoding="utf-8", errors="ignore")
         p_work = out_paths["work"] / scan_branch / pulsar
@@ -640,6 +742,8 @@ def run_param_scan(
                 par_host_path=base_par,
                 work_dir=p_work,
                 plk_out=base_plk,
+                fit_home_dir=snapshot_home,
+                fit_dataset_name=snapshot_dataset_name,
             )
 
         base_stats = summarize_plk_only(base_plk)
@@ -707,6 +811,8 @@ def run_param_scan(
                     par_host_path=mod_par,
                     work_dir=p_work,
                     plk_out=mod_plk,
+                    fit_home_dir=snapshot_home,
+                    fit_dataset_name=snapshot_dataset_name,
                 )
 
             cand_stats = summarize_plk_only(mod_plk)
@@ -782,52 +888,44 @@ def run_param_scan(
         dfp.to_csv(pdir / f"param_scan_{pulsar}.tsv", sep="\t", index=False)
         return rows
 
-    try:
-        logger.info("=== Param scan on branch: %s ===", scan_branch)
-        checkout(repo, scan_branch)
+    logger.info("=== Param scan on branch snapshot: %s ===", scan_branch)
 
-        n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
-        all_rows: List[Dict[str, object]] = []
-        if n_jobs == 1:
+    n_jobs = max(1, int(getattr(cfg, "jobs", 1) or 1))
+    all_rows: List[Dict[str, object]] = []
+    if n_jobs == 1:
+        for psr in pulsar_list:
+            all_rows.extend(_scan_one(psr))
+    else:
+        futures = []
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
             for psr in pulsar_list:
-                all_rows.extend(_scan_one(psr))
-        else:
-            futures = []
-            with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-                for psr in pulsar_list:
-                    futures.append(ex.submit(_scan_one, psr))
-                for fut in as_completed(futures):
-                    all_rows.extend(fut.result())
+                futures.append(ex.submit(_scan_one, psr))
+            for fut in as_completed(futures):
+                all_rows.extend(fut.result())
 
-        if all_rows:
-            df = pd.DataFrame(all_rows)
+    if all_rows:
+        df = pd.DataFrame(all_rows)
 
-            # rank within each pulsar by p-value then delta chisq
-            def _rank_key(x):
-                try:
-                    return float(x)
-                except Exception:
-                    return float("inf")
+        # rank within each pulsar by p-value then delta chisq
+        def _rank_key(x):
+            try:
+                return float(x)
+            except Exception:
+                return float("inf")
 
-            df["p_value_for_sort"] = df["lrt_p_value"].apply(_rank_key)
-            df = df.sort_values(
-                ["pulsar", "p_value_for_sort", "lrt_delta_chisq"],
-                ascending=[True, True, False],
-            )
-            df = df.drop(columns=["p_value_for_sort"])
-            out_file = (
-                out_paths["param_scan"] / f"param_scan_{_safe_label(scan_branch)}.tsv"
-            )
-            df.to_csv(out_file, sep="\t", index=False)
+        df["p_value_for_sort"] = df["lrt_p_value"].apply(_rank_key)
+        df = df.sort_values(
+            ["pulsar", "p_value_for_sort", "lrt_delta_chisq"],
+            ascending=[True, True, False],
+        )
+        df = df.drop(columns=["p_value_for_sort"])
+        out_file = (
+            out_paths["param_scan"] / f"param_scan_{_safe_label(scan_branch)}.tsv"
+        )
+        df.to_csv(out_file, sep="\t", index=False)
 
-        if getattr(cfg, "cleanup_work_dir", False):
-            remove_tree_if_exists(out_paths["work"])
-        if getattr(cfg, "cleanup_output_tree", False):
-            cleanup_empty_dirs(out_paths["tag"])
-        return {k: Path(v) for k, v in out_paths.items()}
-
-    finally:
-        try:
-            checkout(repo, current_branch)
-        except Exception:
-            pass
+    if getattr(cfg, "cleanup_work_dir", False):
+        remove_tree_if_exists(out_paths["work"])
+    if getattr(cfg, "cleanup_output_tree", False):
+        cleanup_empty_dirs(out_paths["tag"])
+    return {k: Path(v) for k, v in out_paths.items()}
