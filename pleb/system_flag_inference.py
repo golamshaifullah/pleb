@@ -984,6 +984,8 @@ def canonicalise_centres(
 ) -> pd.DataFrame:
     """Snap center frequencies across pulsars within a tolerance.
 
+    ## GMS: Annoying that this exists and is not used.
+
     Parameters
     ----------
     assignments : pandas.DataFrame

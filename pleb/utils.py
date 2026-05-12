@@ -16,6 +16,8 @@ from datetime import datetime
 def which_or_raise(cmd: str, hint: str = "") -> str:
     """Resolve an executable on PATH or raise.
 
+    ## GMS: Sham functions to cover for my feeble brain.
+
     Parameters
     ----------
     cmd : str

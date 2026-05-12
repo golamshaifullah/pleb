@@ -348,6 +348,10 @@ def _template_allowed(path: Path) -> bool:
 
 
 def _reverse_aliases(aliases: Dict[str, str]) -> Dict[str, List[str]]:
+    """Invert a pulsar-alias mapping.
+
+    ## GMS: Check if this is actually used.
+    """
     rev: Dict[str, List[str]] = {}
     for src, dst in aliases.items():
         rev.setdefault(dst, []).append(src)

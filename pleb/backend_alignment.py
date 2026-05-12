@@ -709,7 +709,10 @@ def select_backend_alignment_reference(
     error_floor: float = 1e-6,
     score_weights: ReferenceSelectionWeights | None = None,
 ) -> BackendAlignmentResult:
-    """Infer global backend offsets and choose a robust alignment reference."""
+    """Infer global backend offsets and choose a robust alignment reference.
+
+    ## GMS: This is not used, actually.
+    """
     backends, edges, template_diags = estimate_pairwise_backend_offsets(
         records,
         max_toa_separation=max_toa_separation,
@@ -863,7 +866,10 @@ def write_backend_alignment_outputs(
     *,
     prefix: str = "backend_alignment",
 ) -> dict[str, Path]:
-    """Write alignment tables, plots, and a JSON summary to disk."""
+    """Write alignment tables, plots, and a JSON summary to disk.
+
+    ## GMS: Check if this is actually used.
+    """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
     files = {

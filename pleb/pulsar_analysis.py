@@ -170,6 +170,8 @@ def write_binary_analysis(
 ) -> Path:
     """Write a per-branch, per-pulsar binary analysis TSV.
 
+    ## GMS: Check if this was actually used.
+
     Looks for <home_dir>/<pulsar>/<pulsar>.par on each branch.
 
     Parameters

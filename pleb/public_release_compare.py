@@ -495,6 +495,10 @@ def _extract_par_declared_pulsar_name(text: str) -> str:
 
 
 def _canonical_pulsar_name(path: Path, aliases: Optional[Dict[str, str]] = None) -> str:
+    """Resolve a canonical pulsar name from a parfile path or contents.
+
+    ## GMS: Check if this is used somewhere.
+    """
     alias_map = aliases or {}
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")

@@ -177,6 +177,8 @@ class Kepler2DParameters(NamedTuple):
 def kepler_2d(params: Kepler2DParameters, t: float) -> np.ndarray:
     """Position and velocity of a particle in a Kepler orbit (2D).
 
+    ## GMS: Check if this is actually used by pleb.
+
     Returns a length-4 array [x, y, vx, vy].
 
     This is a simplified version of the notebook implementation.

@@ -2,6 +2,8 @@
 """
 tempo2_par_model_check.py
 
+## GMS: This is a standalone script that must be invoked fdirectly on par files that need to be tested.
+
 Standalone validator for Tempo2 .par files. It checks that binary-model
 parameters in a par file are compatible with the selected Tempo2 BINARY model.
 

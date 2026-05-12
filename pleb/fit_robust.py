@@ -1,5 +1,7 @@
 """Legacy robust `.tim` parsing import path.
 
+## GMS: Check if this actually used.
+
 This module is kept for backward compatibility and re-exports the canonical
 reader from :mod:`pleb.tim_reader`.
 """
