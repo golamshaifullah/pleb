@@ -188,12 +188,15 @@ def test_commit_branch_artifacts_scopes_to_current_run_outputs(
         branch="apply_branch",
         out_paths={"base": repo_root / "results" / "current_run", "tag": run_tag},
         commit_message="Artifacts: test",
+        cleanup_source_worktree=True,
     )
 
     show_current = _git(
         repo_root, "show", "apply_branch:results/current_run/apply_branch/run_report.pdf"
     )
     assert "current" in show_current.stdout
+    assert not (run_tag / "run_report.pdf").exists()
+    assert unrelated.exists()
 
     show_unrelated = subprocess.run(
         ["git", "show", "apply_branch:results/other_run/other_branch/noise.tsv"],

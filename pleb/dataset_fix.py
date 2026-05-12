@@ -161,9 +161,13 @@ class FixDatasetConfig:
         remove_patterns: Remove lines matching these patterns.
         coord_convert: Coordinate conversion mode (``equ2ecl`` or ``ecl2equ``).
         qc_remove_outliers: Apply/remove outliers flagged by PQC.
+        qc_apply_only: Run only the QC-driven TOA apply/flag step.
         qc_action: ``comment`` or ``delete`` for flagged TOAs.
         qc_comment_prefix: Prefix for commented-out TOAs.
         qc_backend_col: Backend column for matching QC results.
+        qc_review_action_col: Review-action column used for optional row filtering.
+        qc_review_include_actions: Optional list of review actions to include.
+        qc_review_exclude_actions: Optional list of review actions to exclude.
         qc_remove_bad: Apply bad/bad_day flags from QC.
         qc_remove_transients: Apply transient flags from QC.
         qc_remove_solar: Apply solar-elongation flags from QC.
@@ -266,9 +270,13 @@ class FixDatasetConfig:
     # ---- Optional PQC-driven TOA removal/commenting ----
     qc_remove_outliers: bool = False
     qc_outlier_cols: Optional[List[str]] = None
+    qc_apply_only: bool = False
     qc_action: str = "comment"  # "comment" | "delete"
     qc_comment_prefix: str = "C QC_OUTLIER"
     qc_backend_col: str = "sys"
+    qc_review_action_col: str = "manual_action"
+    qc_review_include_actions: Optional[List[str]] = None
+    qc_review_exclude_actions: Optional[List[str]] = None
     qc_remove_bad: bool = True
     qc_remove_transients: bool = False
     qc_remove_solar: bool = False
@@ -2062,6 +2070,63 @@ def _resolve_qc_results_dir(base: Path) -> Path:
     return base
 
 
+def _normalise_nonempty_strings(values: Sequence[object] | None) -> List[str]:
+    out: List[str] = []
+    for value in values or []:
+        sval = str(value).strip()
+        if sval:
+            out.append(sval)
+    return out
+
+
+def _filter_qc_rows_for_cfg(
+    df: pd.DataFrame, cfg: FixDatasetConfig
+) -> tuple[pd.DataFrame, Dict[str, object]]:
+    """Apply optional review-action filters before QC matching."""
+
+    info: Dict[str, object] = {"input_rows": int(len(df))}
+    include_actions = _normalise_nonempty_strings(cfg.qc_review_include_actions)
+    exclude_actions = _normalise_nonempty_strings(cfg.qc_review_exclude_actions)
+    if not include_actions and not exclude_actions:
+        info["selected_rows"] = int(len(df))
+        return df, info
+
+    action_col = str(cfg.qc_review_action_col or "").strip()
+    if not action_col:
+        raise ValueError(
+            "QC review-action filtering requires qc_review_action_col when "
+            "include/exclude actions are configured."
+        )
+    if action_col not in df.columns:
+        raise ValueError(
+            f"QC review-action column '{action_col}' was not found in the QC CSV."
+        )
+
+    actions = df[action_col].fillna("").astype(str).str.strip()
+    mask = pd.Series(True, index=df.index)
+    if include_actions:
+        wanted = {a.lower() for a in include_actions}
+        mask &= actions.str.lower().isin(wanted)
+    if exclude_actions:
+        blocked = {a.lower() for a in exclude_actions}
+        mask &= ~actions.str.lower().isin(blocked)
+
+    filtered = df.loc[mask].copy()
+    info.update(
+        {
+            "action_col": action_col,
+            "include_actions": include_actions,
+            "exclude_actions": exclude_actions,
+            "selected_rows": int(len(filtered)),
+            "selected_action_counts": {
+                str(k): int(v)
+                for k, v in actions.loc[mask].value_counts(dropna=False).to_dict().items()
+            },
+        }
+    )
+    return filtered, info
+
+
 def _collect_qc_mjds(
     df: pd.DataFrame, cfg: FixDatasetConfig
 ) -> Dict[str, Dict[Optional[str], list[float]]]:
@@ -2297,9 +2362,26 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             "error": str(e),
         }
 
-    mjd_maps = _collect_qc_mjds(df, cfg)
+    try:
+        filtered_df, qc_filter = _filter_qc_rows_for_cfg(df, cfg)
+    except Exception as e:
+        return {
+            "pulsar": psr,
+            "qc_csv": str(qc_csvs[0]),
+            "qc_csvs": [str(p) for p in qc_csvs],
+            "qc_statuses": sorted(
+                {
+                    str(r.get("qc_status", "")).strip()
+                    for r in manifest_rows
+                    if str(r.get("qc_status", "")).strip()
+                }
+            ),
+            "error": str(e),
+        }
+
+    mjd_maps = _collect_qc_mjds(filtered_df, cfg)
     pqc_label_map = (
-        _collect_qc_pqc_labels(df, cfg) if bool(cfg.qc_write_pqc_flag) else {}
+        _collect_qc_pqc_labels(filtered_df, cfg) if bool(cfg.qc_write_pqc_flag) else {}
     )
     if (
         not mjd_maps.get("standard")
@@ -2318,6 +2400,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     if str(r.get("qc_status", "")).strip()
                 }
             ),
+            "qc_filter": qc_filter,
             "matched": 0,
             "changed": False,
         }
@@ -2335,6 +2418,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     if str(r.get("qc_status", "")).strip()
                 }
             ),
+            "qc_filter": qc_filter,
             "error": f"Unsupported qc_action: {cfg.qc_action}",
         }
     solar_action = str(cfg.qc_solar_action or "comment").strip().lower()
@@ -2350,6 +2434,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     if str(r.get("qc_status", "")).strip()
                 }
             ),
+            "qc_filter": qc_filter,
             "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}",
         }
     orbital_action = str(cfg.qc_orbital_phase_action or "comment").strip().lower()
@@ -2365,6 +2450,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     if str(r.get("qc_status", "")).strip()
                 }
             ),
+            "qc_filter": qc_filter,
             "error": f"Unsupported qc_orbital_phase_action: {cfg.qc_orbital_phase_action}",
         }
 
@@ -2558,6 +2644,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 if str(r.get("qc_status", "")).strip()
             }
         ),
+        "qc_filter": qc_filter,
         "matched": int(total_matched),
         "pqc_flagged": int(total_pqc_flagged),
         "changed_files": int(changed_files),
@@ -2892,10 +2979,12 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         write_fix_report: Write aggregated reports to disk.
     """
     psr = psr_dir.name
-    parfile = psr_dir / f"{psr}.par"
-    alltim = psr_dir / f"{psr}_all.tim"
-
     report: Dict[str, object] = {"psr": psr, "steps": []}
+    if bool(getattr(cfg, "qc_apply_only", False)):
+        if cfg.qc_remove_outliers or cfg.qc_write_pqc_flag:
+            report["steps"].append({"qc_outliers": apply_pqc_outliers(psr_dir, cfg)})
+        return report
+
     report["steps"].extend(_fix_pulsar_initial_steps(psr_dir, cfg))
     report["steps"].extend(_fix_pulsar_post_system_steps(psr_dir, cfg))
     return report
@@ -3310,7 +3399,9 @@ def apply_fixdataset_branch(
     jobs: int = 1,
 ) -> List[Dict[str, object]]:
     """Apply FixDataset across a branch with a dataset-global sys canonicalization pass."""
-    if not (cfg.apply and cfg.infer_system_flags):
+    if bool(getattr(cfg, "qc_apply_only", False)) or not (
+        cfg.apply and cfg.infer_system_flags
+    ):
         reports = []
         for pulsar in pulsars:
             rep = fix_pulsar_dataset(dataset_root / str(pulsar), cfg)

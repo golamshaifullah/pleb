@@ -705,10 +705,21 @@ def _build_fixdataset_config(
             ),
             qc_remove_outliers=bool(_cfg_get(cfg, "fix_qc_remove_outliers", False)),
             qc_outlier_cols=_cfg_get(cfg, "fix_qc_outlier_cols", None),
+            qc_apply_only=bool(_cfg_get(cfg, "fix_qc_apply_only", False)),
             qc_action=str(_cfg_get(cfg, "fix_qc_action", "comment") or "comment"),
             qc_backend_col=str(_cfg_get(cfg, "fix_qc_backend_col", "sys") or "sys"),
             qc_comment_prefix=str(
                 _cfg_get(cfg, "fix_qc_comment_prefix", "C QC_OUTLIER") or "C QC_OUTLIER"
+            ),
+            qc_review_action_col=str(
+                _cfg_get(cfg, "fix_qc_review_action_col", "manual_action")
+                or "manual_action"
+            ),
+            qc_review_include_actions=_cfg_get(
+                cfg, "fix_qc_review_include_actions", None
+            ),
+            qc_review_exclude_actions=_cfg_get(
+                cfg, "fix_qc_review_exclude_actions", None
             ),
             qc_remove_bad=bool(_cfg_get(cfg, "fix_qc_remove_bad", True)),
             qc_remove_transients=bool(_cfg_get(cfg, "fix_qc_remove_transients", False)),
@@ -1097,7 +1108,8 @@ def _commit_branch_artifacts(
     branch: str,
     out_paths: Dict[str, Path],
     commit_message: str,
-) -> None:
+    cleanup_source_worktree: bool = False,
+) -> List[str]:
     """Commit persistent run artifacts for a fix-apply branch.
 
     This is intentionally broader than the initial data-only commit: it stages
@@ -1132,7 +1144,7 @@ def _commit_branch_artifacts(
             prefixes.add(rel.rstrip("/"))
 
     if not prefixes:
-        return
+        return []
 
     changed = [p for p in repo.git.diff("--name-only").splitlines() if p.strip()]
     untracked = list(getattr(repo, "untracked_files", []) or [])
@@ -1180,7 +1192,7 @@ def _commit_branch_artifacts(
 
     to_stage = [p for p in paths if _want(p)]
     if not to_stage:
-        return
+        return []
 
     checked_out = branch_checked_out_in_worktree(repo_root, branch)
     if checked_out is not None:
@@ -1188,6 +1200,7 @@ def _commit_branch_artifacts(
             f"Cannot commit artifacts onto branch '{branch}' because it is checked out in {checked_out}."
         )
 
+    committed_paths: List[str] = []
     with temporary_detached_worktree(repo_root, branch) as worktree_root:
         from git import Repo  # type: ignore
 
@@ -1203,9 +1216,21 @@ def _commit_branch_artifacts(
         _git_add_pathspecs(worktree_root.resolve(), to_stage)
         if wt_repo.is_dirty(untracked_files=True):
             wt_repo.index.commit(f"{commit_message} [artifacts]")
+            committed_paths = list(to_stage)
             logger.info(
                 "Committed run artifacts on branch %s (%d paths).", branch, len(to_stage)
             )
+    if cleanup_source_worktree and committed_paths:
+        for rel_path in committed_paths:
+            src = repo_root / rel_path
+            try:
+                if src.is_file() or src.is_symlink():
+                    src.unlink()
+            except FileNotFoundError:
+                pass
+        for pref in sorted(prefixes, key=len, reverse=True):
+            cleanup_empty_dirs(repo_root / pref)
+    return committed_paths
 
 
 def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
@@ -2305,6 +2330,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 branch=branches_to_run[0],
                 out_paths=out_paths,
                 commit_message=str(commit_message),
+                cleanup_source_worktree=bool(
+                    current_branch and branches_to_run[0] != current_branch
+                ),
             )
 
         logger.info("Pipeline complete.")

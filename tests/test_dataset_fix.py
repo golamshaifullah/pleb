@@ -20,6 +20,7 @@ from pleb.dataset_fix import (
     count_toa_lines,
     extract_flag_values,
     ensure_timfile_flags,
+    fix_pulsar_dataset,
     generate_alltim_variants,
     parse_include_lines,
     remove_patterns_from_par_tim,
@@ -446,6 +447,88 @@ def test_apply_pqc_outliers_can_merge_variant_specific_qc_csvs(
     assert new_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
         "C QC_OUTLIER "
     )
+
+
+def test_apply_pqc_outliers_can_filter_review_actions(tmp_path: Path) -> None:
+    psr = "J0000+0006"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        "FORMAT 1\nf 1400 56000 1 1\nf 1400 56001 1 1\n",
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}.combined_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,reviewed_bad_point,manual_action\n"
+            "BACKEND.tim,56000,True,mark_bad\n"
+            "BACKEND.tim,56001,True,\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_outlier_cols=["reviewed_bad_point"],
+        qc_review_include_actions=["mark_bad"],
+        qc_action="comment",
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["matched"] == 1
+    assert rep["changed_files"] == 1
+    assert rep["qc_filter"]["selected_rows"] == 1
+    toa_comments = [
+        ln for ln in tim.read_text(encoding="utf-8").splitlines() if ln.startswith("C ")
+    ]
+    assert len(toa_comments) == 1
+    assert "56000" in toa_comments[0]
+
+
+def test_fix_pulsar_dataset_qc_apply_only_skips_other_mutations(tmp_path: Path) -> None:
+    psr = "J0000+0007"
+    psr_dir = tmp_path / psr
+    tims_dir = psr_dir / "tims"
+    tims_dir.mkdir(parents=True)
+
+    par = psr_dir / f"{psr}.par"
+    alltim = psr_dir / f"{psr}_all.tim"
+    tim = tims_dir / "BACKEND.tim"
+    _write(par, "PSRJ J0000+0007\nJUMP -sys SYS1 0 0\n")
+    _write(alltim, "FORMAT 1\n")
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "main" / f"{psr}.combined_qc.csv",
+        "_timfile,mjd,bad_point\nBACKEND.tim,56000,True\n",
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_apply_only=True,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_outlier_cols=["bad_point"],
+        qc_action="comment",
+    )
+    rep = fix_pulsar_dataset(psr_dir, cfg)
+
+    assert [list(step.keys())[0] for step in rep["steps"]] == ["qc_outliers"]
+    assert par.read_text(encoding="utf-8") == "PSRJ J0000+0007\nJUMP -sys SYS1 0 0\n"
+    assert alltim.read_text(encoding="utf-8") == "FORMAT 1\n"
+    toa_comments = [
+        ln for ln in tim.read_text(encoding="utf-8").splitlines() if ln.startswith("C ")
+    ]
+    assert len(toa_comments) == 1
 
 
 def test_apply_pqc_outliers_treats_empty_variant_manifest_as_skip(

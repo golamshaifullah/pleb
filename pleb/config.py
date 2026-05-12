@@ -1008,9 +1008,13 @@ class PipelineConfig:
     # ---- PQC outlier application (optional) ----
     fix_qc_remove_outliers: bool = False
     fix_qc_outlier_cols: Optional[List[str]] = None
+    fix_qc_apply_only: bool = False
     fix_qc_action: str = "comment"
     fix_qc_comment_prefix: str = "C QC_OUTLIER"
     fix_qc_backend_col: str = "sys"
+    fix_qc_review_action_col: str = "manual_action"
+    fix_qc_review_include_actions: Optional[List[str]] = None
+    fix_qc_review_exclude_actions: Optional[List[str]] = None
     fix_qc_remove_bad: bool = True
     fix_qc_remove_transients: bool = False
     fix_qc_remove_solar: bool = False
@@ -1703,9 +1707,19 @@ class PipelineConfig:
             ),
             fix_qc_remove_outliers=bool(d.get("fix_qc_remove_outliers", False)),
             fix_qc_outlier_cols=opt_list_str("fix_qc_outlier_cols"),
+            fix_qc_apply_only=bool(d.get("fix_qc_apply_only", False)),
             fix_qc_action=str(d.get("fix_qc_action", "comment")),
             fix_qc_comment_prefix=str(d.get("fix_qc_comment_prefix", "C QC_OUTLIER")),
             fix_qc_backend_col=str(d.get("fix_qc_backend_col", "sys")),
+            fix_qc_review_action_col=str(
+                d.get("fix_qc_review_action_col", "manual_action")
+            ),
+            fix_qc_review_include_actions=opt_list_str(
+                "fix_qc_review_include_actions"
+            ),
+            fix_qc_review_exclude_actions=opt_list_str(
+                "fix_qc_review_exclude_actions"
+            ),
             fix_qc_remove_bad=bool(d.get("fix_qc_remove_bad", True)),
             fix_qc_remove_transients=bool(d.get("fix_qc_remove_transients", False)),
             fix_qc_remove_solar=bool(d.get("fix_qc_remove_solar", False)),
