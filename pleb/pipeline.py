@@ -595,6 +595,20 @@ def _build_fixdataset_config(
     if apply:
         dry_run = False
 
+    dedupe_same_obs_same_bw_globs = _cfg_get(
+        cfg, "fix_dedupe_same_obs_same_bw_globs", ["WSRT.*.tim"]
+    )
+    if isinstance(dedupe_same_obs_same_bw_globs, str):
+        dedupe_same_obs_same_bw_globs = [
+            s.strip()
+            for s in dedupe_same_obs_same_bw_globs.split(",")
+            if s.strip()
+        ]
+    else:
+        dedupe_same_obs_same_bw_globs = [
+            str(x) for x in list(dedupe_same_obs_same_bw_globs or [])
+        ]
+
     # canonical knobs (supported by the dataset_fix.py shipped with this repo)
     kwargs = dict(
         apply=bool(apply),
@@ -661,6 +675,7 @@ def _build_fixdataset_config(
         dedupe_mjd_tol_sec=float(_cfg_get(cfg, "fix_dedupe_mjd_tol_sec", 0.0)),
         dedupe_freq_tol_mhz=_cfg_get(cfg, "fix_dedupe_freq_tol_mhz", None),
         dedupe_freq_tol_auto=bool(_cfg_get(cfg, "fix_dedupe_freq_tol_auto", False)),
+        dedupe_same_obs_same_bw_globs=dedupe_same_obs_same_bw_globs,
         check_duplicate_backend_tims=bool(
             _cfg_get(cfg, "fix_check_duplicate_backend_tims", False)
         ),
@@ -744,6 +759,9 @@ def _build_fixdataset_config(
                 or "C QC_BIANRY_ECLIPSE"
             ),
             qc_write_pqc_flag=bool(_cfg_get(cfg, "fix_qc_write_pqc_flag", False)),
+            qc_write_explicit_flags=bool(
+                _cfg_get(cfg, "fix_qc_write_explicit_flags", False)
+            ),
             qc_pqc_flag_name=str(
                 _cfg_get(cfg, "fix_qc_pqc_flag_name", "-pqc") or "-pqc"
             ),
@@ -825,7 +843,11 @@ def _raise_if_fixdataset_failed(
 def _validate_fixdataset_qc_inputs(
     pulsars: List[str], cfg: FixDatasetConfig, *, branch: str
 ) -> None:
-    if not (cfg.qc_remove_outliers or cfg.qc_write_pqc_flag):
+    if not (
+        cfg.qc_remove_outliers
+        or cfg.qc_write_pqc_flag
+        or cfg.qc_write_explicit_flags
+    ):
         return
     errors = []
     for psr in pulsars:

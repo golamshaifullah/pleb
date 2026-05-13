@@ -37,6 +37,7 @@ fix_qc_remove_bad = true
 fix_qc_remove_transients = false
 fix_qc_remove_solar = false
 fix_qc_remove_orbital_phase = false
+fix_qc_write_explicit_flags = true
 
 # Regenerate variants on final branch.
 fix_generate_alltim_variants = true

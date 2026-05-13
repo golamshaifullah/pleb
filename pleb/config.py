@@ -680,6 +680,7 @@ class PipelineConfig:
         fix_qc_orbital_phase_action: Action for orbital-phase flagged TOAs (comment/delete).
         fix_qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
         fix_qc_write_pqc_flag: Add ``-pqc`` classification flag to TOA rows.
+        fix_qc_write_explicit_flags: Add explicit QC flags to TOA rows.
         fix_qc_pqc_flag_name: TOA flag token used for QC class (default ``-pqc``).
         fix_qc_pqc_good_value: Value for non-outlier, non-event TOAs.
         fix_qc_pqc_bad_value: Value for outlier-only TOAs.
@@ -979,6 +980,9 @@ class PipelineConfig:
     fix_dedupe_mjd_tol_sec: float = 0.0
     fix_dedupe_freq_tol_mhz: Optional[float] = None
     fix_dedupe_freq_tol_auto: bool = False
+    fix_dedupe_same_obs_same_bw_globs: List[str] = field(
+        default_factory=lambda: ["WSRT.*.tim"]
+    )
     fix_check_duplicate_backend_tims: bool = False
     fix_remove_overlaps_exact: bool = True
 
@@ -1024,6 +1028,7 @@ class PipelineConfig:
     fix_qc_orbital_phase_action: str = "comment"
     fix_qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
     fix_qc_write_pqc_flag: bool = False
+    fix_qc_write_explicit_flags: bool = False
     fix_qc_pqc_flag_name: str = "-pqc"
     fix_qc_pqc_good_value: str = "good"
     fix_qc_pqc_bad_value: str = "bad"
@@ -1672,6 +1677,10 @@ class PipelineConfig:
                 else float(d.get("fix_dedupe_freq_tol_mhz"))
             ),
             fix_dedupe_freq_tol_auto=bool(d.get("fix_dedupe_freq_tol_auto", False)),
+            fix_dedupe_same_obs_same_bw_globs=(
+                opt_list_str("fix_dedupe_same_obs_same_bw_globs")
+                or ["WSRT.*.tim"]
+            ),
             fix_check_duplicate_backend_tims=bool(
                 d.get("fix_check_duplicate_backend_tims", False)
             ),
@@ -1736,6 +1745,14 @@ class PipelineConfig:
             fix_qc_orbital_phase_comment_prefix=str(
                 d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE")
             ),
+            fix_qc_write_pqc_flag=bool(d.get("fix_qc_write_pqc_flag", False)),
+            fix_qc_write_explicit_flags=bool(
+                d.get("fix_qc_write_explicit_flags", False)
+            ),
+            fix_qc_pqc_flag_name=str(d.get("fix_qc_pqc_flag_name", "-pqc")),
+            fix_qc_pqc_good_value=str(d.get("fix_qc_pqc_good_value", "good")),
+            fix_qc_pqc_bad_value=str(d.get("fix_qc_pqc_bad_value", "bad")),
+            fix_qc_pqc_event_prefix=str(d.get("fix_qc_pqc_event_prefix", "event_")),
             fix_qc_merge_tol_days=float(d.get("fix_qc_merge_tol_days", 2.0 / 86400.0)),
             fix_qc_results_dir=(
                 Path(d["fix_qc_results_dir"]) if d.get("fix_qc_results_dir") else None

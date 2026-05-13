@@ -50,6 +50,29 @@ def test_validate_fixdataset_qc_inputs_allows_missing_csv_when_disabled(
     _validate_fixdataset_qc_inputs(["J0636+5128"], cfg, branch="step3_apply")
 
 
+def test_validate_fixdataset_qc_inputs_checks_explicit_flag_write_mode(
+    tmp_path,
+) -> None:
+    qc_root = tmp_path / "qc"
+    qc_root.mkdir(parents=True, exist_ok=True)
+    cfg = FixDatasetConfig(
+        apply=True,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=False,
+        qc_write_explicit_flags=True,
+        qc_require_csv=True,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "FixDataset QC input validation failed for branch step3_apply"
+        ),
+    ):
+        _validate_fixdataset_qc_inputs(["J0636+5128"], cfg, branch="step3_apply")
+
+
 def test_validate_fixdataset_qc_inputs_allows_empty_variant_manifest(
     tmp_path,
 ) -> None:

@@ -111,6 +111,49 @@ whitenoise_timfile_name = "{pulsar}_all.new.tim"
     assert cfg.whitenoise_timfile_name == "{pulsar}_all.new.tim"
 
 
+def test_config_parses_fix_qc_flag_write_keys(tmp_path: Path) -> None:
+    toml_text = """
+home_dir = "/tmp/repo"
+singularity_image = "/tmp/tempo2.sif"
+dataset_name = "."
+results_dir = "/tmp/results"
+fix_qc_write_pqc_flag = true
+fix_qc_write_explicit_flags = true
+fix_qc_pqc_flag_name = "-pqcx"
+fix_qc_pqc_good_value = "ok"
+fix_qc_pqc_bad_value = "reject"
+fix_qc_pqc_event_prefix = "evt_"
+"""
+    cfg_path = tmp_path / "cfg_fix_qc.toml"
+    cfg_path.write_text(toml_text, encoding="utf-8")
+
+    cfg = PipelineConfig.load(cfg_path)
+    assert cfg.fix_qc_write_pqc_flag is True
+    assert cfg.fix_qc_write_explicit_flags is True
+    assert cfg.fix_qc_pqc_flag_name == "-pqcx"
+    assert cfg.fix_qc_pqc_good_value == "ok"
+    assert cfg.fix_qc_pqc_bad_value == "reject"
+    assert cfg.fix_qc_pqc_event_prefix == "evt_"
+
+
+def test_config_parses_fix_dedupe_same_obs_same_bw_globs(tmp_path: Path) -> None:
+    toml_text = """
+home_dir = "/tmp/repo"
+singularity_image = "/tmp/tempo2.sif"
+dataset_name = "."
+results_dir = "/tmp/results"
+fix_dedupe_same_obs_same_bw_globs = ["WSRT.*.tim", "EFF.*.tim"]
+"""
+    cfg_path = tmp_path / "cfg_fix_dedupe_same_obs.toml"
+    cfg_path.write_text(toml_text, encoding="utf-8")
+
+    cfg = PipelineConfig.load(cfg_path)
+    assert cfg.fix_dedupe_same_obs_same_bw_globs == [
+        "WSRT.*.tim",
+        "EFF.*.tim",
+    ]
+
+
 def test_ingest_config_roundtrip_preserves_timing_defaults(tmp_path: Path) -> None:
     cfg = IngestConfig(
         ingest_mapping_file=tmp_path / "mapping.json",

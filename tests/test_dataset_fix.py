@@ -18,6 +18,7 @@ from pleb.dataset_fix import (
     apply_pqc_outliers,
     build_variant_reference_jump_pars,
     count_toa_lines,
+    dedupe_timfile_toas,
     extract_flag_values,
     ensure_timfile_flags,
     fix_pulsar_dataset,
@@ -33,6 +34,17 @@ from pleb.tim_utils import extract_flag_value_from_line, parse_tim_flags_from_li
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _toa_lines_by_mjd(timfile: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for raw in timfile.read_text(encoding="utf-8").splitlines():
+        if not is_toa_line(raw):
+            continue
+        parts = raw.split()
+        if len(parts) >= 3:
+            out[str(parts[2])] = raw
+    return out
 
 
 def test_count_toa_lines_ignores_directives_and_comments(tmp_path: Path) -> None:
@@ -64,6 +76,111 @@ def test_is_toa_line_warns_for_lowercase_c_comment_marker() -> None:
         warnings.simplefilter("always")
         assert not is_toa_line("c this is comment")
     assert any("lowercase 'c' comment marker" in str(w.message) for w in rec)
+
+
+def test_dedupe_timfile_toas_removes_wsrt_same_obs_same_bw_near_duplicates(
+    tmp_path: Path,
+) -> None:
+    tim = tmp_path / "WSRT.P2.1380.tim"
+    _write(
+        tim,
+        "\n".join(
+            [
+                "FORMAT 1",
+                (
+                    "obs001.ar 1380.000000 55000.000000000000 1.0 wsrt "
+                    "-bw 160 -nch 512 -sys WSRT.P2.1380"
+                ),
+                (
+                    "obs001.ar 1380.050000 55000.000000005000 1.1 wsrt "
+                    "-bw 160 -nch 512 -sys WSRT.P2.1380"
+                ),
+                (
+                    "obs001.ar 1380.500000 55000.000000004000 1.2 wsrt "
+                    "-bw 160 -nch 512 -sys WSRT.P2.1380"
+                ),
+                (
+                    "obs001.ar 1380.040000 55000.000000005000 1.3 wsrt "
+                    "-bw 140 -nch 448 -sys WSRT.P2.1380"
+                ),
+            ]
+        )
+        + "\n",
+    )
+
+    rep = dedupe_timfile_toas(tim, apply=True, backup=False)
+
+    assert rep["changed"] is True
+    assert rep["removed"] == 1
+
+    toa_lines = [
+        ln for ln in tim.read_text(encoding="utf-8").splitlines() if is_toa_line(ln)
+    ]
+    assert len(toa_lines) == 3
+    assert sum("1380.050000" in ln for ln in toa_lines) == 0
+    assert sum("1380.500000" in ln for ln in toa_lines) == 1
+    assert sum("-bw 140" in ln for ln in toa_lines) == 1
+
+
+def test_dedupe_timfile_toas_keeps_same_obs_near_duplicates_for_non_wsrt_files(
+    tmp_path: Path,
+) -> None:
+    tim = tmp_path / "EFF.P200.1380.tim"
+    _write(
+        tim,
+        "\n".join(
+            [
+                "FORMAT 1",
+                (
+                    "obs001.ar 1380.000000 55000.000000000000 1.0 eff "
+                    "-bw 160 -nch 512 -sys EFF.P200.1380"
+                ),
+                (
+                    "obs001.ar 1380.050000 55000.000000005000 1.1 eff "
+                    "-bw 160 -nch 512 -sys EFF.P200.1380"
+                ),
+            ]
+        )
+        + "\n",
+    )
+
+    rep = dedupe_timfile_toas(tim, apply=True, backup=False)
+
+    assert rep["changed"] is False
+    assert rep["removed"] == 0
+
+
+def test_dedupe_timfile_toas_can_apply_same_obs_same_bw_rule_to_other_backends(
+    tmp_path: Path,
+) -> None:
+    tim = tmp_path / "EFF.P200.1380.tim"
+    _write(
+        tim,
+        "\n".join(
+            [
+                "FORMAT 1",
+                (
+                    "obs001.ar 1380.000000 55000.000000000000 1.0 eff "
+                    "-bw 160 -nch 512 -sys EFF.P200.1380"
+                ),
+                (
+                    "obs001.ar 1380.050000 55000.000000005000 1.1 eff "
+                    "-bw 160 -nch 512 -sys EFF.P200.1380"
+                ),
+            ]
+        )
+        + "\n",
+    )
+
+    rep = dedupe_timfile_toas(
+        tim,
+        apply=True,
+        backup=False,
+        same_obs_same_bw_globs=["EFF.*.tim"],
+    )
+
+    assert rep["changed"] is True
+    assert rep["removed"] == 1
 
 
 def test_update_alltim_includes_dry_run_and_apply(tmp_path: Path) -> None:
@@ -250,6 +367,151 @@ def test_apply_pqc_outliers_can_write_pqc_flag_labels(tmp_path: Path) -> None:
     assert "-pqc good" in text
     assert "-pqc bad" in text
     assert "-pqc event_step" in text
+    assert "-bad_toa" not in text
+    assert "-event " not in text
+    assert "-event_type " not in text
+
+
+def test_apply_pqc_outliers_can_write_explicit_qc_flags(tmp_path: Path) -> None:
+    psr = "J0000+0000"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "f 1400 55000 1 1 -event true -event false -event_type glitch -event_type solar -bad_toa true -bad_toa false -x keep\n"
+            "f 1400 55001 1 1 -event true -event_type transient -bad_toa false\n"
+            "f 1400 55002 1 1 -event false -event_type none -bad_toa true\n"
+            "f 1400 55003 1 1\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,bad_point,step_member,transient_id\n"
+            "BACKEND.tim,55000,False,False,-1\n"
+            "BACKEND.tim,55001,True,False,-1\n"
+            "BACKEND.tim,55002,False,True,-1\n"
+            "BACKEND.tim,55003,False,False,7\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=False,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    assert rep["pqc_flagged"] == 0
+    assert rep["explicit_flagged"] == 4
+
+    text = tim.read_text(encoding="utf-8")
+    assert "-pqc " not in text
+
+    lines = _toa_lines_by_mjd(tim)
+
+    good_line = lines["55000"]
+    good_tokens = good_line.split()
+    good_flags = parse_tim_flags_from_line(good_line)
+    assert good_tokens.count("-event") == 1
+    assert good_tokens.count("-event_type") == 1
+    assert good_tokens.count("-bad_toa") == 0
+    assert good_flags["-event"] == "false"
+    assert good_flags["-event_type"] == "none"
+    assert "-bad_toa" not in good_flags
+    assert good_flags["-x"] == "keep"
+
+    bad_line = lines["55001"]
+    bad_tokens = bad_line.split()
+    bad_flags = parse_tim_flags_from_line(bad_line)
+    assert bad_tokens.count("-event") == 1
+    assert bad_tokens.count("-event_type") == 1
+    assert bad_tokens.count("-bad_toa") == 1
+    assert bad_flags["-event"] == "false"
+    assert bad_flags["-event_type"] == "none"
+    assert bad_flags["-bad_toa"] == "true"
+
+    step_flags = parse_tim_flags_from_line(lines["55002"])
+    assert step_flags["-event"] == "true"
+    assert step_flags["-event_type"] == "step"
+    assert "-bad_toa" not in step_flags
+
+    transient_flags = parse_tim_flags_from_line(lines["55003"])
+    assert transient_flags["-event"] == "true"
+    assert transient_flags["-event_type"] == "transient"
+    assert "-bad_toa" not in transient_flags
+
+
+def test_apply_pqc_outliers_can_write_pqc_and_explicit_flags_together(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0002"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "f 1400 56000 1 1\n"
+            "f 1400 56001 1 1\n"
+            "f 1400 56002 1 1\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,bad_point,transient_id\n"
+            "BACKEND.tim,56000,False,-1\n"
+            "BACKEND.tim,56001,True,-1\n"
+            "BACKEND.tim,56002,False,3\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=False,
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    assert rep["pqc_flagged"] == 3
+    assert rep["explicit_flagged"] == 3
+
+    flags_by_mjd = {
+        mjd: parse_tim_flags_from_line(raw) for mjd, raw in _toa_lines_by_mjd(tim).items()
+    }
+
+    assert flags_by_mjd["56000"]["-pqc"] == "good"
+    assert flags_by_mjd["56000"]["-event"] == "false"
+    assert flags_by_mjd["56000"]["-event_type"] == "none"
+    assert "-bad_toa" not in flags_by_mjd["56000"]
+
+    assert flags_by_mjd["56001"]["-pqc"] == "bad"
+    assert flags_by_mjd["56001"]["-bad_toa"] == "true"
+    assert flags_by_mjd["56001"]["-event"] == "false"
+    assert flags_by_mjd["56001"]["-event_type"] == "none"
+
+    assert flags_by_mjd["56002"]["-pqc"] == "event_transient"
+    assert flags_by_mjd["56002"]["-event"] == "true"
+    assert flags_by_mjd["56002"]["-event_type"] == "transient"
+    assert "-bad_toa" not in flags_by_mjd["56002"]
 
 
 def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(

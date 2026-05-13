@@ -45,7 +45,7 @@ from __future__ import annotations
 from dataclasses import field
 from .compat import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fnmatch import fnmatch
 import shutil
@@ -81,6 +81,7 @@ from .tim_utils import (
     list_backend_timfiles,
     mjd_from_toa_line,
     parse_include_lines,
+    parse_tim_flags_from_line,
     toa_key_from_line,
 )
 from .tempo2 import build_singularity_prefix, run_subprocess
@@ -90,6 +91,7 @@ logger = get_logger("pleb.dataset_fix")
 _A4_FIGSIZE = (8.27, 11.69)
 
 _BACKEND_BW_TABLE: Dict[str, float] = load_table("backend_bw", {})
+_DEFAULT_SAME_OBS_SAME_BW_GLOBS: Tuple[str, ...] = ("WSRT.*.tim",)
 
 _LEGACY_SYS_ALLOWLIST = {
     "EFF.EBPP.1360",
@@ -149,6 +151,8 @@ class FixDatasetConfig:
         backend_overrides: Map tim basename to backend name override.
         raise_on_backend_missing: Raise when backend cannot be inferred.
         dedupe_toas_within_tim: Remove duplicate TOAs within each tim.
+        dedupe_same_obs_same_bw_globs: Timfile globs that enable near-duplicate
+            matching by observation filename + bandwidth.
         check_duplicate_backend_tims: Detect duplicated backend tims.
         remove_overlaps_exact: Remove known overlapping TOAs across backends.
         insert_missing_jumps: Insert missing JUMP lines into par files.
@@ -177,6 +181,7 @@ class FixDatasetConfig:
         qc_orbital_phase_action: ``comment`` or ``delete`` for orbital-phase TOAs.
         qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
         qc_write_pqc_flag: Write ``-pqc`` classification on each TOA after QC.
+        qc_write_explicit_flags: Write explicit QC flags on each TOA after QC.
         qc_pqc_flag_name: Flag token used for QC classification.
         qc_pqc_good_value: Value for TOAs that are neither outliers nor events.
         qc_pqc_bad_value: Value for outliers that are not part of events.
@@ -244,6 +249,9 @@ class FixDatasetConfig:
     dedupe_mjd_tol_sec: float = 0.0
     dedupe_freq_tol_mhz: Optional[float] = None
     dedupe_freq_tol_auto: bool = False
+    dedupe_same_obs_same_bw_globs: List[str] = field(
+        default_factory=lambda: list(_DEFAULT_SAME_OBS_SAME_BW_GLOBS)
+    )
     check_duplicate_backend_tims: bool = False
 
     # Overlap handling (cheap: exact TOA duplicate removal across known overlapping backends)
@@ -286,6 +294,7 @@ class FixDatasetConfig:
     qc_orbital_phase_action: str = "comment"
     qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
     qc_write_pqc_flag: bool = False
+    qc_write_explicit_flags: bool = False
     qc_pqc_flag_name: str = "-pqc"
     qc_pqc_good_value: str = "good"
     qc_pqc_bad_value: str = "bad"
@@ -1320,6 +1329,62 @@ def _token_set_flag(parts: List[str], flag: str, value: str) -> bool:
     return True
 
 
+def _token_remove_flag(parts: List[str], flag: str) -> bool:
+    old_parts = list(parts)
+    new_parts: list[str] = []
+    changed = False
+    i = 0
+    while i < len(old_parts):
+        tok = old_parts[i]
+        if tok != flag:
+            new_parts.append(tok)
+            i += 1
+            continue
+        changed = True
+        i += 1
+        if i < len(old_parts) and not old_parts[i].startswith("-"):
+            i += 1
+    if changed:
+        parts[:] = new_parts
+    return changed
+
+
+def _token_upsert_unique_flag(parts: List[str], flag: str, value: str) -> bool:
+    old_parts = list(parts)
+    new_parts: list[str] = []
+    changed = False
+    seen = False
+    i = 0
+    while i < len(old_parts):
+        tok = old_parts[i]
+        if tok != flag:
+            new_parts.append(tok)
+            i += 1
+            continue
+
+        existing_value: Optional[str] = None
+        i += 1
+        if i < len(old_parts) and not old_parts[i].startswith("-"):
+            existing_value = old_parts[i]
+            i += 1
+
+        if not seen:
+            new_parts.extend([flag, value])
+            seen = True
+            if existing_value != value:
+                changed = True
+        else:
+            changed = True
+
+    if not seen:
+        new_parts.extend([flag, value])
+        changed = True
+
+    if changed:
+        parts[:] = new_parts
+    return changed
+
+
 def _load_relabel_rules(path: Path) -> List[Dict[str, object]]:
     data = _load_toml(path)
     raw = data.get("rules", [])
@@ -2235,10 +2300,51 @@ def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
     return None
 
 
-def _collect_qc_pqc_labels(
+class _QCTimClassification(NamedTuple):
+    pqc_label: str
+    bad_toa: bool
+    event: bool
+    event_type: str
+
+
+def _write_any_qc_tim_flags(cfg: FixDatasetConfig) -> bool:
+    return bool(cfg.qc_write_pqc_flag or cfg.qc_write_explicit_flags)
+
+
+def _default_qc_tim_classification(cfg: FixDatasetConfig) -> _QCTimClassification:
+    return _QCTimClassification(
+        pqc_label=str(cfg.qc_pqc_good_value or "good"),
+        bad_toa=False,
+        event=False,
+        event_type="none",
+    )
+
+
+def _apply_explicit_qc_tim_flags(
+    parts: List[str], classification: _QCTimClassification
+) -> bool:
+    changed = False
+    if classification.bad_toa:
+        changed = _token_upsert_unique_flag(parts, "-bad_toa", "true") or changed
+    else:
+        changed = _token_remove_flag(parts, "-bad_toa") or changed
+    changed = (
+        _token_upsert_unique_flag(
+            parts, "-event", "true" if classification.event else "false"
+        )
+        or changed
+    )
+    changed = (
+        _token_upsert_unique_flag(parts, "-event_type", classification.event_type)
+        or changed
+    )
+    return changed
+
+
+def _collect_qc_tim_classifications(
     df: pd.DataFrame, cfg: FixDatasetConfig
-) -> Dict[Optional[str], list[tuple[float, str]]]:
-    """Build per-TOA ``-pqc`` labels from a QC table."""
+) -> Dict[Optional[str], list[tuple[float, _QCTimClassification]]]:
+    """Build per-TOA QC classifications from a QC table."""
     if "mjd" not in df.columns or len(df) == 0:
         return {}
 
@@ -2264,15 +2370,34 @@ def _collect_qc_pqc_labels(
     bad_val = str(cfg.qc_pqc_bad_value or "bad")
     event_prefix = str(cfg.qc_pqc_event_prefix or "event_")
 
-    labels = [good_val] * len(df)
+    labels: list[_QCTimClassification] = [
+        _default_qc_tim_classification(cfg) for _ in range(len(df))
+    ]
     for i in range(len(df)):
         event_type = _first_event_type_for_row(df, i)
         if event_type:
-            labels[i] = f"{event_prefix}{event_type}"
+            labels[i] = _QCTimClassification(
+                pqc_label=f"{event_prefix}{event_type}",
+                bad_toa=False,
+                event=True,
+                event_type=event_type,
+            )
         elif bool(outlier_mask[i]):
-            labels[i] = bad_val
+            labels[i] = _QCTimClassification(
+                pqc_label=bad_val,
+                bad_toa=True,
+                event=False,
+                event_type="none",
+            )
+        else:
+            labels[i] = _QCTimClassification(
+                pqc_label=good_val,
+                bad_toa=False,
+                event=False,
+                event_type="none",
+            )
 
-    mapping: Dict[Optional[str], list[tuple[float, str]]] = {}
+    mapping: Dict[Optional[str], list[tuple[float, _QCTimClassification]]] = {}
     if "_timfile" in df.columns:
         for i in range(len(df)):
             raw_name = str(df.iloc[i]["_timfile"])
@@ -2380,14 +2505,16 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         }
 
     mjd_maps = _collect_qc_mjds(filtered_df, cfg)
-    pqc_label_map = (
-        _collect_qc_pqc_labels(filtered_df, cfg) if bool(cfg.qc_write_pqc_flag) else {}
+    qc_classification_map = (
+        _collect_qc_tim_classifications(filtered_df, cfg)
+        if _write_any_qc_tim_flags(cfg)
+        else {}
     )
     if (
         not mjd_maps.get("standard")
         and not mjd_maps.get("solar")
         and not mjd_maps.get("orbital")
-        and not pqc_label_map
+        and not qc_classification_map
     ):
         return {
             "pulsar": psr,
@@ -2465,11 +2592,11 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         str(cfg.qc_orbital_phase_comment_prefix or "C QC_BINARY_ECLIPSE")
     )
     pqc_flag_name = str(cfg.qc_pqc_flag_name or "-pqc").strip()
-    pqc_good_value = str(cfg.qc_pqc_good_value or "good").strip()
 
     tims = list_backend_timfiles(psr_dir)
     total_matched = 0
     total_pqc_flagged = 0
+    total_explicit_flagged = 0
     changed_files = 0
     file_reports: list[Dict[str, object]] = []
 
@@ -2485,9 +2612,9 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             and (None not in solar_map)
             and (key not in orbital_map)
             and (None not in orbital_map)
-            and (key not in pqc_label_map)
-            and (None not in pqc_label_map)
-            and not bool(cfg.qc_write_pqc_flag)
+            and (key not in qc_classification_map)
+            and (None not in qc_classification_map)
+            and not _write_any_qc_tim_flags(cfg)
         ):
             continue
         target_mjds = np.asarray(std_map.get(key, std_map.get(None, [])), dtype=float)
@@ -2497,19 +2624,23 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         target_mjds_orbital = np.asarray(
             orbital_map.get(key, orbital_map.get(None, [])), dtype=float
         )
-        target_pqc_labels = pqc_label_map.get(key, pqc_label_map.get(None, []))
-        if target_pqc_labels:
-            target_mjds_pqc = np.asarray([float(m) for m, _ in target_pqc_labels])
-            target_vals_pqc = [str(v) for _, v in target_pqc_labels]
+        target_qc_classifications = qc_classification_map.get(
+            key, qc_classification_map.get(None, [])
+        )
+        if target_qc_classifications:
+            target_mjds_qc = np.asarray(
+                [float(m) for m, _ in target_qc_classifications]
+            )
+            target_vals_qc = [v for _, v in target_qc_classifications]
         else:
-            target_mjds_pqc = np.asarray([], dtype=float)
-            target_vals_pqc = []
+            target_mjds_qc = np.asarray([], dtype=float)
+            target_vals_qc = []
         if (
             target_mjds.size == 0
             and target_mjds_solar.size == 0
             and target_mjds_orbital.size == 0
-            and target_mjds_pqc.size == 0
-            and not bool(cfg.qc_write_pqc_flag)
+            and target_mjds_qc.size == 0
+            and not _write_any_qc_tim_flags(cfg)
         ):
             continue
 
@@ -2518,6 +2649,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         removed = 0
         commented = 0
         pqc_flagged = 0
+        explicit_flagged = 0
         time_offset_sec = 0.0
 
         for raw in lines:
@@ -2538,15 +2670,21 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 continue
 
             raw_toa = raw
-            if bool(cfg.qc_write_pqc_flag):
-                pqc_val = pqc_good_value
-                if target_mjds_pqc.size > 0:
-                    idx = np.where(np.abs(target_mjds_pqc - mjd) <= tol)[0]
+            if _write_any_qc_tim_flags(cfg):
+                classification = _default_qc_tim_classification(cfg)
+                if target_mjds_qc.size > 0:
+                    idx = np.where(np.abs(target_mjds_qc - mjd) <= tol)[0]
                     if idx.size > 0:
-                        pqc_val = target_vals_pqc[int(idx[0])]
+                        classification = target_vals_qc[int(idx[0])]
                 parts = raw.split()
-                if _token_set_flag(parts, pqc_flag_name, pqc_val):
+                if bool(cfg.qc_write_pqc_flag) and _token_set_flag(
+                    parts, pqc_flag_name, classification.pqc_label
+                ):
                     pqc_flagged += 1
+                if bool(cfg.qc_write_explicit_flags) and _apply_explicit_qc_tim_flags(
+                    parts, classification
+                ):
+                    explicit_flagged += 1
                 raw_toa = " ".join(parts)
 
             is_solar = target_mjds_solar.size > 0 and np.any(
@@ -2615,13 +2753,15 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             new_lines.append(raw_toa)
 
         total_pqc_flagged += int(pqc_flagged)
-        changed = (removed + commented + pqc_flagged) > 0
+        total_explicit_flagged += int(explicit_flagged)
+        changed = (removed + commented + pqc_flagged + explicit_flagged) > 0
         file_reports.append(
             {
                 "timfile": str(tim),
                 "removed": int(removed),
                 "commented": int(commented),
                 "pqc_flagged": int(pqc_flagged),
+                "explicit_flagged": int(explicit_flagged),
                 "changed": bool(changed),
             }
         )
@@ -2647,6 +2787,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         "qc_filter": qc_filter,
         "matched": int(total_matched),
         "pqc_flagged": int(total_pqc_flagged),
+        "explicit_flagged": int(total_explicit_flagged),
         "changed_files": int(changed_files),
         "files": file_reports,
     }
@@ -2981,7 +3122,7 @@ def fix_pulsar_dataset(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     psr = psr_dir.name
     report: Dict[str, object] = {"psr": psr, "steps": []}
     if bool(getattr(cfg, "qc_apply_only", False)):
-        if cfg.qc_remove_outliers or cfg.qc_write_pqc_flag:
+        if cfg.qc_remove_outliers or _write_any_qc_tim_flags(cfg):
             report["steps"].append({"qc_outliers": apply_pqc_outliers(psr_dir, cfg)})
         return report
 
@@ -3034,6 +3175,7 @@ def _fix_pulsar_initial_steps(
                         mjd_tol_sec=float(cfg.dedupe_mjd_tol_sec),
                         freq_tol_mhz=cfg.dedupe_freq_tol_mhz,
                         freq_tol_auto=bool(cfg.dedupe_freq_tol_auto),
+                        same_obs_same_bw_globs=cfg.dedupe_same_obs_same_bw_globs,
                     )
                 )
             except Exception as e:
@@ -3188,7 +3330,7 @@ def _fix_pulsar_post_system_steps(
         )
         steps.append({"coord_convert": rep})
 
-    if cfg.qc_remove_outliers or cfg.qc_write_pqc_flag:
+    if cfg.qc_remove_outliers or _write_any_qc_tim_flags(cfg):
         rep = apply_pqc_outliers(psr_dir, cfg)
         steps.append({"qc_outliers": rep})
 
@@ -3704,6 +3846,158 @@ def _infer_freq_tol(freqs: np.ndarray, bw: Optional[float]) -> Optional[float]:
     return None
 
 
+_TIM_BW_FLAG_KEYS = ("-bw", "-BW", "-bandwidth", "-bwidth")
+_TIM_NBAND_FLAG_KEYS = ("-nchan", "-nband", "-nsub", "-nch")
+_SAME_OBS_SAME_BW_MJD_TOL_SEC = 1.0
+
+
+class _DedupeToaRecord(NamedTuple):
+    raw: str
+    file_token: Optional[str]
+    obs_key: Optional[str]
+    mjd: Optional[float]
+    freq_mhz: Optional[float]
+    bw_mhz: Optional[float]
+    nband: Optional[int]
+
+
+def _toa_obs_key(token: str) -> str:
+    """Return a conservative observation key from the TOA filename token."""
+    return str(token).strip().rsplit("/", 1)[-1]
+
+
+def _parse_dedupe_toa_record(
+    raw: str, *, default_bw_mhz: Optional[float]
+) -> _DedupeToaRecord:
+    """Parse one TOA line into the fields used by dedupe matching."""
+    if not is_toa_line(raw):
+        return _DedupeToaRecord(raw, None, None, None, None, None, None)
+
+    parts = raw.strip().split()
+    if len(parts) < 4:
+        return _DedupeToaRecord(raw, None, None, None, None, None, None)
+
+    try:
+        freq = float(parts[1])
+        mjd = float(parts[2])
+    except Exception:
+        return _DedupeToaRecord(raw, None, None, None, None, None, None)
+
+    flags = parse_tim_flags_from_line(raw)
+    bw = None
+    for key in _TIM_BW_FLAG_KEYS:
+        val = flags.get(key)
+        if val in (None, ""):
+            continue
+        try:
+            bw = float(val)
+        except Exception:
+            bw = None
+        if bw is not None:
+            break
+    if bw is None:
+        bw = default_bw_mhz
+
+    nband = None
+    for key in _TIM_NBAND_FLAG_KEYS:
+        val = flags.get(key)
+        if val in (None, ""):
+            continue
+        try:
+            nband = int(float(val))
+        except Exception:
+            nband = None
+        if nband is not None:
+            break
+
+    token = parts[0]
+    return _DedupeToaRecord(
+        raw=raw,
+        file_token=token,
+        obs_key=_toa_obs_key(token),
+        mjd=mjd,
+        freq_mhz=freq,
+        bw_mhz=bw,
+        nband=nband,
+    )
+
+
+def _bandwidths_match(lhs: Optional[float], rhs: Optional[float]) -> bool:
+    if lhs is None or rhs is None:
+        return False
+    return abs(float(lhs) - float(rhs)) <= 1e-6
+
+
+def _channel_width_mhz(rec: _DedupeToaRecord) -> Optional[float]:
+    if rec.bw_mhz is None or rec.bw_mhz <= 0:
+        return None
+    if rec.nband is not None and rec.nband > 0:
+        return abs(float(rec.bw_mhz)) / float(rec.nband)
+    return None
+
+
+def _same_obs_same_bw_freq_tol_mhz(
+    lhs: _DedupeToaRecord, rhs: _DedupeToaRecord
+) -> Optional[float]:
+    """Return a conservative same-observation frequency jitter tolerance."""
+    tolerances: List[float] = []
+    for rec in (lhs, rhs):
+        channel_width = _channel_width_mhz(rec)
+        if channel_width is not None and channel_width > 0:
+            tolerances.append(channel_width * 0.5)
+            continue
+        if rec.bw_mhz is not None and rec.bw_mhz > 0:
+            tolerances.append(max(0.01, min(1.0, abs(float(rec.bw_mhz)) / 1024.0)))
+    if not tolerances:
+        return None
+    return max(0.01, min(1.0, min(tolerances)))
+
+
+def _is_same_obs_same_bw_near_duplicate(
+    lhs: _DedupeToaRecord,
+    rhs: _DedupeToaRecord,
+    *,
+    mjd_tol_sec: float,
+    freq_tol_mhz: Optional[float],
+) -> bool:
+    """Match near-duplicates by observation token, bandwidth, MJD, and freq."""
+    if (
+        lhs.obs_key is None
+        or rhs.obs_key is None
+        or lhs.obs_key != rhs.obs_key
+        or not _bandwidths_match(lhs.bw_mhz, rhs.bw_mhz)
+        or lhs.mjd is None
+        or rhs.mjd is None
+        or lhs.freq_mhz is None
+        or rhs.freq_mhz is None
+    ):
+        return False
+
+    tol_days = max(float(mjd_tol_sec), _SAME_OBS_SAME_BW_MJD_TOL_SEC) / 86400.0
+    if abs(lhs.mjd - rhs.mjd) > tol_days:
+        return False
+
+    effective_freq_tol = max(0.0, float(freq_tol_mhz or 0.0))
+    same_obs_tol = _same_obs_same_bw_freq_tol_mhz(lhs, rhs)
+    if same_obs_tol is not None:
+        effective_freq_tol = max(effective_freq_tol, same_obs_tol)
+    if effective_freq_tol <= 0.0:
+        return False
+    return abs(lhs.freq_mhz - rhs.freq_mhz) <= effective_freq_tol
+
+
+def _timfile_matches_same_obs_same_bw_globs(
+    timfile: Path, globs: Optional[Sequence[str]]
+) -> bool:
+    """Return whether this timfile should use same-observation dedupe matching."""
+    patterns: Sequence[str]
+    if globs is None:
+        patterns = _DEFAULT_SAME_OBS_SAME_BW_GLOBS
+    else:
+        patterns = [str(p).strip() for p in globs if str(p).strip()]
+    return any(fnmatch(timfile.name, pattern) for pattern in patterns)
+
+
 def dedupe_timfile_toas(
     timfile: Path,
     apply: bool = False,
@@ -3712,6 +4006,7 @@ def dedupe_timfile_toas(
     mjd_tol_sec: float = 0.0,
     freq_tol_mhz: Optional[float] = None,
     freq_tol_auto: bool = False,
+    same_obs_same_bw_globs: Optional[Sequence[str]] = None,
 ) -> Dict[str, object]:
     """Remove duplicate TOA rows inside one backend tim file.
 
@@ -3732,6 +4027,10 @@ def dedupe_timfile_toas(
     freq_tol_auto : bool, optional
         If ``True`` and ``freq_tol_mhz`` is unset, infer tolerance from
         observed channel spacing/bandwidth.
+    same_obs_same_bw_globs : sequence of str, optional
+        Timfile glob patterns that enable near-duplicate matching by
+        observation filename + bandwidth. ``None`` uses the default
+        ``["WSRT.*.tim"]``; an empty sequence disables this heuristic.
 
     Returns
     -------
@@ -3742,7 +4041,9 @@ def dedupe_timfile_toas(
     -----
     Two matching modes:
 
-    - exact mode (default): duplicate key is first four TOA columns.
+    - exact mode (default): duplicate key is first four TOA columns, with a
+      conservative same-observation same-bandwidth fallback for matching
+      timfile globs.
     - tolerance mode: same file token and ``|Delta MJD| <= tol`` and
       ``|Delta nu| <= freq_tol``.
 
@@ -3757,71 +4058,92 @@ def dedupe_timfile_toas(
     removed = 0
     new_lines: List[str] = []
     changed = False
+    default_bw_mhz = _BACKEND_BW_TABLE.get(timfile.name)
+    same_obs_same_bw_enabled = _timfile_matches_same_obs_same_bw_globs(
+        timfile, same_obs_same_bw_globs
+    )
 
-    # If no tolerance requested, keep legacy exact-key behavior.
+    # If no tolerance requested, keep exact-key behavior and add a narrow
+    # same-observation same-bandwidth fallback for matching timfile globs.
     if mjd_tol_sec <= 0.0 and not freq_tol_auto and freq_tol_mhz is None:
         seen: Set[Tuple[str, str, str, str]] = set()
+        kept_same_obs: List[_DedupeToaRecord] = []
         for raw in lines:
             key = toa_key_from_line(raw)
             if key is None:
                 new_lines.append(cleanline(raw))
                 continue
+            rec = _parse_dedupe_toa_record(raw, default_bw_mhz=default_bw_mhz)
             if key in seen:
                 removed += 1
                 changed = True
                 continue
+            if same_obs_same_bw_enabled:
+                if any(
+                    _is_same_obs_same_bw_near_duplicate(
+                        rec,
+                        kept_rec,
+                        mjd_tol_sec=0.0,
+                        freq_tol_mhz=None,
+                    )
+                    for kept_rec in kept_same_obs
+                ):
+                    removed += 1
+                    changed = True
+                    continue
             seen.add(key)
+            if rec.file_token is not None:
+                kept_same_obs.append(rec)
             new_lines.append(cleanline(raw))
     else:
-        # Tolerance-based dedupe: same file token + close MJD + close freq.
+        # Tolerance-based dedupe: same file token + close MJD + close freq,
+        # plus the same narrow same-observation fallback above.
         tol_days = float(mjd_tol_sec) / 86400.0
-        bw = _BACKEND_BW_TABLE.get(timfile.name)
-        freqs = []
-        parsed = []
+        freqs: List[float] = []
+        parsed: List[_DedupeToaRecord] = []
         for raw in lines:
-            if not is_toa_line(raw):
-                parsed.append((raw, None, None, None))
-                continue
-            parts = raw.strip().split()
-            if len(parts) < 4:
-                parsed.append((raw, None, None, None))
-                continue
-            try:
-                freq = float(parts[1])
-                mjd = float(parts[2])
-            except Exception:
-                parsed.append((raw, None, None, None))
-                continue
-            freqs.append(freq)
-            parsed.append((raw, parts[0], mjd, freq))
+            rec = _parse_dedupe_toa_record(raw, default_bw_mhz=default_bw_mhz)
+            if rec.freq_mhz is not None:
+                freqs.append(rec.freq_mhz)
+            parsed.append(rec)
 
         if freq_tol_mhz is None and freq_tol_auto:
             freq_tol_mhz = _infer_freq_tol(
-                np.array(freqs, dtype=float), float(bw) if bw is not None else None
+                np.array(freqs, dtype=float),
+                float(default_bw_mhz) if default_bw_mhz is not None else None,
             )
         if freq_tol_mhz is None:
             freq_tol_mhz = 0.0
 
-        kept: List[Tuple[str, float, float]] = []
-        for raw, ftoken, mjd, freq in parsed:
-            if ftoken is None or mjd is None or freq is None:
-                new_lines.append(cleanline(raw))
+        kept: List[_DedupeToaRecord] = []
+        for rec in parsed:
+            if rec.file_token is None or rec.mjd is None or rec.freq_mhz is None:
+                new_lines.append(cleanline(rec.raw))
                 continue
             is_dup = False
-            for k_ftoken, k_mjd, k_freq in kept:
-                if k_ftoken != ftoken:
-                    continue
-                if abs(mjd - k_mjd) <= tol_days and abs(freq - k_freq) <= float(
-                    freq_tol_mhz
-                ):
+            for kept_rec in kept:
+                same_token_match = (
+                    kept_rec.file_token == rec.file_token
+                    and abs(rec.mjd - kept_rec.mjd) <= tol_days
+                    and abs(rec.freq_mhz - kept_rec.freq_mhz) <= float(freq_tol_mhz)
+                )
+                same_obs_match = same_obs_same_bw_enabled and (
+                    _is_same_obs_same_bw_near_duplicate(
+                        rec,
+                        kept_rec,
+                        mjd_tol_sec=float(mjd_tol_sec),
+                        freq_tol_mhz=freq_tol_mhz,
+                    )
+                )
+                if same_token_match or same_obs_match:
                     is_dup = True
                     break
             if is_dup:
                 removed += 1
                 changed = True
                 continue
-            kept.append((ftoken, mjd, freq))
-            new_lines.append(cleanline(raw))
+            kept.append(rec)
+            new_lines.append(cleanline(rec.raw))
 
     if dry_run or not apply or not changed:
         return {
