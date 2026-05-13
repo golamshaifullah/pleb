@@ -77,7 +77,10 @@ import pandas as pd
 try:  # Python 3.11+
     import tomllib
 except Exception:  # pragma: no cover
-    tomllib = None  # type: ignore
+    try:
+        import tomli as tomllib  # type: ignore
+    except Exception:  # pragma: no cover
+        tomllib = None  # type: ignore
 
 from .logging_utils import get_logger
 from .tim_utils import is_toa_line as _tim_is_toa_line
@@ -621,7 +624,6 @@ def run_pqc_for_parfile(
     parfile = Path(parfile)
     out_csv = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
-    _validate_pqc_runtime_environment()
 
     try:
         from pqc.pipeline import run_pipeline as qc_run  # type: ignore
@@ -665,6 +667,8 @@ def run_pqc_for_parfile(
             "pqc is not installed (or failed to import). Install your outlier package first, then rerun with run_pqc=true. "
             "If you're installing from a local zip/folder: pip install <path-to-pqc>."
         ) from e
+
+    _validate_pqc_runtime_environment()
 
     def _opt_float_or_none(v: object) -> Optional[float]:
         if v is None:

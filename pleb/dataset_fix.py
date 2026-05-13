@@ -67,7 +67,10 @@ except Exception:  # pragma: no cover
 try:  # Python 3.11+
     import tomllib
 except Exception:  # pragma: no cover
-    tomllib = None  # type: ignore
+    try:
+        import tomli as tomllib  # type: ignore
+    except Exception:  # pragma: no cover
+        tomllib = None  # type: ignore
 
 from .logging_utils import get_logger
 from .parsers import read_general2
@@ -461,7 +464,7 @@ def update_alltim_includes(
 def _load_toml(path: Path) -> Dict[str, object]:
     if tomllib is None:
         raise RuntimeError(
-            "tomllib unavailable; Python 3.11+ required for TOML support."
+            "No TOML parser available (tomllib/tomli). Install tomli for Python <3.11."
         )
     return tomllib.loads(path.read_text(encoding="utf-8"))
 

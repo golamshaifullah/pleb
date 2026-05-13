@@ -26,6 +26,8 @@ from pleb.optimize.search_space import (
 )
 from pleb.optimize.trial_runner import run_fold_trial, run_trial
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_load_search_space_and_sample_conditional(tmp_path: Path) -> None:
     path = tmp_path / "space.toml"
@@ -726,14 +728,11 @@ def test_true_fold_reruns_keep_repo_root_as_home_dir(
         pipeline_cfg,
         fold_cfg,
         load_search_space(
-            Path(
-                "/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml"
-            )
+            REPO_ROOT / "configs/optimize/search_spaces/pqc_balanced_v1.toml"
         ),
         load_objective_config(
-            Path(
-                "/work/git_projects/pleb/configs/optimize/objectives/single_pulsar_variant_consensus_production.toml"
-            )
+            REPO_ROOT
+            / "configs/optimize/objectives/single_pulsar_variant_consensus_production.toml"
         ),
         selected_variant=None,
         variant_strategy="single",
@@ -767,9 +766,7 @@ def test_parameter_override_helpers() -> None:
     assert "backend_profile::NRT.NUPPI.*::robust_z_thresh" not in flat
     assert profiles == {"NRT.NUPPI.*": {"robust_z_thresh": 5.5}}
     space = load_search_space(
-        Path(
-            "/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml"
-        )
+        REPO_ROOT / "configs/optimize/search_spaces/pqc_balanced_v1.toml"
     )
     assert active_parameter_count(space, {"pqc_step_enabled": False}) >= 1
 
