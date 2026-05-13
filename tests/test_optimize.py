@@ -26,6 +26,7 @@ from pleb.optimize.search_space import (
 )
 from pleb.optimize.trial_runner import run_fold_trial, run_trial
 
+
 def test_load_search_space_and_sample_conditional(tmp_path: Path) -> None:
     path = tmp_path / "space.toml"
     path.write_text(
@@ -726,8 +727,7 @@ def test_true_fold_reruns_keep_repo_root_as_home_dir(
 type = "float"
 low = 0.001
 high = 0.1
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     objective_path = tmp_path / "objective.toml"
@@ -735,8 +735,7 @@ high = 0.1
         """
 [weights]
 n_toas = 1.0
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
@@ -783,8 +782,7 @@ def test_parameter_override_helpers(tmp_path: Path) -> None:
         """
 [parameters.pqc_step_enabled]
 type = "bool"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     space = load_search_space(search_space_path)
