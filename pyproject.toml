@@ -25,7 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 libstempo = ["libstempo"]
 plot = ["matplotlib>=3.6"]
-dev = ["pytest", "black", "ruff"]
+dev = ["pytest", "black", "ruff", "GitPython>=3.1"]
 qc = ["pqc", "libstempo"]
 gui = ["streamlit>=1.30", "jsonschema>=4.21", "plotly>=5.0"]
 
