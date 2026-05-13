@@ -45,9 +45,10 @@ def _load_config_dict(config_arg: str | None, *, base_dir: Path | None = None) -
         text = sys.stdin.read().strip()
         if not text:
             return {}
-        if text.lstrip().startswith("{") or text.lstrip().startswith("["):
+        try:
+            return tomllib.loads(text)
+        except Exception:
             return json.loads(text)
-        return tomllib.loads(text)
 
     path = Path(config_arg).expanduser()
     if not path.is_absolute() and base_dir is not None:

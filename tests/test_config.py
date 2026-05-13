@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
+import sys
 
 from pleb.config import IngestConfig, PipelineConfig
+from pleb.config_io import _load_config_dict
 
 
 def _make_git_root(path: Path) -> Path:
@@ -61,6 +64,28 @@ pulsars = ["J1234+5678"]
     assert str(cfg.results_dir) == "/tmp/results"
     assert cfg.branches == ["master", "b1"]
     assert cfg.pulsars == ["J1234+5678"]
+
+
+def test_config_load_from_stdin_parses_toml_and_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            '[pipeline]\nhome_dir = "/tmp/repo"\nresults_dir = "/tmp/results"\n'
+        ),
+    )
+    toml_cfg = _load_config_dict("-")
+    assert toml_cfg["pipeline"]["home_dir"] == "/tmp/repo"
+    assert toml_cfg["pipeline"]["results_dir"] == "/tmp/results"
+
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO('{"home_dir": "/tmp/repo", "results_dir": "/tmp/results"}'),
+    )
+    json_cfg = _load_config_dict("-")
+    assert json_cfg["home_dir"] == "/tmp/repo"
+    assert json_cfg["results_dir"] == "/tmp/results"
 
 
 def test_config_parses_new_cross_pulsar_and_flag_rule_keys(tmp_path: Path) -> None:

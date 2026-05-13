@@ -6,6 +6,8 @@ from pathlib import Path
 import math
 
 import numpy as np
+import pytest
+import pandas as pd
 
 from pleb.kepler_orbits import (
     eccentric_from_mean,
@@ -14,7 +16,11 @@ from pleb.kepler_orbits import (
     kepler_2d,
     Kepler2DParameters,
 )
-from pleb.pulsar_analysis import read_parfile, analyse_binary_from_par
+from pleb.pulsar_analysis import (
+    analyse_binary_from_par,
+    read_parfile,
+    write_binary_analysis,
+)
 from pleb.tempo2 import build_singularity_prefix, tempo2_paths_in_container
 from pleb.utils import container_runtime
 
@@ -82,6 +88,58 @@ TASC 50000.0
     assert out["BINARY"] == "ELL1"
     assert math.isclose(float(out["ELL1_e"]), 0.1, abs_tol=1e-12)
     assert math.isclose(float(out["ELL1_t0"]), 50000.0, abs_tol=1e-10)
+
+
+def test_write_binary_analysis_requires_branch_roots_for_multi_branch(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="branch_dataset_roots"):
+        write_binary_analysis(
+            home_dir=tmp_path / "unused",
+            out_dir=tmp_path / "out",
+            pulsars=["J0000+0000"],
+            branches=["main", "feature"],
+        )
+
+
+def test_write_binary_analysis_uses_branch_specific_roots(tmp_path: Path) -> None:
+    main_root = tmp_path / "main_dataset"
+    feature_root = tmp_path / "feature_dataset"
+    _write(
+        main_root / "J0000+0000/J0000+0000.par",
+        """
+BINARY ELL1
+A1 1.0
+PB 10.0
+EPS1 0.0
+EPS2 0.1
+TASC 50000.0
+""",
+    )
+    _write(
+        feature_root / "J0000+0000/J0000+0000.par",
+        """
+BINARY BT
+A1 2.0
+PB 20.0
+OM 30.0
+T0 51000.0
+""",
+    )
+
+    out = write_binary_analysis(
+        home_dir=tmp_path / "unused",
+        out_dir=tmp_path / "out",
+        pulsars=["J0000+0000"],
+        branches=["main", "feature"],
+        branch_dataset_roots={"main": main_root, "feature": feature_root},
+    )
+
+    df = pd.read_csv(out, sep="\t")
+    assert df["branch"].tolist() == ["main", "feature"]
+    assert df["parfile"].tolist() == [
+        str(main_root / "J0000+0000/J0000+0000.par"),
+        str(feature_root / "J0000+0000/J0000+0000.par"),
+    ]
+    assert df["BINARY"].tolist() == ["ELL1", "BT"]
 
 
 def test_tempo2_command_helpers(tmp_path: Path) -> None:

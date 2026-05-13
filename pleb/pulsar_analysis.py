@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from .compat import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 import math
 import re
 
@@ -167,12 +167,17 @@ def write_binary_analysis(
     pulsars: List[str],
     branches: List[str],
     config: Optional[BinaryAnalysisConfig] = None,
+    *,
+    branch_dataset_roots: Mapping[str, Path] | None = None,
 ) -> Path:
     """Write a per-branch, per-pulsar binary analysis TSV.
 
     ## GMS: Check if this was actually used.
 
-    Looks for <home_dir>/<pulsar>/<pulsar>.par on each branch.
+    If ``branch_dataset_roots`` is not supplied, this reads
+    ``<home_dir>/<pulsar>/<pulsar>.par`` for a single branch only. When
+    analyzing multiple branches, pass a branch-specific dataset root for each
+    branch so the output is not duplicated.
 
     Parameters
     ----------
@@ -186,6 +191,10 @@ def write_binary_analysis(
         Branch names (used for labeling).
     config : BinaryAnalysisConfig, optional
         Optional binary analysis configuration.
+    branch_dataset_roots : mapping of str to pathlib.Path, optional
+        Branch-specific dataset roots. Each root should contain the pulsar
+        subdirectories for that branch. Required when ``branches`` contains
+        more than one branch.
 
     Returns
     -------
@@ -201,22 +210,39 @@ def write_binary_analysis(
             out_dir=Path("results/binary"),
             pulsars=["J1234+5678"],
             branches=["main", "EPTA"],
+            branch_dataset_roots={
+                "main": Path("/data/epta/main_dataset"),
+                "EPTA": Path("/data/epta/epta_dataset"),
+            },
         )
     """
     cfg = config or BinaryAnalysisConfig()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    branch_roots = None
+    if branch_dataset_roots is not None:
+        branch_roots = {
+            branch: Path(root) for branch, root in branch_dataset_roots.items()
+        }
+    elif len(branches) > 1:
+        raise ValueError(
+            "branch_dataset_roots is required when analyzing more than one branch"
+        )
+
+    only_models = set(cfg.only_models) if cfg.only_models else None
     rows: List[Dict[str, object]] = []
     for branch in branches:
+        branch_root = home_dir if branch_roots is None else branch_roots.get(branch)
+        if branch_root is None:
+            raise ValueError(f"Missing dataset root for branch {branch!r}")
         for psr in pulsars:
-            parfile = home_dir / psr / f"{psr}.par"
+            parfile = Path(branch_root) / psr / f"{psr}.par"
             d = analyse_binary_from_par(parfile)
             d["pulsar"] = psr
             d["branch"] = branch
 
-            if cfg.only_models:
-                if d.get("BINARY") not in set(cfg.only_models):
-                    continue
+            if only_models and d.get("BINARY") not in only_models:
+                continue
 
             rows.append(d)
 

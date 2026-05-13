@@ -45,7 +45,7 @@ from __future__ import annotations
 from dataclasses import field
 from .compat import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fnmatch import fnmatch
 import shutil

@@ -31,7 +31,7 @@ import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 # ----------------------------- Normalisation -----------------------------

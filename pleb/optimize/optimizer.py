@@ -11,7 +11,7 @@ from ..config_io import _dump_toml_no_nulls, _load_config_dict, _set_dotted_key
 from .folds import load_fold_config
 from .fold_datasets import build_fold_dataset
 from .models import OptimizationConfig, OptimizationResult, TrialResult
-from .objectives import compute_score, load_objective_config, violated_constraints
+from .objectives import compute_score, load_objective_config
 from .post_apply import run_post_apply_evaluation
 from .results import write_results
 from .report import write_markdown_report, write_pdf_report

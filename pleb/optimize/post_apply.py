@@ -9,7 +9,7 @@ fed back into optimization scoring.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Dict, Iterable, List
 import json
 
 import numpy as np

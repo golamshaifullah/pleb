@@ -885,7 +885,6 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
     try:
         import matplotlib.pyplot as plt
         import matplotlib.image as mpimg
-        import pandas as pd
         from matplotlib.backends.backend_pdf import PdfPages
     except Exception:
         return None

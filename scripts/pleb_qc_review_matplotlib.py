@@ -32,7 +32,7 @@ import argparse
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence, Any
+from typing import Mapping, Sequence, Any
 
 import numpy as np
 import pandas as pd
