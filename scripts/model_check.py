@@ -33,7 +33,6 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-
 # ----------------------------- Normalisation -----------------------------
 
 ALIASES = {
@@ -41,7 +40,7 @@ ALIASES = {
     "E": "ECC",
     "ECC": "ECC",
     "XDOT": "A1DOT",
-    "X": "A1",        # seen in older files / literature; A1 is Tempo2's internal label
+    "X": "A1",  # seen in older files / literature; A1 is Tempo2's internal label
     "T0ASC": "TASC",
     "TASC": "TASC",
     "KIN": "KIN",
@@ -51,26 +50,76 @@ ALIASES = {
 # A non-exhaustive list of global parameters. These are allowed regardless of
 # BINARY model. Regex families cover most normal timing/noise/instrument terms.
 GLOBAL_EXACT = {
-    "PSR", "PSRJ", "PSRB", "RA", "RAJ", "DEC", "DECJ", "ELONG", "ELAT",
-    "PMRA", "PMDEC", "PMELONG", "PMELAT", "PX", "POSEPOCH", "PEPOCH",
-    "DMEPOCH", "DM", "DMDOT", "CM", "START", "FINISH", "EPHEM", "UNITS",
-    "CLK", "CLKCORR", "CORRECT_TROPOSPHERE", "PLANET_SHAPIRO", "DILATEFREQ",
-    "DILATEFREQREF", "TIMEEPH", "T2CMETHOD", "MODE", "TRACK", "TZRMJD",
-    "TZRSITE", "TZRFRQ", "NE_SW", "SWM", "EPHVER", "NITS", "NTOA", "CHI2R",
-    "TRES", "JUMP", "DMMODEL", "DMOFF", "RM", "PMRV", "DIST", "H0",
-    "QIFUNC", "IFUNC", "SIFUNC", "GWM_AMP", "GWM_EPOCH", "GWM_PHI", "GWM_THETA",
+    "PSR",
+    "PSRJ",
+    "PSRB",
+    "RA",
+    "RAJ",
+    "DEC",
+    "DECJ",
+    "ELONG",
+    "ELAT",
+    "PMRA",
+    "PMDEC",
+    "PMELONG",
+    "PMELAT",
+    "PX",
+    "POSEPOCH",
+    "PEPOCH",
+    "DMEPOCH",
+    "DM",
+    "DMDOT",
+    "CM",
+    "START",
+    "FINISH",
+    "EPHEM",
+    "UNITS",
+    "CLK",
+    "CLKCORR",
+    "CORRECT_TROPOSPHERE",
+    "PLANET_SHAPIRO",
+    "DILATEFREQ",
+    "DILATEFREQREF",
+    "TIMEEPH",
+    "T2CMETHOD",
+    "MODE",
+    "TRACK",
+    "TZRMJD",
+    "TZRSITE",
+    "TZRFRQ",
+    "NE_SW",
+    "SWM",
+    "EPHVER",
+    "NITS",
+    "NTOA",
+    "CHI2R",
+    "TRES",
+    "JUMP",
+    "DMMODEL",
+    "DMOFF",
+    "RM",
+    "PMRV",
+    "DIST",
+    "H0",
+    "QIFUNC",
+    "IFUNC",
+    "SIFUNC",
+    "GWM_AMP",
+    "GWM_EPOCH",
+    "GWM_PHI",
+    "GWM_THETA",
 }
 GLOBAL_PATTERNS = [
-    re.compile(r"^F\d+$"),                  # spin frequency derivatives F0, F1, ...
-    re.compile(r"^P\d+$"),                  # period form P0, P1, ...
+    re.compile(r"^F\d+$"),  # spin frequency derivatives F0, F1, ...
+    re.compile(r"^P\d+$"),  # period form P0, P1, ...
     re.compile(r"^DMX(_R\d+)?_?\d*$"),
     re.compile(r"^FD\d+$"),
     re.compile(r"^FDJUMP\d*$"),
     re.compile(r"^JUMP\d*$"),
     re.compile(r"^WAVE\d+$"),
     re.compile(r"^WAVEEPOCH$"),
-    re.compile(r"^GL[A-Z0-9_]*$"),          # glitch families
-    re.compile(r"^TN[A-Z0-9_]*$"),          # TempoNest/noise terms
+    re.compile(r"^GL[A-Z0-9_]*$"),  # glitch families
+    re.compile(r"^TN[A-Z0-9_]*$"),  # TempoNest/noise terms
     re.compile(r"^TNE[A-Z0-9_]*$"),
     re.compile(r"^EFAC\d*$"),
     re.compile(r"^EQUAD\d*$"),
@@ -84,13 +133,58 @@ GLOBAL_PATTERNS = [
 
 # Canonical binary-ish names. Only these are model-restricted by default.
 BINARY_EXACT = {
-    "A0", "B0", "A1", "A1DOT", "A1_2", "A1_3", "A1_4", "A1_5",
-    "PB", "PBDOT", "XPBDOT", "ECC", "EDOT", "T0", "TASC", "OM", "OMDOT",
-    "GAMMA", "SINI", "M2", "MTOT", "DR", "DTHETA", "H3", "H4", "STIG",
-    "SHAPMAX", "KIN", "KOM", "K96", "KOMDOT", "KINDOT", "EPS1", "EPS2",
-    "EPS1DOT", "EPS2DOT", "ORBWAVEC0", "ORBWAVES0", "ORBWAVE_OM",
-    "ORBWAVE_EPOCH", "ORBWAVE", "ORBIFUNC", "NHARM", "AFAC", "NDDOP",
-    "BINARY", "OM2DOT", "BETA", "XOMDOT", "MASSFN", "FB", "BPJ",
+    "A0",
+    "B0",
+    "A1",
+    "A1DOT",
+    "A1_2",
+    "A1_3",
+    "A1_4",
+    "A1_5",
+    "PB",
+    "PBDOT",
+    "XPBDOT",
+    "ECC",
+    "EDOT",
+    "T0",
+    "TASC",
+    "OM",
+    "OMDOT",
+    "GAMMA",
+    "SINI",
+    "M2",
+    "MTOT",
+    "DR",
+    "DTHETA",
+    "H3",
+    "H4",
+    "STIG",
+    "SHAPMAX",
+    "KIN",
+    "KOM",
+    "K96",
+    "KOMDOT",
+    "KINDOT",
+    "EPS1",
+    "EPS2",
+    "EPS1DOT",
+    "EPS2DOT",
+    "ORBWAVEC0",
+    "ORBWAVES0",
+    "ORBWAVE_OM",
+    "ORBWAVE_EPOCH",
+    "ORBWAVE",
+    "ORBIFUNC",
+    "NHARM",
+    "AFAC",
+    "NDDOP",
+    "BINARY",
+    "OM2DOT",
+    "BETA",
+    "XOMDOT",
+    "MASSFN",
+    "FB",
+    "BPJ",
 }
 BINARY_PATTERNS = [
     re.compile(r"^FB\d+$"),
@@ -129,6 +223,7 @@ def is_binary_param(canon: str, raw: Optional[str] = None) -> bool:
 
 # ----------------------------- Rule metadata -----------------------------
 
+
 @dataclass(frozen=True)
 class ModelRule:
     allowed: Set[str]
@@ -142,12 +237,36 @@ class ModelRule:
 
 BT = {"PB", "A1", "ECC", "T0", "OM", "PBDOT", "A1DOT", "OMDOT", "EDOT", "GAMMA"}
 DD = {
-    "PB", "A1", "ECC", "T0", "OM", "PBDOT", "A1DOT", "OMDOT", "EDOT",
-    "GAMMA", "SINI", "M2", "DR", "DTHETA", "XPBDOT",
+    "PB",
+    "A1",
+    "ECC",
+    "T0",
+    "OM",
+    "PBDOT",
+    "A1DOT",
+    "OMDOT",
+    "EDOT",
+    "GAMMA",
+    "SINI",
+    "M2",
+    "DR",
+    "DTHETA",
+    "XPBDOT",
 }
 ELL1 = {
-    "PB", "FB", "A1", "A1DOT", "TASC", "EPS1", "EPS2", "EPS1DOT", "EPS2DOT",
-    "PBDOT", "SINI", "M2", "ORBIFUNC",
+    "PB",
+    "FB",
+    "A1",
+    "A1DOT",
+    "TASC",
+    "EPS1",
+    "EPS2",
+    "EPS1DOT",
+    "EPS2DOT",
+    "PBDOT",
+    "SINI",
+    "M2",
+    "ORBIFUNC",
 }
 ELL1_FORBIDDEN_NOTES = {
     "ECC": "ELL1 uses EPS1/EPS2 instead of ECC/E.",
@@ -159,7 +278,9 @@ DEFAULT_RULES: Dict[str, ModelRule] = {
     "BT": ModelRule(
         allowed=BT,
         required_all=("PB", "A1", "ECC", "T0", "OM"),
-        notes={"EDOT": "BT has derivative/update code for EDOT, but the delay path initializes edot to zero in current source; treat fitted EDOT with suspicion."},
+        notes={
+            "EDOT": "BT has derivative/update code for EDOT, but the delay path initializes edot to zero in current source; treat fitted EDOT with suspicion."
+        },
     ),
     "BTJ": ModelRule(
         allowed=BT | {"BPJ"},
@@ -178,19 +299,36 @@ DEFAULT_RULES: Dict[str, ModelRule] = {
         allowed=(DD | {"SHAPMAX"}) - {"DR", "DTHETA", "XPBDOT"},
         required_all=("PB", "A1", "ECC", "T0", "OM", "SHAPMAX"),
         compatibility={"SINI"},
-        notes={"SINI": "DDS source comments out SINI input and uses SHAPMAX; SINI is update/derivative-era compatibility, not the intended shape parameter."},
+        notes={
+            "SINI": "DDS source comments out SINI input and uses SHAPMAX; SINI is update/derivative-era compatibility, not the intended shape parameter."
+        },
     ),
     "DDH": ModelRule(
         allowed=DD | {"H3", "STIG"},
         required_all=("PB", "A1", "ECC", "T0", "OM", "H3", "STIG"),
         require_pairs=(("H3", "STIG"),),
         compatibility={"SINI", "M2"},
-        notes={"SINI": "DDH derives sin(i) from STIG.", "M2": "DDH derives the Shapiro mass term from H3/STIG."},
+        notes={
+            "SINI": "DDH derives sin(i) from STIG.",
+            "M2": "DDH derives the Shapiro mass term from H3/STIG.",
+        },
     ),
     "DDGR": ModelRule(
         # Current source has derivative/update branches for SINI and PBDOT, but it also computes
         # GR-derived values via mass2dd; keep them allowed but warn in strict mode.
-        allowed={"PB", "A1", "ECC", "T0", "OM", "M2", "MTOT", "SINI", "PBDOT", "XPBDOT", "A1DOT"},
+        allowed={
+            "PB",
+            "A1",
+            "ECC",
+            "T0",
+            "OM",
+            "M2",
+            "MTOT",
+            "SINI",
+            "PBDOT",
+            "XPBDOT",
+            "A1DOT",
+        },
         required_all=("PB", "A1", "ECC", "T0", "OM", "M2", "MTOT"),
         derived={"GAMMA", "OMDOT", "DR", "DTHETA"},
         compatibility={"SINI", "PBDOT"},
@@ -202,7 +340,8 @@ DEFAULT_RULES: Dict[str, ModelRule] = {
         },
     ),
     "DDK": ModelRule(
-        allowed=(DD | {"KIN", "KOM", "K96", "KOMDOT", "KINDOT"}) - {"XPBDOT", "DR", "DTHETA"},
+        allowed=(DD | {"KIN", "KOM", "K96", "KOMDOT", "KINDOT"})
+        - {"XPBDOT", "DR", "DTHETA"},
         required_all=("PB", "A1", "ECC", "T0", "OM", "KIN", "KOM"),
         compatibility={"SINI", "A1DOT"},
     ),
@@ -231,11 +370,41 @@ DEFAULT_RULES: Dict[str, ModelRule] = {
     # Broad/superset models. These are deliberately permissive: use --tempo2-src
     # with the current tree if you need exact source-derived sets for these.
     "T2": ModelRule(
-        allowed=BT | DD | ELL1 | {"H3", "H4", "STIG", "SHAPMAX", "KIN", "KOM", "MTOT", "FB", "NHARM", "A0", "B0"},
+        allowed=BT
+        | DD
+        | ELL1
+        | {
+            "H3",
+            "H4",
+            "STIG",
+            "SHAPMAX",
+            "KIN",
+            "KOM",
+            "MTOT",
+            "FB",
+            "NHARM",
+            "A0",
+            "B0",
+        },
         required_any=(("PB", "FB"),),
     ),
     "T2-PTA": ModelRule(
-        allowed=BT | DD | ELL1 | {"H3", "H4", "STIG", "SHAPMAX", "KIN", "KOM", "MTOT", "FB", "NHARM", "A0", "B0"},
+        allowed=BT
+        | DD
+        | ELL1
+        | {
+            "H3",
+            "H4",
+            "STIG",
+            "SHAPMAX",
+            "KIN",
+            "KOM",
+            "MTOT",
+            "FB",
+            "NHARM",
+            "A0",
+            "B0",
+        },
         required_any=(("PB", "FB"),),
     ),
     "MSS": ModelRule(
@@ -262,17 +431,45 @@ MODEL_FILE_BY_NAME = {
 }
 
 PARAM_UNDERSCORE_TO_PAR = {
-    "pb": "PB", "a1": "A1", "ecc": "ECC", "t0": "T0", "om": "OM",
-    "pbdot": "PBDOT", "xpbdot": "XPBDOT", "a1dot": "A1DOT", "omdot": "OMDOT",
-    "edot": "EDOT", "gamma": "GAMMA", "sini": "SINI", "m2": "M2", "mtot": "MTOT",
-    "dr": "DR", "dtheta": "DTHETA", "eps1": "EPS1", "eps2": "EPS2", "eps1dot": "EPS1DOT",
-    "eps2dot": "EPS2DOT", "tasc": "TASC", "fb": "FB", "h3": "H3", "h4": "H4",
-    "stig": "STIG", "shapmax": "SHAPMAX", "kin": "KIN", "kom": "KOM", "nharm": "NHARM",
-    "bpj": "BPJ", "a0": "A0", "b0": "B0", "orbifunc": "ORBIFUNC",
+    "pb": "PB",
+    "a1": "A1",
+    "ecc": "ECC",
+    "t0": "T0",
+    "om": "OM",
+    "pbdot": "PBDOT",
+    "xpbdot": "XPBDOT",
+    "a1dot": "A1DOT",
+    "omdot": "OMDOT",
+    "edot": "EDOT",
+    "gamma": "GAMMA",
+    "sini": "SINI",
+    "m2": "M2",
+    "mtot": "MTOT",
+    "dr": "DR",
+    "dtheta": "DTHETA",
+    "eps1": "EPS1",
+    "eps2": "EPS2",
+    "eps1dot": "EPS1DOT",
+    "eps2dot": "EPS2DOT",
+    "tasc": "TASC",
+    "fb": "FB",
+    "h3": "H3",
+    "h4": "H4",
+    "stig": "STIG",
+    "shapmax": "SHAPMAX",
+    "kin": "KIN",
+    "kom": "KOM",
+    "nharm": "NHARM",
+    "bpj": "BPJ",
+    "a0": "A0",
+    "b0": "B0",
+    "orbifunc": "ORBIFUNC",
 }
 
 
-def source_derived_rules(src: pathlib.Path, base: Dict[str, ModelRule]) -> Dict[str, ModelRule]:
+def source_derived_rules(
+    src: pathlib.Path, base: Dict[str, ModelRule]
+) -> Dict[str, ModelRule]:
     """Optionally augment embedded rules with param_* references from a Tempo2 source tree."""
     out = dict(base)
     for model, rel in MODEL_FILE_BY_NAME.items():
@@ -302,6 +499,7 @@ def source_derived_rules(src: pathlib.Path, base: Dict[str, ModelRule]) -> Dict[
 
 
 # ----------------------------- Par parsing -----------------------------
+
 
 @dataclass(frozen=True)
 class ParamRec:
@@ -350,6 +548,7 @@ def canonical_model(value: str) -> str:
 
 # ----------------------------- Validation -----------------------------
 
+
 @dataclass(frozen=True)
 class Diagnostic:
     severity: str  # ERROR, WARNING
@@ -373,15 +572,25 @@ def validate(
     diags: List[Diagnostic] = []
 
     present = {r.canon for r in records}
-    binary_records = [r for r in records if r.canon != "BINARY" and is_binary_param(r.canon, r.raw)]
+    binary_records = [
+        r for r in records if r.canon != "BINARY" and is_binary_param(r.canon, r.raw)
+    ]
 
     if binary is None:
         for r in binary_records:
-            diags.append(Diagnostic("ERROR", r.line_no, f"binary parameter {r.raw} is present but no BINARY model is set"))
+            diags.append(
+                Diagnostic(
+                    "ERROR",
+                    r.line_no,
+                    f"binary parameter {r.raw} is present but no BINARY model is set",
+                )
+            )
         return diags
 
     if binary not in rules:
-        diags.append(Diagnostic("ERROR", None, f"unknown or unsupported BINARY model {binary!r}"))
+        diags.append(
+            Diagnostic("ERROR", None, f"unknown or unsupported BINARY model {binary!r}")
+        )
         return diags
 
     rule = rules[binary]
@@ -389,23 +598,53 @@ def validate(
     if require_core:
         for p in rule.required_all:
             if p not in present:
-                diags.append(Diagnostic("ERROR", None, f"BINARY {binary} requires {p}, but it is missing"))
+                diags.append(
+                    Diagnostic(
+                        "ERROR",
+                        None,
+                        f"BINARY {binary} requires {p}, but it is missing",
+                    )
+                )
         for group in rule.required_any:
             if not any(g in present for g in group):
-                diags.append(Diagnostic("ERROR", None, f"BINARY {binary} requires one of {', '.join(group)}, but none is present"))
+                diags.append(
+                    Diagnostic(
+                        "ERROR",
+                        None,
+                        f"BINARY {binary} requires one of {', '.join(group)}, but none is present",
+                    )
+                )
 
     for pair in rule.require_pairs:
         got = [p for p in pair if p in present]
         if got and len(got) != len(pair):
             missing = [p for p in pair if p not in present]
-            diags.append(Diagnostic("ERROR", None, f"BINARY {binary} requires {', '.join(pair)} as a set; missing {', '.join(missing)}"))
+            diags.append(
+                Diagnostic(
+                    "ERROR",
+                    None,
+                    f"BINARY {binary} requires {', '.join(pair)} as a set; missing {', '.join(missing)}",
+                )
+            )
 
     # Model-specific relationship checks not expressible as pure allow-list rules.
     if binary == "ELL1H":
         if "NHARM" in present and "H4" not in present:
-            diags.append(Diagnostic("WARNING", None, "ELL1H NHARM is meaningful only with H4; Tempo2 logs an error and reverts if NHARM is supplied without H4"))
+            diags.append(
+                Diagnostic(
+                    "WARNING",
+                    None,
+                    "ELL1H NHARM is meaningful only with H4; Tempo2 logs an error and reverts if NHARM is supplied without H4",
+                )
+            )
         if "H4" in present and "STIG" in present:
-            diags.append(Diagnostic("WARNING", None, "ELL1H source gives H4/NHARM mode precedence and ignores STIG when H4 and STIG are both supplied"))
+            diags.append(
+                Diagnostic(
+                    "WARNING",
+                    None,
+                    "ELL1H source gives H4/NHARM mode precedence and ignores STIG when H4 and STIG are both supplied",
+                )
+            )
 
     for r in records:
         if r.canon == "BINARY":
@@ -414,13 +653,22 @@ def validate(
             continue
         if not is_binary_param(r.canon, r.raw):
             if strict_known:
-                diags.append(Diagnostic("WARNING", r.line_no, f"unclassified non-binary parameter {r.raw}; not checked against BINARY {binary}"))
+                diags.append(
+                    Diagnostic(
+                        "WARNING",
+                        r.line_no,
+                        f"unclassified non-binary parameter {r.raw}; not checked against BINARY {binary}",
+                    )
+                )
             continue
 
         if r.canon in rule.allowed:
             if r.canon in rule.compatibility:
                 sev = "WARNING" if mode == "compatibility" else "WARNING"
-                msg = rule.notes.get(r.canon, f"{r.raw} is accepted for BINARY {binary}, but is compatibility/suspicious in this model")
+                msg = rule.notes.get(
+                    r.canon,
+                    f"{r.raw} is accepted for BINARY {binary}, but is compatibility/suspicious in this model",
+                )
                 diags.append(Diagnostic(sev, r.line_no, msg))
             elif r.canon in rule.notes and mode == "strict":
                 diags.append(Diagnostic("WARNING", r.line_no, rule.notes[r.canon]))
@@ -428,13 +676,20 @@ def validate(
 
         if r.canon in rule.derived:
             sev = "WARNING" if mode == "compatibility" else "ERROR"
-            msg = rule.notes.get(r.canon, f"{r.raw} is derived internally by BINARY {binary}, not an independent model parameter")
+            msg = rule.notes.get(
+                r.canon,
+                f"{r.raw} is derived internally by BINARY {binary}, not an independent model parameter",
+            )
             diags.append(Diagnostic(sev, r.line_no, msg))
             continue
 
         extra = rule.notes.get(r.canon, "")
         suffix = f" {extra}" if extra else ""
-        diags.append(Diagnostic("ERROR", r.line_no, f"{r.raw} is not valid for BINARY {binary}.{suffix}"))
+        diags.append(
+            Diagnostic(
+                "ERROR", r.line_no, f"{r.raw} is not valid for BINARY {binary}.{suffix}"
+            )
+        )
 
     return diags
 
@@ -451,7 +706,9 @@ def print_diags(path: pathlib.Path, diags: Sequence[Diagnostic]) -> None:
 # ----------------------------- Self tests -----------------------------
 
 SELF_TEST_CASES = [
-    ("ell1_good", """
+    (
+        "ell1_good",
+        """
 PSRJ J0000+0000
 F0 100
 DM 10
@@ -461,8 +718,12 @@ PB 1
 TASC 58000
 EPS1 1e-6
 EPS2 2e-6
-""", 0),
-    ("ell1_bad_ecc", """
+""",
+        0,
+    ),
+    (
+        "ell1_bad_ecc",
+        """
 PSRJ J0000+0000
 F0 100
 BINARY ELL1
@@ -472,8 +733,12 @@ TASC 58000
 EPS1 1e-6
 EPS2 2e-6
 ECC 0.1
-""", 1),
-    ("bt_good", """
+""",
+        1,
+    ),
+    (
+        "bt_good",
+        """
 PSRJ J0000+0000
 F0 100
 BINARY BT
@@ -482,8 +747,12 @@ PB 1
 T0 58000
 ECC 0.1
 OM 20
-""", 0),
-    ("bt_bad_eps", """
+""",
+        0,
+    ),
+    (
+        "bt_bad_eps",
+        """
 PSRJ J0000+0000
 F0 100
 BINARY BT
@@ -493,8 +762,12 @@ T0 58000
 ECC 0.1
 OM 20
 EPS1 1e-6
-""", 1),
-    ("ddh_missing_stig", """
+""",
+        1,
+    ),
+    (
+        "ddh_missing_stig",
+        """
 PSRJ J0000+0000
 F0 100
 BINARY DDH
@@ -504,14 +777,22 @@ T0 58000
 ECC 0.1
 OM 20
 H3 1e-7
-""", 1),
-    ("no_binary_with_pb", """
+""",
+        1,
+    ),
+    (
+        "no_binary_with_pb",
+        """
 PSRJ J0000+0000
 F0 100
 PB 1
 A1 1
-""", 1),
-    ("ddgr_warn_sini", """
+""",
+        1,
+    ),
+    (
+        "ddgr_warn_sini",
+        """
 PSRJ J0000+0000
 F0 100
 BINARY DDGR
@@ -523,8 +804,12 @@ OM 20
 M2 1.2
 MTOT 2.4
 SINI 0.9
-""", 0),
-    ("ddgr_reject_gamma", """
+""",
+        0,
+    ),
+    (
+        "ddgr_reject_gamma",
+        """
 PSRJ J0000+0000
 F0 100
 BINARY DDGR
@@ -536,7 +821,9 @@ OM 20
 M2 1.2
 MTOT 2.4
 GAMMA 0.001
-""", 1),
+""",
+        1,
+    ),
 ]
 
 
@@ -561,16 +848,31 @@ def run_self_tests() -> int:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Validate Tempo2 .par binary parameters against selected BINARY model")
+    p = argparse.ArgumentParser(
+        description="Validate Tempo2 .par binary parameters against selected BINARY model"
+    )
     p.add_argument("par_files", nargs="*", type=pathlib.Path)
-    p.add_argument("--mode", choices=("strict", "compatibility"), default="strict",
-                   help="strict errors on derived/incompatible params; compatibility downgrades derived params to warnings")
-    p.add_argument("--no-require-core", action="store_true",
-                   help="do not require the usual/core parameters for the selected binary model")
-    p.add_argument("--strict-known", action="store_true",
-                   help="warn on unclassified non-binary parameters")
-    p.add_argument("--tempo2-src", type=pathlib.Path,
-                   help="optional local Tempo2 source tree; source param_* references are unioned into embedded model rules")
+    p.add_argument(
+        "--mode",
+        choices=("strict", "compatibility"),
+        default="strict",
+        help="strict errors on derived/incompatible params; compatibility downgrades derived params to warnings",
+    )
+    p.add_argument(
+        "--no-require-core",
+        action="store_true",
+        help="do not require the usual/core parameters for the selected binary model",
+    )
+    p.add_argument(
+        "--strict-known",
+        action="store_true",
+        help="warn on unclassified non-binary parameters",
+    )
+    p.add_argument(
+        "--tempo2-src",
+        type=pathlib.Path,
+        help="optional local Tempo2 source tree; source param_* references are unioned into embedded model rules",
+    )
     p.add_argument("--list-models", action="store_true")
     p.add_argument("--self-test", action="store_true")
     return p
@@ -584,7 +886,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     rules = DEFAULT_RULES
     if args.tempo2_src:
         if not args.tempo2_src.exists():
-            print(f"ERROR: --tempo2-src path does not exist: {args.tempo2_src}", file=sys.stderr)
+            print(
+                f"ERROR: --tempo2-src path does not exist: {args.tempo2_src}",
+                file=sys.stderr,
+            )
             return 2
         rules = source_derived_rules(args.tempo2_src, DEFAULT_RULES)
 

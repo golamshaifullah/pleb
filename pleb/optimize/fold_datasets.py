@@ -96,7 +96,9 @@ def _collect_toa_manifest(
     flag = backend_col if backend_col.startswith("-") else f"-{backend_col}"
     for psr in pulsars:
         psr_dir = dataset_root / psr
-        for tim in _active_backend_timfiles(cfg, psr_dir, psr, variant_label=variant_label):
+        for tim in _active_backend_timfiles(
+            cfg, psr_dir, psr, variant_label=variant_label
+        ):
             toa_index = 0
             for raw in tim.read_text(encoding="utf-8", errors="ignore").splitlines():
                 if not is_toa_line(raw):
@@ -156,7 +158,9 @@ def _compute_fold_membership(
                 for _, row in work.iterrows()
             }
         held_out = backends[int(fold_index) % len(backends)]
-        work["_is_held_out"] = work["backend"].astype(str).map(lambda val: val == held_out)
+        work["_is_held_out"] = (
+            work["backend"].astype(str).map(lambda val: val == held_out)
+        )
     else:
         raise ValueError(f"Unsupported fold mode for reruns: {mode!r}")
     membership: Dict[tuple[str, int], bool] = {}
@@ -178,7 +182,9 @@ def _filter_pulsar_timfiles(
     *,
     variant_label: str | None = None,
 ) -> None:
-    for src_tim in _active_backend_timfiles(cfg, src_psr, psr, variant_label=variant_label):
+    for src_tim in _active_backend_timfiles(
+        cfg, src_psr, psr, variant_label=variant_label
+    ):
         rel = str(src_tim.relative_to(src_psr.parent))
         dst_tim = dst_psr.parent / rel
 
@@ -248,7 +254,9 @@ def _active_backend_timfiles(
     variant_label: str | None = None,
 ) -> List[Path]:
     """Return backend timfiles referenced by the active PQC all-tim files."""
-    alltim_files = _active_pqc_alltim_files(cfg, psr_dir, psr, variant_label=variant_label)
+    alltim_files = _active_pqc_alltim_files(
+        cfg, psr_dir, psr, variant_label=variant_label
+    )
     tims: List[Path] = []
     seen: Set[Path] = set()
     for alltim in alltim_files:

@@ -303,16 +303,19 @@ def test_pipeline_config_repo_resources_resolve_from_declared_config_repo(
     assert Path(str(resolved.pqc_backend_profiles_path)) == resource.resolve()
 
 
-def test_ingest_resolved_output_root_uses_repo_relative_dataset_path(tmp_path: Path) -> None:
+def test_ingest_resolved_output_root_uses_repo_relative_dataset_path(
+    tmp_path: Path,
+) -> None:
     repo_root = _make_git_root(tmp_path / "repo")
     cfg = IngestConfig(
         home_dir=repo_root,
         dataset_name="EPTA-DR3/epta-dr3-data-v0",
     )
 
-    assert cfg.resolved_output_root() == (
-        repo_root / "EPTA-DR3/epta-dr3-data-v0"
-    ).resolve()
+    assert (
+        cfg.resolved_output_root()
+        == (repo_root / "EPTA-DR3/epta-dr3-data-v0").resolve()
+    )
 
 
 def test_ingest_resolved_output_root_rejects_mismatched_explicit_output(

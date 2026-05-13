@@ -45,7 +45,9 @@ def test_compare_public_parser_accepts_required_arguments() -> None:
 
 def test_compare_public_parser_accepts_local_branch_argument() -> None:
     p = build_compare_public_parser()
-    ns = p.parse_args(["--out-dir", "results/public_compare", "--local-branch", "step6"])
+    ns = p.parse_args(
+        ["--out-dir", "results/public_compare", "--local-branch", "step6"]
+    )
     assert ns.local_branch == "step6"
 
 

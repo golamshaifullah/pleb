@@ -90,7 +90,9 @@ def _git_show_file(repo_root: Path, ref: str, path_in_repo: str) -> bytes | None
     return res.stdout
 
 
-def _discover_pulsars_at_ref(repo_root: Path, dataset_root: Path, ref: str) -> List[str]:
+def _discover_pulsars_at_ref(
+    repo_root: Path, dataset_root: Path, ref: str
+) -> List[str]:
     dataset_rel = _path_in_repo_required(repo_root, dataset_root)
     files = _git_ls_files_at_ref(repo_root, ref, dataset_rel)
     out: List[str] = []
@@ -420,8 +422,14 @@ def _run_fit_only_plk(
 ) -> None:
     """Run tempo2 in 'fit-only' mode (plk stdout capture) for a given par file."""
 
-    data_home = Path(fit_home_dir).resolve() if fit_home_dir is not None else cfg.home_dir
-    data_name = Path(fit_dataset_name) if fit_dataset_name is not None else Path(cfg.dataset_name)
+    data_home = (
+        Path(fit_home_dir).resolve() if fit_home_dir is not None else cfg.home_dir
+    )
+    data_name = (
+        Path(fit_dataset_name)
+        if fit_dataset_name is not None
+        else Path(cfg.dataset_name)
+    )
     par_container = f"/work/{par_host_path.name}"
     _, tim_container = tempo2_paths_in_container(pulsar)
     prefix = build_singularity_prefix(

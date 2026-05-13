@@ -161,9 +161,7 @@ def _load_mapping(path: Path) -> IngestMapping:
             )
         root = _path(root_raw)
         if root is None:
-            raise IngestError(
-                f"Backend '{key}' has an invalid 'root' in mapping file."
-            )
+            raise IngestError(f"Backend '{key}' has an invalid 'root' in mapping file.")
         backends.append(
             BackendSpec(
                 name=key,
@@ -537,7 +535,9 @@ def verify_ingest_tims(
                             logger.warning("Ingest verify: not tracked in git %s", rel)
 
         if check_all_tim and copied_entries:
-            expected_includes = {f"tims/{dst_path.name}" for _, dst_path in copied_entries}
+            expected_includes = {
+                f"tims/{dst_path.name}" for _, dst_path in copied_entries
+            }
             missing_includes = sorted(expected_includes - includes)
             if missing_includes:
                 logger.warning(
@@ -880,7 +880,9 @@ def _write_per_pulsar_summary_tables(pdf, per_pulsar: List[Dict[str, Any]]) -> N
         plt.close(fig)
 
 
-def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optional[Path]:
+def _write_ingest_pdf_report(
+    output_root: Path, report: Dict[str, Any]
+) -> Optional[Path]:
     """Write a PDF ingest report when plotting dependencies are available."""
     try:
         import matplotlib.pyplot as plt
@@ -895,7 +897,9 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
 
     summary = report.get("summary", {}) or {}
     per_pulsar = report.get("per_pulsar", []) or []
-    upset_plots = [Path(p) for p in (report.get("upset_plots", []) or []) if Path(p).exists()]
+    upset_plots = [
+        Path(p) for p in (report.get("upset_plots", []) or []) if Path(p).exists()
+    ]
     ephem_counts = Counter(
         str(row.get("ephem"))
         for row in per_pulsar
@@ -912,19 +916,13 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
         if row.get("parfile_present") and row.get("ne_sw")
     )
     missing_ephem = sum(
-        1
-        for row in per_pulsar
-        if row.get("parfile_present") and not row.get("ephem")
+        1 for row in per_pulsar if row.get("parfile_present") and not row.get("ephem")
     )
     missing_clk = sum(
-        1
-        for row in per_pulsar
-        if row.get("parfile_present") and not row.get("clk")
+        1 for row in per_pulsar if row.get("parfile_present") and not row.get("clk")
     )
     missing_ne_sw = sum(
-        1
-        for row in per_pulsar
-        if row.get("parfile_present") and not row.get("ne_sw")
+        1 for row in per_pulsar if row.get("parfile_present") and not row.get("ne_sw")
     )
 
     with PdfPages(pdf_path) as pdf:
@@ -980,7 +978,9 @@ def _write_ingest_pdf_report(output_root: Path, report: Dict[str, Any]) -> Optio
             fig = plt.figure(figsize=_A4_FIGSIZE)
             ax = fig.add_subplot(111)
             ax.axis("off")
-            ax.set_title(f"2. Upset plots: {upset_plots[1].name}", fontsize=12, loc="left")
+            ax.set_title(
+                f"2. Upset plots: {upset_plots[1].name}", fontsize=12, loc="left"
+            )
             try:
                 img = mpimg.imread(upset_plots[1])
                 ax.imshow(img)
@@ -1632,9 +1632,7 @@ def ingest_dataset(
             logger.info("Wrote ingest lockfile: %s", lock_path)
 
     try:
-        report["upset_plots"] = [
-            str(p) for p in _write_ingest_upset_plots(output_root)
-        ]
+        report["upset_plots"] = [str(p) for p in _write_ingest_upset_plots(output_root)]
     except Exception as e:  # pragma: no cover
         logger.warning("Failed to generate ingest upset plots: %s", e)
 
@@ -1648,8 +1646,16 @@ def ingest_dataset(
         all_tim_path = psr_dir / f"{psr}_all.tim"
         tims_dir = psr_dir / "tims"
         tmplts_dir = psr_dir / "tmplts"
-        timfiles_added = [p.name for p in sorted(tims_dir.glob("*.tim"))] if tims_dir.exists() else []
-        templates_added = [p.name for p in sorted(tmplts_dir.iterdir()) if p.is_file()] if tmplts_dir.exists() else []
+        timfiles_added = (
+            [p.name for p in sorted(tims_dir.glob("*.tim"))]
+            if tims_dir.exists()
+            else []
+        )
+        templates_added = (
+            [p.name for p in sorted(tmplts_dir.iterdir()) if p.is_file()]
+            if tmplts_dir.exists()
+            else []
+        )
         par_summary = _parse_parfile_summary(par_path)
         row = {
             "pulsar": psr,
@@ -1854,7 +1860,9 @@ def commit_ingest_changes(
         msg = (commit_message or "Ingest: collected files").strip()
         staged = [
             p
-            for p in wt_repo.git.diff("--cached", "--name-only", "--", rel_output).splitlines()
+            for p in wt_repo.git.diff(
+                "--cached", "--name-only", "--", rel_output
+            ).splitlines()
             if p.strip()
         ]
         if staged:
@@ -1898,7 +1906,9 @@ def _ensure_ingest_gitignore(path: Path) -> None:
         existing = set(existing_lines)
         to_add = [ln for ln in ignore_lines if ln not in existing]
         if to_add:
-            path.write_text("\n".join([*existing_lines, *to_add]) + "\n", encoding="utf-8")
+            path.write_text(
+                "\n".join([*existing_lines, *to_add]) + "\n", encoding="utf-8"
+            )
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(ignore_lines) + "\n", encoding="utf-8")
@@ -1948,7 +1958,9 @@ def _remove_tree_if_exists(path: Path) -> None:
         pass
 
 
-def _copy_selected_tree_entries(src_root: Path, dst_root: Path, rel_paths: List[str]) -> None:
+def _copy_selected_tree_entries(
+    src_root: Path, dst_root: Path, rel_paths: List[str]
+) -> None:
     src_root = Path(src_root)
     dst_root = Path(dst_root)
     dst_root.mkdir(parents=True, exist_ok=True)

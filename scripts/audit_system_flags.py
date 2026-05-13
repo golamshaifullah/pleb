@@ -87,9 +87,11 @@ def _series_from_flags(df: pd.DataFrame, flag: str) -> pd.Series:
     if df.empty:
         return pd.Series(dtype=object)
     return df["flags"].apply(
-        lambda flags: ""
-        if not isinstance(flags, dict)
-        else str(flags.get(flag, "") or "").strip()
+        lambda flags: (
+            ""
+            if not isinstance(flags, dict)
+            else str(flags.get(flag, "") or "").strip()
+        )
     )
 
 
@@ -174,12 +176,16 @@ def audit_timfile(
                 "pulsar": pulsar,
                 "timfile": timfile.name,
                 "n_toas": int(len(merged)),
-                "backend": str(merged["backend"].dropna().iloc[0])
-                if merged["backend"].notna().any()
-                else "",
-                "tel": str(merged["tel"].dropna().iloc[0])
-                if merged["tel"].notna().any()
-                else "",
+                "backend": (
+                    str(merged["backend"].dropna().iloc[0])
+                    if merged["backend"].notna().any()
+                    else ""
+                ),
+                "tel": (
+                    str(merged["tel"].dropna().iloc[0])
+                    if merged["tel"].notna().any()
+                    else ""
+                ),
                 "current_sys_values": _join_distinct(merged["current_sys"]),
                 "inferred_sys_values": _join_distinct(merged["inferred_sys"]),
                 "current_group_values": _join_distinct(merged["current_group"]),

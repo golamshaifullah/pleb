@@ -108,7 +108,9 @@ def _path_rel_to_repo(path: Path, repo_root: Path) -> Optional[Path]:
         return None
 
 
-def _remap_repo_local_path(path: Path, old_repo_root: Path, new_repo_root: Path) -> Path:
+def _remap_repo_local_path(
+    path: Path, old_repo_root: Path, new_repo_root: Path
+) -> Path:
     rel = _path_rel_to_repo(path, old_repo_root)
     if rel is None:
         return path.expanduser().resolve()
@@ -135,8 +137,14 @@ def _remap_repo_local_string_path(
     return str((new_repo_root / rel).resolve())
 
 
-def _rebase_cfg_for_worktree(cfg: PipelineConfig | IngestConfig, worktree_root: Path) -> None:
-    old_repo_root = Path(cfg.home_dir).expanduser().resolve() if getattr(cfg, "home_dir", None) not in (None, "") else None
+def _rebase_cfg_for_worktree(
+    cfg: PipelineConfig | IngestConfig, worktree_root: Path
+) -> None:
+    old_repo_root = (
+        Path(cfg.home_dir).expanduser().resolve()
+        if getattr(cfg, "home_dir", None) not in (None, "")
+        else None
+    )
     if old_repo_root is None:
         return
     new_repo_root = Path(worktree_root).expanduser().resolve()
@@ -285,7 +293,9 @@ def _commit_generated_changes_to_branch(
         )
     with temporary_detached_worktree(repo_root, branch) as target_root:
         if Repo is None:
-            raise RuntimeError("GitPython is required for branch-owned workflow commits.")
+            raise RuntimeError(
+                "GitPython is required for branch-owned workflow commits."
+            )
         wt_repo = Repo(str(target_root), search_parent_directories=False)
         wt_repo.git.checkout(branch)
         to_stage: List[str] = []
@@ -307,17 +317,13 @@ def _commit_generated_changes_to_branch(
 
 
 def _single_branch_from_cfg(cfg: PipelineConfig) -> Optional[str]:
-    branches = [
-        str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()
-    ]
+    branches = [str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()]
     branches = list(dict.fromkeys(branches))
     return branches[0] if len(branches) == 1 else None
 
 
 def _single_source_branch_from_cfg(cfg: PipelineConfig) -> Optional[str]:
-    branches = [
-        str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()
-    ]
+    branches = [str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()]
     reference = str(getattr(cfg, "reference_branch", "") or "").strip()
     branch_set = list(dict.fromkeys([*branches, *([reference] if reference else [])]))
     return branch_set[0] if len(branch_set) == 1 else None
@@ -385,17 +391,31 @@ def _infer_worktree_plan(
         return None
 
     if name == "ingest":
-        target = str(getattr(cfg, "ingest_commit_branch_name", "") or "raw_ingest").strip() or "raw_ingest"
-        base = str(getattr(cfg, "ingest_commit_base_branch", "") or "main").strip() or "main"
+        target = (
+            str(getattr(cfg, "ingest_commit_branch_name", "") or "raw_ingest").strip()
+            or "raw_ingest"
+        )
+        base = (
+            str(getattr(cfg, "ingest_commit_base_branch", "") or "main").strip()
+            or "main"
+        )
         start_ref = target if _git_branch_exists(repo_root, target) else base
-        return _WorktreePlan(start_ref=start_ref, commit_branch=None, commit_message=None)
+        return _WorktreePlan(
+            start_ref=start_ref, commit_branch=None, commit_message=None
+        )
 
     if name in {"pipeline", "fix_dataset", "fix_apply"}:
         if bool(getattr(cfg, "fix_apply", False)):
-            base = str(getattr(cfg, "fix_base_branch", "") or getattr(cfg, "reference_branch", "") or "").strip()
+            base = str(
+                getattr(cfg, "fix_base_branch", "")
+                or getattr(cfg, "reference_branch", "")
+                or ""
+            ).strip()
             if not base:
                 return None
-            return _WorktreePlan(start_ref=base, commit_branch=None, commit_message=None)
+            return _WorktreePlan(
+                start_ref=base, commit_branch=None, commit_message=None
+            )
         branch = _single_branch_from_cfg(cfg)
         if not branch:
             return None
@@ -406,7 +426,9 @@ def _infer_worktree_plan(
         )
 
     if name in {"param_scan", "whitenoise"}:
-        branch = str(getattr(cfg, "reference_branch", "") or "").strip() or (_single_branch_from_cfg(cfg) or "")
+        branch = str(getattr(cfg, "reference_branch", "") or "").strip() or (
+            _single_branch_from_cfg(cfg) or ""
+        )
         if not branch:
             return None
         return _WorktreePlan(
@@ -416,7 +438,9 @@ def _infer_worktree_plan(
         )
 
     if name == "compare_public":
-        branch = str(step_effective_dict.get("compare_public_local_branch", "") or "").strip()
+        branch = str(
+            step_effective_dict.get("compare_public_local_branch", "") or ""
+        ).strip()
         if not branch:
             branch = str(getattr(cfg, "reference_branch", "") or "").strip()
         if not branch:
@@ -463,7 +487,9 @@ def _load_workflow(path: Path) -> Dict[str, Any]:
     return data
 
 
-def _resolve_config_path(config_arg: str | Path, *, base_dir: Path | None = None) -> Path:
+def _resolve_config_path(
+    config_arg: str | Path, *, base_dir: Path | None = None
+) -> Path:
     """Resolve a workflow-referenced config path against the workflow directory."""
     path = Path(config_arg).expanduser()
     if not path.is_absolute() and base_dir is not None:
@@ -513,9 +539,7 @@ def _normalize_step(step: Any) -> Dict[str, Any]:
                 "overrides": dict(payload.get("overrides", {}) or {}),
                 "run_dir": payload.get("run_dir"),
                 "config": payload.get("config"),
-                "set_from_toml": _normalize_set_from_toml(
-                    payload.get("set_from_toml")
-                ),
+                "set_from_toml": _normalize_set_from_toml(payload.get("set_from_toml")),
             }
     raise ValueError(f"Invalid step format: {step!r}")
 
@@ -616,9 +640,7 @@ def _resolve_step_artifact_path(
     return candidates[0]
 
 
-def _flatten_override_mapping(
-    data: Dict[str, Any], prefix: str = ""
-) -> Dict[str, Any]:
+def _flatten_override_mapping(data: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for key, value in data.items():
         dotted = f"{prefix}.{key}" if prefix else str(key)
@@ -987,7 +1009,9 @@ def _execute_step_body(
         if not local_branch:
             local_branch = str(getattr(cfg, "reference_branch", "") or "").strip()
         if not local_branch:
-            branches = [str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()]
+            branches = [
+                str(b).strip() for b in getattr(cfg, "branches", []) if str(b).strip()
+            ]
             if len(branches) == 1:
                 local_branch = branches[0]
         out = compare_public_releases(
@@ -1001,7 +1025,11 @@ def _execute_step_body(
             local_dataset_root=local_dataset_root,
             local_branch=(local_branch or None),
             local_pulsars=getattr(cfg, "pulsars", None),
-            alias_mapping_path=(Path(cfg.ingest_mapping_file) if getattr(cfg, "ingest_mapping_file", None) else None),
+            alias_mapping_path=(
+                Path(cfg.ingest_mapping_file)
+                if getattr(cfg, "ingest_mapping_file", None)
+                else None
+            ),
         )
         ctx.last_run_dir = Path(out["out_dir"])
         ctx.step_records.append(
@@ -1044,16 +1072,17 @@ def _execute_step_body(
             str(step_effective_dict.get("review_final_branch", "") or "").strip()
             or f"{review_slug}_step6_apply_delete"
         )
-        review_workflow_config = (
-            str(step_effective_dict.get("review_workflow_config", "") or "").strip()
-            or (str(workflow_path.resolve()) if workflow_path is not None else "")
-        )
+        review_workflow_config = str(
+            step_effective_dict.get("review_workflow_config", "") or ""
+        ).strip() or (str(workflow_path.resolve()) if workflow_path is not None else "")
         review_out_dir = _resolve_repo_path(
             home_dir, step_effective_dict.get("review_out_dir")
         )
         if review_out_dir is None:
             package_name = (
-                Path(review_workflow_config).stem if review_workflow_config else review_slug
+                Path(review_workflow_config).stem
+                if review_workflow_config
+                else review_slug
             )
             review_out_dir = (
                 results_root / "review_packages" / review_psr / package_name
@@ -1071,12 +1100,16 @@ def _execute_step_body(
             final_branch=review_final_branch,
             out=review_out_dir,
             overrides=review_overrides,
-            max_keep_points=int(step_effective_dict.get("review_max_keep_points", 4000)),
+            max_keep_points=int(
+                step_effective_dict.get("review_max_keep_points", 4000)
+            ),
             top_n_rows=int(step_effective_dict.get("review_top_n_rows", 50)),
             stage_branch=_normalize_step_values(
                 step_effective_dict.get("review_stage_branch")
             ),
-            stage_run=_normalize_step_values(step_effective_dict.get("review_stage_run")),
+            stage_run=_normalize_step_values(
+                step_effective_dict.get("review_stage_run")
+            ),
         )
         ctx.last_run_dir = result.out_dir
         ctx.last_pipeline_run_dir = result.out_dir
@@ -1092,8 +1125,10 @@ def _execute_step_body(
         return
 
     if name == "qc_report":
-        run_dir = Path(step_run_dir) if step_run_dir not in (None, "") else (
-            ctx.last_pipeline_run_dir or ctx.last_run_dir
+        run_dir = (
+            Path(step_run_dir)
+            if step_run_dir not in (None, "")
+            else (ctx.last_pipeline_run_dir or ctx.last_run_dir)
         )
         if not run_dir:
             raise RuntimeError(
@@ -1209,7 +1244,9 @@ def _run_step(
         name, provisional_cfg, provisional_effective_dict, workflow_path=workflow_path
     )
     if worktree_plan is not None:
-        original_repo_root = Path(getattr(provisional_cfg, "home_dir")).expanduser().resolve()
+        original_repo_root = (
+            Path(getattr(provisional_cfg, "home_dir")).expanduser().resolve()
+        )
         with temporary_detached_worktree(
             original_repo_root, worktree_plan.start_ref
         ) as worktree_root:
@@ -1270,7 +1307,10 @@ def _run_step(
                     source_worktree_root=worktree_root,
                     repo_root=original_repo_root,
                     branch=worktree_plan.commit_branch,
-                    commit_message=str(worktree_plan.commit_message or f"Workflow {name}: generated outputs"),
+                    commit_message=str(
+                        worktree_plan.commit_message
+                        or f"Workflow {name}: generated outputs"
+                    ),
                 )
             _map_ctx_paths_from_worktree(
                 ctx,

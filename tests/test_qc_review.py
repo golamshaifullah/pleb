@@ -126,7 +126,9 @@ def test_load_qc_frames_rejects_explicit_reviewed_qc_csv(tmp_path: Path) -> None
         raise AssertionError("expected reviewed_qc.csv to be rejected")
 
 
-def test_load_qc_frames_attaches_tempo2_general2_postfit_columns(tmp_path: Path) -> None:
+def test_load_qc_frames_attaches_tempo2_general2_postfit_columns(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "run"
     qc_path = run_dir / "qc" / "step2_detect" / "J0000+0000_qc.csv"
     qc_path.parent.mkdir(parents=True)

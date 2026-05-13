@@ -100,7 +100,9 @@ def test_choose_residual_display_limit_clips_extreme_outliers() -> None:
     assert limit > 1.0
 
 
-def test_make_variant_overview_plot_uses_axis_legends_not_figure_legend(tmp_path: Path) -> None:
+def test_make_variant_overview_plot_uses_axis_legends_not_figure_legend(
+    tmp_path: Path,
+) -> None:
     mod = _load_module()
 
     frame = pd.DataFrame(
@@ -150,7 +152,9 @@ def test_discover_artifacts_includes_model_check_outputs(tmp_path: Path) -> None
     repo_root = tmp_path
     dataset_root = tmp_path / "dataset"
     dataset_root.mkdir()
-    run_dir = tmp_path / "results" / "j1909_step6_apply_delete" / "j1909_step6_apply_delete"
+    run_dir = (
+        tmp_path / "results" / "j1909_step6_apply_delete" / "j1909_step6_apply_delete"
+    )
     (run_dir / "binary_analysis").mkdir(parents=True)
     (run_dir / "param_scan").mkdir(parents=True)
     (run_dir / "change_report").mkdir(parents=True)
@@ -183,10 +187,22 @@ def test_discover_artifacts_includes_model_check_outputs(tmp_path: Path) -> None
     rows = mod.discover_artifacts([rt], dataset_root, repo_root)
     paths = {row["path"] for row in rows}
 
-    assert "results/j1909_step6_apply_delete/j1909_step6_apply_delete/binary_analysis/binary_analysis.tsv" in paths
-    assert "results/j1909_step6_apply_delete/j1909_step6_apply_delete/param_scan/param_scan_j1909_step6_apply_delete.tsv" in paths
-    assert "results/j1909_step6_apply_delete/j1909_step6_apply_delete/change_report/MODEL_COMPARISON_main.tsv" in paths
-    assert "results/j1909_step6_apply_delete/j1909_step6_apply_delete/change_report/NEW_PARAM_SIGNIFICANCE_main.tsv" in paths
+    assert (
+        "results/j1909_step6_apply_delete/j1909_step6_apply_delete/binary_analysis/binary_analysis.tsv"
+        in paths
+    )
+    assert (
+        "results/j1909_step6_apply_delete/j1909_step6_apply_delete/param_scan/param_scan_j1909_step6_apply_delete.tsv"
+        in paths
+    )
+    assert (
+        "results/j1909_step6_apply_delete/j1909_step6_apply_delete/change_report/MODEL_COMPARISON_main.tsv"
+        in paths
+    )
+    assert (
+        "results/j1909_step6_apply_delete/j1909_step6_apply_delete/change_report/NEW_PARAM_SIGNIFICANCE_main.tsv"
+        in paths
+    )
 
 
 def test_build_stage_runtimes_and_discover_artifacts_support_branch_only_run_dirs(
@@ -194,26 +210,70 @@ def test_build_stage_runtimes_and_discover_artifacts_support_branch_only_run_dir
 ) -> None:
     mod = _load_module()
     repo_root = tmp_path
-    subprocess.run(["git", "init"], cwd=repo_root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_root, check=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_root, check=True)
+    subprocess.run(
+        ["git", "init"],
+        cwd=repo_root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo_root, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=repo_root, check=True
+    )
     (repo_root / "README.md").write_text("root\n", encoding="utf-8")
     subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=repo_root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=repo_root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     subprocess.run(["git", "branch", "-M", "main"], cwd=repo_root, check=True)
 
-    subprocess.run(["git", "checkout", "-b", "j1909_step5_apply_comments"], cwd=repo_root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    run_dir = repo_root / "results" / "j1909_step5_apply_comments" / "j1909_step5_apply_comments"
+    subprocess.run(
+        ["git", "checkout", "-b", "j1909_step5_apply_comments"],
+        cwd=repo_root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    run_dir = (
+        repo_root
+        / "results"
+        / "j1909_step5_apply_comments"
+        / "j1909_step5_apply_comments"
+    )
     (run_dir / "fix_dataset" / "j1909_step5_apply_comments").mkdir(parents=True)
-    (run_dir / "fix_dataset" / "j1909_step5_apply_comments" / "fix_dataset_summary.tsv").write_text(
+    (
+        run_dir
+        / "fix_dataset"
+        / "j1909_step5_apply_comments"
+        / "fix_dataset_summary.tsv"
+    ).write_text(
         "branch\tpulsar\nj1909_step5_apply_comments\tJ1909-3744\n",
         encoding="utf-8",
     )
     (run_dir / "run_report.pdf").write_bytes(b"%PDF-1.4\n")
     subprocess.run(["git", "add", "results"], cwd=repo_root, check=True)
-    subprocess.run(["git", "commit", "-m", "step5 artifacts"], cwd=repo_root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(
+        ["git", "commit", "-m", "step5 artifacts"],
+        cwd=repo_root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
-    subprocess.run(["git", "checkout", "main"], cwd=repo_root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(
+        ["git", "checkout", "main"],
+        cwd=repo_root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     if (repo_root / "results").exists():
         shutil.rmtree(repo_root / "results")
 
@@ -232,7 +292,10 @@ def test_build_stage_runtimes_and_discover_artifacts_support_branch_only_run_dir
 
     rows = mod.discover_artifacts(runtimes, repo_root / "dataset", repo_root)
     paths = {row["path"] for row in rows if row["stage"] == "step5_apply_comments"}
-    assert "results/j1909_step5_apply_comments/j1909_step5_apply_comments/run_report.pdf" in paths
+    assert (
+        "results/j1909_step5_apply_comments/j1909_step5_apply_comments/run_report.pdf"
+        in paths
+    )
     assert (
         "results/j1909_step5_apply_comments/j1909_step5_apply_comments/fix_dataset/"
         "j1909_step5_apply_comments/fix_dataset_summary.tsv"
@@ -242,7 +305,9 @@ def test_build_stage_runtimes_and_discover_artifacts_support_branch_only_run_dir
 def test_build_model_check_package_summarizes_unwired_outputs(tmp_path: Path) -> None:
     mod = _load_module()
     repo_root = tmp_path
-    run_dir = tmp_path / "results" / "j1909_step6_apply_delete" / "j1909_step6_apply_delete"
+    run_dir = (
+        tmp_path / "results" / "j1909_step6_apply_delete" / "j1909_step6_apply_delete"
+    )
     (run_dir / "binary_analysis").mkdir(parents=True)
     (run_dir / "param_scan").mkdir(parents=True)
     (run_dir / "change_report").mkdir(parents=True)

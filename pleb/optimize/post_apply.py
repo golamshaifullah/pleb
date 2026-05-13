@@ -117,7 +117,9 @@ def run_post_apply_evaluation(
     metrics = _aggregate_metric_rows(metric_rows)
     metrics_path = eval_root / "post_apply_metrics.json"
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
-    metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    metrics_path.write_text(
+        json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return metrics
 
 
@@ -310,7 +312,11 @@ def _aggregate_metric_rows(rows: List[Dict[str, float]]) -> Dict[str, float]:
             "post_apply_backend_offset_std_us",
         }:
             out[key] = max(values)
-        elif key in {"post_apply_fit_quality", "post_apply_wrms_quality", "post_apply_backend_alignment"}:
+        elif key in {
+            "post_apply_fit_quality",
+            "post_apply_wrms_quality",
+            "post_apply_backend_alignment",
+        }:
             out[key] = min(values)
         else:
             out[key] = sum(values) / float(len(values))

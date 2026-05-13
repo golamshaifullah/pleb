@@ -226,8 +226,12 @@ def test_workflow_compare_public_step_dispatches(monkeypatch, tmp_path: Path) ->
         captured["local_dataset_root"] = (
             str(local_dataset_root) if local_dataset_root is not None else None
         )
-        captured["local_branch"] = str(local_branch) if local_branch is not None else None
-        captured["local_pulsars"] = list(local_pulsars) if local_pulsars is not None else None
+        captured["local_branch"] = (
+            str(local_branch) if local_branch is not None else None
+        )
+        captured["local_pulsars"] = (
+            list(local_pulsars) if local_pulsars is not None else None
+        )
         captured["alias_mapping_path"] = (
             str(alias_mapping_path) if alias_mapping_path is not None else None
         )
@@ -264,9 +268,7 @@ def test_workflow_compare_public_step_uses_isolated_worktree_and_keeps_main_clea
     (home / "dataset" / "seed.txt").write_text("seed\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=home, check=True)
     subprocess.run(["git", "commit", "-m", "seed"], cwd=home, check=True)
-    subprocess.run(
-        ["git", "branch", "j1909_step6_apply_delete"], cwd=home, check=True
-    )
+    subprocess.run(["git", "branch", "j1909_step6_apply_delete"], cwd=home, check=True)
 
     image = tmp_path / "tempo2.sif"
     image.write_text("", encoding="utf-8")
@@ -328,7 +330,9 @@ def test_workflow_compare_public_step_uses_isolated_worktree_and_keeps_main_clea
     )
     assert status.stdout.strip() == ""
 
-    subprocess.run(["git", "checkout", "j1909_step6_apply_delete"], cwd=home, check=True)
+    subprocess.run(
+        ["git", "checkout", "j1909_step6_apply_delete"], cwd=home, check=True
+    )
     assert (requested_out_dir / "done.txt").exists()
 
 
@@ -379,7 +383,9 @@ study_name = "study"
         (Path(cfg.out_dir) / "done.txt").write_text("ok\n", encoding="utf-8")
         return SimpleNamespace(out_dir=Path(cfg.out_dir))
 
-    monkeypatch.setattr("pleb.optimize.optimizer.run_optimization", _fake_run_optimization)
+    monkeypatch.setattr(
+        "pleb.optimize.optimizer.run_optimization", _fake_run_optimization
+    )
 
     step = {"name": "optimize", "config": str(home / "configs" / "optimize.toml")}
     ctx = WorkflowContext()
@@ -516,7 +522,9 @@ def test_workflow_review_synthesis_step_dispatches(monkeypatch, tmp_path: Path) 
         _Result.out_dir.mkdir(parents=True, exist_ok=True)
         return _Result()
 
-    monkeypatch.setattr("pleb.workflow.run_review_synthesis", _fake_run_review_synthesis)
+    monkeypatch.setattr(
+        "pleb.workflow.run_review_synthesis", _fake_run_review_synthesis
+    )
 
     base_cfg = {
         "home_dir": str(home),
@@ -546,12 +554,22 @@ def test_workflow_review_synthesis_step_dispatches(monkeypatch, tmp_path: Path) 
     assert captured["results_root"] == str((tmp_path / "results").resolve())
     assert captured["final_branch"] == "j1909_step6_apply_delete"
     assert captured["out"] == str(
-        (tmp_path / "results" / "review_packages" / "J1909-3744" / "j1909_full_runthrough").resolve()
+        (
+            tmp_path
+            / "results"
+            / "review_packages"
+            / "J1909-3744"
+            / "j1909_full_runthrough"
+        ).resolve()
     )
     assert captured["max_keep_points"] == 123
     assert captured["top_n_rows"] == 9
-    assert captured["stage_branch"] == ["step5_apply_comments=j1909_step5_apply_comments"]
-    assert captured["stage_run"] == ["step8_compare_public=results/public_compare/j1909"]
+    assert captured["stage_branch"] == [
+        "step5_apply_comments=j1909_step5_apply_comments"
+    ]
+    assert captured["stage_run"] == [
+        "step8_compare_public=results/public_compare/j1909"
+    ]
     assert ctx.last_run_dir == _Result.out_dir
     assert ctx.last_pipeline_run_dir == _Result.out_dir
 

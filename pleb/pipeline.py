@@ -149,7 +149,9 @@ def _git_show_file(repo_root: Path, ref: str, path_in_repo: str) -> bytes | None
     return res.stdout
 
 
-def _discover_pulsars_at_ref(repo_root: Path, dataset_root: Path, ref: str) -> List[str]:
+def _discover_pulsars_at_ref(
+    repo_root: Path, dataset_root: Path, ref: str
+) -> List[str]:
     dataset_rel = _path_in_repo_required(repo_root, dataset_root)
     files = _git_ls_files_at_ref(repo_root, ref, dataset_rel)
     out: List[str] = []
@@ -321,13 +323,18 @@ def _canonical_timfile_keys(df: pd.DataFrame) -> pd.Series:
     if "_timfile_base" in df.columns:
         return df["_timfile_base"].fillna("").astype(str)
     if "_timfile" in df.columns:
-        return df["_timfile"].fillna("").astype(str).map(
-            lambda x: Path(x).name if x else ""
+        return (
+            df["_timfile"]
+            .fillna("")
+            .astype(str)
+            .map(lambda x: Path(x).name if x else "")
         )
     return pd.Series([""] * len(df), index=df.index, dtype=str)
 
 
-def _rows_near_any(targets: np.ndarray, refs: np.ndarray, tol_days: float) -> np.ndarray:
+def _rows_near_any(
+    targets: np.ndarray, refs: np.ndarray, tol_days: float
+) -> np.ndarray:
     if targets.size == 0 or refs.size == 0:
         return np.zeros(targets.shape, dtype=bool)
     refs = np.asarray(refs, dtype=float)
@@ -424,7 +431,9 @@ def _homogenize_variant_outlier_flags(
                     total_cells_changed += int((updated != current).sum())
                     changed = True
             if "outlier_any" in df.columns:
-                src_cols = [c for c in candidate_cols if c != "outlier_any" and c in df.columns]
+                src_cols = [
+                    c for c in candidate_cols if c != "outlier_any" and c in df.columns
+                ]
                 if src_cols:
                     current = df["outlier_any"].fillna(False).astype(bool).to_numpy()
                     union = (
@@ -438,9 +447,13 @@ def _homogenize_variant_outlier_flags(
             if not changed:
                 continue
             csv_path = csv_by_key[key]
-            df.drop(columns=["__timkey__"], errors="ignore").to_csv(csv_path, index=False)
+            df.drop(columns=["__timkey__"], errors="ignore").to_csv(
+                csv_path, index=False
+            )
             total_csvs_changed += 1
-            summary_updates[key] = summarize_pqc(df.drop(columns=["__timkey__"], errors="ignore"))
+            summary_updates[key] = summarize_pqc(
+                df.drop(columns=["__timkey__"], errors="ignore")
+            )
 
     for row in qc_rows:
         key = (str(row.get("pulsar", "")), str(row.get("variant", "")))
@@ -600,9 +613,7 @@ def _build_fixdataset_config(
     )
     if isinstance(dedupe_same_obs_same_bw_globs, str):
         dedupe_same_obs_same_bw_globs = [
-            s.strip()
-            for s in dedupe_same_obs_same_bw_globs.split(",")
-            if s.strip()
+            s.strip() for s in dedupe_same_obs_same_bw_globs.split(",") if s.strip()
         ]
     else:
         dedupe_same_obs_same_bw_globs = [
@@ -835,18 +846,14 @@ def _raise_if_fixdataset_failed(
     preview = "; ".join(errors[:5])
     if len(errors) > 5:
         preview += f"; ... ({len(errors)} pulsars failed)"
-    raise RuntimeError(
-        f"FixDataset {stage} failed on branch {branch}. {preview}"
-    )
+    raise RuntimeError(f"FixDataset {stage} failed on branch {branch}. {preview}")
 
 
 def _validate_fixdataset_qc_inputs(
     pulsars: List[str], cfg: FixDatasetConfig, *, branch: str
 ) -> None:
     if not (
-        cfg.qc_remove_outliers
-        or cfg.qc_write_pqc_flag
-        or cfg.qc_write_explicit_flags
+        cfg.qc_remove_outliers or cfg.qc_write_pqc_flag or cfg.qc_write_explicit_flags
     ):
         return
     errors = []
@@ -855,8 +862,11 @@ def _validate_fixdataset_qc_inputs(
             manifest_rows = _load_qc_manifest_rows(psr, cfg)
             if manifest_rows:
                 statuses = {
-                    str(r.get("qc_status", "")).strip() or (
-                        "pqc_failed" if str(r.get("qc_error", "")).strip() else "success"
+                    str(r.get("qc_status", "")).strip()
+                    or (
+                        "pqc_failed"
+                        if str(r.get("qc_error", "")).strip()
+                        else "success"
                     )
                     for r in manifest_rows
                 }
@@ -869,7 +879,9 @@ def _validate_fixdataset_qc_inputs(
                     continue
                 if statuses == {"empty_variant"}:
                     continue
-                errors.append(f"{psr}: no successful QC status in manifest: {sorted(statuses)}")
+                errors.append(
+                    f"{psr}: no successful QC status in manifest: {sorted(statuses)}"
+                )
                 continue
             _find_qc_csv(psr, cfg)
         except Exception as e:
@@ -1036,7 +1048,9 @@ def _apply_fixdataset_and_commit(
         dataset_root = Path(cfg.dataset_name)
         dataset_prefix = ""
         try:
-            dataset_prefix = dataset_root.relative_to(cfg.home_dir).as_posix().strip("/")
+            dataset_prefix = (
+                dataset_root.relative_to(cfg.home_dir).as_posix().strip("/")
+            )
         except Exception:
             if not dataset_root.exists():
                 logger.warning(
@@ -1067,7 +1081,9 @@ def _apply_fixdataset_and_commit(
         else:
             reports = []
             if n_jobs == 1:
-                for pulsar in tqdm(pulsars, desc=f"fix-dataset (apply on {new_branch})"):
+                for pulsar in tqdm(
+                    pulsars, desc=f"fix-dataset (apply on {new_branch})"
+                ):
                     rep = fix_pulsar_dataset(dataset_root_work / pulsar, fcfg_work)
                     rep["branch"] = new_branch
                     reports.append(rep)
@@ -1240,7 +1256,9 @@ def _commit_branch_artifacts(
             wt_repo.index.commit(f"{commit_message} [artifacts]")
             committed_paths = list(to_stage)
             logger.info(
-                "Committed run artifacts on branch %s (%d paths).", branch, len(to_stage)
+                "Committed run artifacts on branch %s (%d paths).",
+                branch,
+                len(to_stage),
             )
     if cleanup_source_worktree and committed_paths:
         for rel_path in committed_paths:
@@ -1410,15 +1428,21 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             pulsars = discover_pulsars(dataset_root)
         elif branch_snapshot_reads:
             discovery_branch = (
-                base_branch if fix_apply and base_branch else branches_to_run[0]
-            ) if branches_to_run else reference_branch
+                (base_branch if fix_apply and base_branch else branches_to_run[0])
+                if branches_to_run
+                else reference_branch
+            )
             if not discovery_branch:
                 raise RuntimeError(
                     "Snapshot mode requires at least one branch in cfg.branches or cfg.reference_branch."
                 )
-            pulsars = _discover_pulsars_at_ref(Path(cfg.home_dir), dataset_root, discovery_branch)
+            pulsars = _discover_pulsars_at_ref(
+                Path(cfg.home_dir), dataset_root, discovery_branch
+            )
         else:
-            discovery_branch = base_branch if fix_apply and base_branch else current_branch
+            discovery_branch = (
+                base_branch if fix_apply and base_branch else current_branch
+            )
             if discovery_branch != current_branch:
                 checkout(repo, discovery_branch)
                 logger.info(
@@ -1430,7 +1454,12 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
             finally:
                 if discovery_branch != current_branch:
                     checkout(repo, current_branch)
-            if not pulsars and fix_apply and base_branch and base_branch != current_branch:
+            if (
+                not pulsars
+                and fix_apply
+                and base_branch
+                and base_branch != current_branch
+            ):
                 raise RuntimeError(
                     f"No pulsars found under {dataset_root} on base branch '{base_branch}'."
                 )
@@ -1558,9 +1587,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         ):
                             reports.append(fut.result())
                 write_fix_report(reports, out_paths["fix_dataset"] / branch)
-                _raise_if_fixdataset_failed(
-                    reports, stage="report-only", branch=branch
-                )
+                _raise_if_fixdataset_failed(reports, stage="report-only", branch=branch)
             elif not run_fix_dataset:
                 logger.info(
                     "FixDataset report-only stage skipped (run_fix_dataset=false)."
@@ -2068,9 +2095,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     _execute_pqc_tasks(tasks, n_jobs=n_jobs, desc=f"pqc ({branch})")
                 )
 
-                auto_retry_enabled = bool(
-                    getattr(cfg, "pqc_auto_retry_failed", False)
-                )
+                auto_retry_enabled = bool(getattr(cfg, "pqc_auto_retry_failed", False))
                 max_retry_passes = max(
                     0, int(getattr(cfg, "pqc_auto_retry_max_passes", 1) or 0)
                 )
@@ -2086,10 +2111,7 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     ),
                 )
                 if auto_retry_enabled and max_retry_passes > 0 and tasks:
-                    tasks_by_key = {
-                        (task[0], task[1]): task
-                        for task in tasks
-                    }
+                    tasks_by_key = {(task[0], task[1]): task for task in tasks}
                     for retry_idx in range(1, max_retry_passes + 1):
                         failed_keys = {
                             (str(r.get("pulsar", "")), str(r.get("variant", "")))
@@ -2130,13 +2152,13 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                             merged_rows[key] = row
                         qc_rows = list(merged_rows.values())
                         remaining = sum(
-                            1 for r in retry_rows if str(r.get("qc_status", "")) == "pqc_failed"
+                            1
+                            for r in retry_rows
+                            if str(r.get("qc_status", "")) == "pqc_failed"
                         )
                         if remaining == 0:
                             break
-                if bool(
-                    getattr(cfg, "pqc_homogenize_outliers_across_variants", False)
-                ):
+                if bool(getattr(cfg, "pqc_homogenize_outliers_across_variants", False)):
                     outlier_cols = list(
                         getattr(cfg, "pqc_homogenize_outlier_cols", None)
                         or [

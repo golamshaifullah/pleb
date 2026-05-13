@@ -16,7 +16,9 @@ from pleb.whitenoise_integration import (
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    )
 
 
 def test_resolve_timfile_for_pulsar_prefers_template(tmp_path: Path) -> None:

@@ -13,7 +13,11 @@ from pleb.optimize.models import (
     SearchSpace,
     TrialResult,
 )
-from pleb.optimize.objectives import compute_score, load_objective_config, violated_constraints
+from pleb.optimize.objectives import (
+    compute_score,
+    load_objective_config,
+    violated_constraints,
+)
 from pleb.optimize.optimizer import _score_trial
 from pleb.optimize.scorers import (
     score_run_dir_consensus,
@@ -54,8 +58,7 @@ bad_fraction = -1.0
 [constraints]
 max_bad_fraction = 0.25
 min_n_clean = 3
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     objective = load_objective_config(objective_path)
@@ -114,10 +117,15 @@ def test_variants_are_scored_independently_and_constraints_select_safe_candidate
     )
     tdf = pd.read_csv(table)
     assert set(tdf["variant"]) == {"aggressive", "conservative"}
-    assert tdf.loc[tdf["variant"] == "conservative", "selected"].iloc[0] in {True, "True"}
+    assert tdf.loc[tdf["variant"] == "conservative", "selected"].iloc[0] in {
+        True,
+        "True",
+    }
 
 
-def test_bad_mask_artifacts_have_stable_ids_keep_flags_and_reasons(tmp_path: Path) -> None:
+def test_bad_mask_artifacts_have_stable_ids_keep_flags_and_reasons(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "run"
     _write_qc(
         run_dir / "qc" / "J0000+0000.safe_qc.csv",
@@ -477,8 +485,7 @@ singularity_image = "tempo2.sif"
 dataset_name = "dataset"
 pulsars = ["J0000+0000"]
 pqc_run_variants = true
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     seen = {}
@@ -518,8 +525,7 @@ singularity_image = "tempo2.sif"
 dataset_name = "dataset"
 pulsars = ["J0000+0000"]
 pqc_run_variants = true
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     seen = {}

@@ -377,9 +377,7 @@ class QCReportConfig:
         if "qc_report" in d and isinstance(d["qc_report"], dict):
             d = d["qc_report"]
         return QCReportConfig(
-            run_dir=_resolve_declared_path(
-                Path(d["run_dir"]), base_dir=base_dir
-            )
+            run_dir=_resolve_declared_path(Path(d["run_dir"]), base_dir=base_dir)
             or Path("."),
             backend_col=str(d.get("backend_col", "group")),
             backend=(None if d.get("backend") in (None, "") else str(d.get("backend"))),
@@ -1117,94 +1115,65 @@ class PipelineConfig:
                 or c.fix_qc_results_dir
             )
         if c.pqc_backend_profiles_path is not None:
-            c.pqc_backend_profiles_path = (
-                _resolve_declared_path(c.pqc_backend_profiles_path, repo_root=c.home_dir)
-                or Path(c.pqc_backend_profiles_path)
-            )
+            c.pqc_backend_profiles_path = _resolve_declared_path(
+                c.pqc_backend_profiles_path, repo_root=c.home_dir
+            ) or Path(c.pqc_backend_profiles_path)
         if c.whitenoise_source_path is not None:
-            c.whitenoise_source_path = (
-                _resolve_declared_path(c.whitenoise_source_path, repo_root=c.home_dir)
-                or Path(c.whitenoise_source_path)
-            )
+            c.whitenoise_source_path = _resolve_declared_path(
+                c.whitenoise_source_path, repo_root=c.home_dir
+            ) or Path(c.whitenoise_source_path)
         if c.fix_system_flag_mapping_path is not None:
-            c.fix_system_flag_mapping_path = (
-                _resolve_declared_path(
-                    c.fix_system_flag_mapping_path, repo_root=c.home_dir
-                )
-                or Path(c.fix_system_flag_mapping_path)
-            )
+            c.fix_system_flag_mapping_path = _resolve_declared_path(
+                c.fix_system_flag_mapping_path, repo_root=c.home_dir
+            ) or Path(c.fix_system_flag_mapping_path)
         if c.fix_flag_sys_freq_rules_path is not None:
-            c.fix_flag_sys_freq_rules_path = (
-                _resolve_declared_path(
-                    c.fix_flag_sys_freq_rules_path, repo_root=c.home_dir
-                )
-                or Path(c.fix_flag_sys_freq_rules_path)
-            )
+            c.fix_flag_sys_freq_rules_path = _resolve_declared_path(
+                c.fix_flag_sys_freq_rules_path, repo_root=c.home_dir
+            ) or Path(c.fix_flag_sys_freq_rules_path)
         if c.fix_system_flag_table_path is not None:
-            c.fix_system_flag_table_path = (
-                _resolve_declared_path(
-                    c.fix_system_flag_table_path, repo_root=c.home_dir
-                )
-                or Path(c.fix_system_flag_table_path)
-            )
+            c.fix_system_flag_table_path = _resolve_declared_path(
+                c.fix_system_flag_table_path, repo_root=c.home_dir
+            ) or Path(c.fix_system_flag_table_path)
         if c.fix_backend_classifications_path is not None:
-            c.fix_backend_classifications_path = (
-                _resolve_declared_path(
-                    c.fix_backend_classifications_path, repo_root=c.home_dir
-                )
-                or Path(c.fix_backend_classifications_path)
-            )
+            c.fix_backend_classifications_path = _resolve_declared_path(
+                c.fix_backend_classifications_path, repo_root=c.home_dir
+            ) or Path(c.fix_backend_classifications_path)
         if c.fix_alltim_variants_path is not None:
-            c.fix_alltim_variants_path = (
-                _resolve_declared_path(
-                    c.fix_alltim_variants_path, repo_root=c.home_dir
-                )
-                or Path(c.fix_alltim_variants_path)
-            )
+            c.fix_alltim_variants_path = _resolve_declared_path(
+                c.fix_alltim_variants_path, repo_root=c.home_dir
+            ) or Path(c.fix_alltim_variants_path)
         if c.fix_relabel_rules_path is not None:
-            c.fix_relabel_rules_path = (
-                _resolve_declared_path(c.fix_relabel_rules_path, repo_root=c.home_dir)
-                or Path(c.fix_relabel_rules_path)
-            )
+            c.fix_relabel_rules_path = _resolve_declared_path(
+                c.fix_relabel_rules_path, repo_root=c.home_dir
+            ) or Path(c.fix_relabel_rules_path)
         if c.fix_overlap_rules_path is not None:
-            c.fix_overlap_rules_path = (
-                _resolve_declared_path(c.fix_overlap_rules_path, repo_root=c.home_dir)
-                or Path(c.fix_overlap_rules_path)
-            )
+            c.fix_overlap_rules_path = _resolve_declared_path(
+                c.fix_overlap_rules_path, repo_root=c.home_dir
+            ) or Path(c.fix_overlap_rules_path)
         if c.fix_overlap_exact_catalog_path is not None:
-            c.fix_overlap_exact_catalog_path = (
-                _resolve_declared_path(
-                    c.fix_overlap_exact_catalog_path, repo_root=c.home_dir
-                )
-                or Path(c.fix_overlap_exact_catalog_path)
-            )
+            c.fix_overlap_exact_catalog_path = _resolve_declared_path(
+                c.fix_overlap_exact_catalog_path, repo_root=c.home_dir
+            ) or Path(c.fix_overlap_exact_catalog_path)
         if c.ingest_mapping_file is not None:
-            c.ingest_mapping_file = (
-                _resolve_declared_path(c.ingest_mapping_file, repo_root=c.home_dir)
-                or Path(c.ingest_mapping_file)
-            )
+            c.ingest_mapping_file = _resolve_declared_path(
+                c.ingest_mapping_file, repo_root=c.home_dir
+            ) or Path(c.ingest_mapping_file)
         if c.ingest_output_dir is not None:
-            c.ingest_output_dir = (
-                _resolve_declared_path(c.ingest_output_dir, repo_root=c.home_dir)
-                or Path(c.ingest_output_dir)
-            )
+            c.ingest_output_dir = _resolve_declared_path(
+                c.ingest_output_dir, repo_root=c.home_dir
+            ) or Path(c.ingest_output_dir)
         if c.compare_public_out_dir is not None:
-            c.compare_public_out_dir = (
-                _resolve_declared_path(c.compare_public_out_dir, repo_root=c.home_dir)
-                or Path(c.compare_public_out_dir)
-            )
+            c.compare_public_out_dir = _resolve_declared_path(
+                c.compare_public_out_dir, repo_root=c.home_dir
+            ) or Path(c.compare_public_out_dir)
         if c.compare_public_cache_dir is not None:
-            c.compare_public_cache_dir = (
-                _resolve_declared_path(c.compare_public_cache_dir, repo_root=c.home_dir)
-                or Path(c.compare_public_cache_dir)
-            )
+            c.compare_public_cache_dir = _resolve_declared_path(
+                c.compare_public_cache_dir, repo_root=c.home_dir
+            ) or Path(c.compare_public_cache_dir)
         if c.compare_public_providers_path is not None:
-            c.compare_public_providers_path = (
-                _resolve_declared_path(
-                    c.compare_public_providers_path, repo_root=c.home_dir
-                )
-                or Path(c.compare_public_providers_path)
-            )
+            c.compare_public_providers_path = _resolve_declared_path(
+                c.compare_public_providers_path, repo_root=c.home_dir
+            ) or Path(c.compare_public_providers_path)
         return c
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1632,9 +1601,7 @@ class PipelineConfig:
             fix_backend_classifications_path=opt_repo_resource_str(
                 "fix_backend_classifications_path"
             ),
-            fix_alltim_variants_path=opt_repo_resource_str(
-                "fix_alltim_variants_path"
-            ),
+            fix_alltim_variants_path=opt_repo_resource_str("fix_alltim_variants_path"),
             fix_relabel_rules_path=opt_repo_resource_str("fix_relabel_rules_path"),
             fix_overlap_rules_path=opt_repo_resource_str("fix_overlap_rules_path"),
             fix_overlap_exact_catalog_path=opt_repo_resource_str(
@@ -1678,8 +1645,7 @@ class PipelineConfig:
             ),
             fix_dedupe_freq_tol_auto=bool(d.get("fix_dedupe_freq_tol_auto", False)),
             fix_dedupe_same_obs_same_bw_globs=(
-                opt_list_str("fix_dedupe_same_obs_same_bw_globs")
-                or ["WSRT.*.tim"]
+                opt_list_str("fix_dedupe_same_obs_same_bw_globs") or ["WSRT.*.tim"]
             ),
             fix_check_duplicate_backend_tims=bool(
                 d.get("fix_check_duplicate_backend_tims", False)
@@ -1723,12 +1689,8 @@ class PipelineConfig:
             fix_qc_review_action_col=str(
                 d.get("fix_qc_review_action_col", "manual_action")
             ),
-            fix_qc_review_include_actions=opt_list_str(
-                "fix_qc_review_include_actions"
-            ),
-            fix_qc_review_exclude_actions=opt_list_str(
-                "fix_qc_review_exclude_actions"
-            ),
+            fix_qc_review_include_actions=opt_list_str("fix_qc_review_include_actions"),
+            fix_qc_review_exclude_actions=opt_list_str("fix_qc_review_exclude_actions"),
             fix_qc_remove_bad=bool(d.get("fix_qc_remove_bad", True)),
             fix_qc_remove_transients=bool(d.get("fix_qc_remove_transients", False)),
             fix_qc_remove_solar=bool(d.get("fix_qc_remove_solar", False)),

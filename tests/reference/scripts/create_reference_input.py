@@ -14,14 +14,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--source-dataset", required=True, type=Path)
     parser.add_argument("--reference-root", type=Path, default=Path("tests/reference"))
-    parser.add_argument("--pulsar", action="append", required=True, help="Pulsar directory name to copy.")
+    parser.add_argument(
+        "--pulsar",
+        action="append",
+        required=True,
+        help="Pulsar directory name to copy.",
+    )
     parser.add_argument(
         "--extra-path",
         action="append",
         default=[],
         help="Additional path relative to the source dataset to copy into input/.",
     )
-    parser.add_argument("--clean", action="store_true", help="Remove existing input/ before copying.")
+    parser.add_argument(
+        "--clean", action="store_true", help="Remove existing input/ before copying."
+    )
     return parser
 
 

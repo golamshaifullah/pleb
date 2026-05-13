@@ -147,7 +147,9 @@ class MixedBackendValuesError(BackendMissingError):
     def __init__(
         self, timfile: Path, backend_values: Sequence[str], sample_toa_line: str
     ):
-        values = tuple(sorted({str(v).strip() for v in backend_values if str(v).strip()}))
+        values = tuple(
+            sorted({str(v).strip() for v in backend_values if str(v).strip()})
+        )
         RuntimeError.__init__(
             self,
             f"Multiple backend values found in {timfile}: {', '.join(values)}. "

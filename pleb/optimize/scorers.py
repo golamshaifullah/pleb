@@ -147,7 +147,9 @@ def write_bad_toa_masks(
     root.mkdir(parents=True, exist_ok=True)
     grouped: Dict[str, List[pd.DataFrame]] = {}
     for frame in frames:
-        variant = str(frame.get("_optimize_variant", pd.Series(["base"])).iloc[0]) or "base"
+        variant = (
+            str(frame.get("_optimize_variant", pd.Series(["base"])).iloc[0]) or "base"
+        )
         grouped.setdefault(variant, []).append(
             _mask_frame(frame, variant=variant, backend_col=backend_col)
         )
@@ -281,7 +283,9 @@ def list_variant_labels(run_dir: Path) -> List[str]:
     """Return discovered QC variant labels under one run directory."""
     labels = []
     for frame in _load_qc_frames(run_dir):
-        label = str(frame.get("_optimize_variant", pd.Series(["base"])).iloc[0]) or "base"
+        label = (
+            str(frame.get("_optimize_variant", pd.Series(["base"])).iloc[0]) or "base"
+        )
         labels.append(label)
     return sorted(dict.fromkeys(labels))
 
@@ -337,16 +341,18 @@ def _compute_metrics(
     metrics.update(_backend_bad_fraction_metrics(df, bad_mask, backend_col=backend_col))
     if "variant_support_present" in df.columns:
         support = pd.to_numeric(df["variant_support_present"], errors="coerce")
-        metrics["variant_support_mean_present"] = float(support.mean()) if support.notna().any() else 0.0
-    if "variant_support_any_bad_fraction" in df.columns:
-        support = pd.to_numeric(
-            df["variant_support_any_bad_fraction"], errors="coerce"
+        metrics["variant_support_mean_present"] = (
+            float(support.mean()) if support.notna().any() else 0.0
         )
+    if "variant_support_any_bad_fraction" in df.columns:
+        support = pd.to_numeric(df["variant_support_any_bad_fraction"], errors="coerce")
         if support.notna().any():
             metrics["variant_bad_support_mean"] = float(support.mean())
-            metrics["variant_bad_support_among_bad"] = float(
-                support.loc[bad_mask & support.notna()].mean()
-            ) if (bad_mask & support.notna()).any() else 0.0
+            metrics["variant_bad_support_among_bad"] = (
+                float(support.loc[bad_mask & support.notna()].mean())
+                if (bad_mask & support.notna()).any()
+                else 0.0
+            )
     if "variant_support_any_event_fraction" in df.columns:
         support = pd.to_numeric(
             df["variant_support_any_event_fraction"], errors="coerce"
@@ -444,11 +450,17 @@ def _build_variant_consensus_frame(
         work["_optimize_variant"] = "base"
     work["_optimize_variant"] = work["_optimize_variant"].fillna("base").astype(str)
     work["_timfile_base"] = _canonical_timfile_keys(work)
-    work["__mjd__"] = pd.to_numeric(work.get("mjd", pd.Series(dtype=float)), errors="coerce")
+    work["__mjd__"] = pd.to_numeric(
+        work.get("mjd", pd.Series(dtype=float)), errors="coerce"
+    )
     work["__freq__"] = pd.to_numeric(
         work.get("freq", pd.Series(dtype=float)), errors="coerce"
     )
-    work["__site__"] = work.get("site", pd.Series([""] * len(work), index=work.index)).fillna("").astype(str)
+    work["__site__"] = (
+        work.get("site", pd.Series([""] * len(work), index=work.index))
+        .fillna("")
+        .astype(str)
+    )
     work["__group_id__"] = -1
 
     next_group_id = 0
@@ -456,7 +468,9 @@ def _build_variant_consensus_frame(
     if "__freq__" in work.columns:
         work["__freq_key__"] = work["__freq__"].round(6)
         group_keys.append("__freq_key__")
-    for _group_key, idx in work.groupby(group_keys, sort=False, dropna=False).indices.items():
+    for _group_key, idx in work.groupby(
+        group_keys, sort=False, dropna=False
+    ).indices.items():
         sub = work.loc[idx].copy()
         mjd = pd.to_numeric(sub["__mjd__"], errors="coerce")
         if mjd.notna().any():
@@ -479,9 +493,13 @@ def _build_variant_consensus_frame(
                     current = [int(row_idx)]
                     current_center = row_mjd
                     continue
-                if abs(row_mjd - current_center) <= (CONSENSUS_MERGE_TOL_SECONDS / 86400.0):
+                if abs(row_mjd - current_center) <= (
+                    CONSENSUS_MERGE_TOL_SECONDS / 86400.0
+                ):
                     current.append(int(row_idx))
-                    current_center = float(work.loc[current, "__mjd__"].astype(float).mean())
+                    current_center = float(
+                        work.loc[current, "__mjd__"].astype(float).mean()
+                    )
                 else:
                     work.loc[current, "__group_id__"] = next_group_id
                     next_group_id += 1
@@ -571,19 +589,19 @@ def _aggregate_consensus_group(
     for col in preferred_cols:
         if col in row or col not in df.columns:
             continue
-        row[col] = _representative_value(df[col], prefer_numeric=col in {"mjd", "freq", "sigma_us", "sigma", "resid_us", "resid"})
+        row[col] = _representative_value(
+            df[col],
+            prefer_numeric=col
+            in {"mjd", "freq", "sigma_us", "sigma", "resid_us", "resid"},
+        )
 
     bad_mask = _combined_bad_mask(df)
     event_mask = _combined_event_mask(df)
-    row["variant_support_any_bad_count"] = _unique_variant_truth_count(
-        df, bad_mask
-    )
+    row["variant_support_any_bad_count"] = _unique_variant_truth_count(df, bad_mask)
     row["variant_support_any_bad_fraction"] = float(
         row["variant_support_any_bad_count"]
     ) / float(present_count)
-    row["variant_support_any_event_count"] = _unique_variant_truth_count(
-        df, event_mask
-    )
+    row["variant_support_any_event_count"] = _unique_variant_truth_count(df, event_mask)
     row["variant_support_any_event_fraction"] = float(
         row["variant_support_any_event_count"]
     ) / float(present_count)
@@ -591,7 +609,9 @@ def _aggregate_consensus_group(
     for col in bool_cols:
         truth_count = _unique_variant_truth_count(df, _truthy_mask(df[col]))
         row[f"variant_support_{col}_count"] = truth_count
-        row[f"variant_support_{col}_fraction"] = float(truth_count) / float(present_count)
+        row[f"variant_support_{col}_fraction"] = float(truth_count) / float(
+            present_count
+        )
         row[col] = truth_count > 0
 
     for col in event_id_cols:
@@ -606,8 +626,11 @@ def _canonical_timfile_keys(df: pd.DataFrame) -> pd.Series:
     if "_timfile_base" in df.columns:
         return df["_timfile_base"].fillna("").astype(str)
     if "_timfile" in df.columns:
-        return df["_timfile"].fillna("").astype(str).map(
-            lambda x: Path(x).name if x else ""
+        return (
+            df["_timfile"]
+            .fillna("")
+            .astype(str)
+            .map(lambda x: Path(x).name if x else "")
         )
     return pd.Series([""] * len(df), index=df.index, dtype=str)
 
@@ -642,14 +665,19 @@ def _truthy_mask(series: pd.Series) -> pd.Series:
     numeric = pd.to_numeric(series, errors="coerce")
     if numeric.notna().any():
         return numeric.fillna(0).astype(float) != 0.0
-    return series.fillna("").astype(str).str.lower().isin({"1", "true", "t", "yes", "y"})
+    return (
+        series.fillna("").astype(str).str.lower().isin({"1", "true", "t", "yes", "y"})
+    )
 
 
 def _unique_variant_truth_count(df: pd.DataFrame, mask: pd.Series) -> int:
     if not mask.any():
         return 0
     return int(
-        df.loc[mask, "_optimize_variant"].fillna("base").astype(str).nunique(dropna=True)
+        df.loc[mask, "_optimize_variant"]
+        .fillna("base")
+        .astype(str)
+        .nunique(dropna=True)
     )
 
 
@@ -805,8 +833,12 @@ def _backend_bad_fraction_metrics(
     fractions = grouped.mean().astype(float)
     n_clean = grouped.apply(lambda s: float((~s.astype(bool)).sum()))
     return {
-        "max_backend_bad_fraction": float(fractions.max()) if not fractions.empty else 0.0,
-        "backend_bad_fraction_std": float(fractions.std(ddof=0)) if len(fractions) > 1 else 0.0,
+        "max_backend_bad_fraction": (
+            float(fractions.max()) if not fractions.empty else 0.0
+        ),
+        "backend_bad_fraction_std": (
+            float(fractions.std(ddof=0)) if len(fractions) > 1 else 0.0
+        ),
         "min_backend_n_clean": float(n_clean.min()) if not n_clean.empty else 0.0,
     }
 

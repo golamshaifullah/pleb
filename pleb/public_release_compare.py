@@ -426,7 +426,9 @@ def _find_par_files(root: Path, pattern: str = "**/*.par") -> List[Path]:
 def _clone_git_repo(url: str, dst: Path, *, ref: str | None = None) -> Path:
     git = shutil.which("git")
     if not git:
-        raise RuntimeError("git executable not found on PATH; cannot fetch git_clone provider.")
+        raise RuntimeError(
+            "git executable not found on PATH; cannot fetch git_clone provider."
+        )
     if dst.exists():
         if (dst / ".git").exists():
             return dst
@@ -706,7 +708,11 @@ def _normalize_local_pulsars(pulsars: object) -> List[str]:
             items = list(pulsars)  # type: ignore[arg-type]
         except Exception:
             items = [str(pulsars)]
-    return [str(x).strip() for x in items if str(x).strip() and str(x).strip().upper() != "ALL"]
+    return [
+        str(x).strip()
+        for x in items
+        if str(x).strip() and str(x).strip().upper() != "ALL"
+    ]
 
 
 def _discover_local_variant_parfiles(
@@ -723,7 +729,9 @@ def _discover_local_variant_parfiles(
         psr = _canonicalize_pulsar_token(raw_psr, aliases)
         psr_dir = dataset_root / psr
         if not psr_dir.is_dir():
-            logger.warning("Local compare_public pulsar directory not found: %s", psr_dir)
+            logger.warning(
+                "Local compare_public pulsar directory not found: %s", psr_dir
+            )
             continue
         variant_paths: Dict[str, Path] = {}
         base = psr_dir / f"{psr}.par"
@@ -991,7 +999,9 @@ def _build_comparison(df: pd.DataFrame) -> pd.DataFrame:
         sigma_rows["error_cmp"] = errs
         sigma_rows = sigma_rows[
             np.isfinite(sigma_rows["value_cmp"].to_numpy(dtype=float, na_value=np.nan))
-            & np.isfinite(sigma_rows["error_cmp"].to_numpy(dtype=float, na_value=np.nan))
+            & np.isfinite(
+                sigma_rows["error_cmp"].to_numpy(dtype=float, na_value=np.nan)
+            )
             & (sigma_rows["error_cmp"].astype(float) > 0.0)
         ]
         if len(sigma_rows) >= 2:
@@ -1009,11 +1019,12 @@ def _build_comparison(df: pd.DataFrame) -> pd.DataFrame:
                     )
                     if denom <= 0.0 or not np.isfinite(denom):
                         continue
-                    score = abs(
-                        float(left["value_cmp"]) - float(right["value_cmp"])
-                    ) / denom
+                    score = (
+                        abs(float(left["value_cmp"]) - float(right["value_cmp"]))
+                        / denom
+                    )
                     pair_scores.append(float(score))
-                    pair_labels.append(f'{left[source_col]} vs {right[source_col]}')
+                    pair_labels.append(f"{left[source_col]} vs {right[source_col]}")
             if pair_scores:
                 max_idx = int(np.argmax(pair_scores))
                 sigma_tension_max = float(pair_scores[max_idx])
@@ -1022,7 +1033,11 @@ def _build_comparison(df: pd.DataFrame) -> pd.DataFrame:
                 agreement_class = _agreement_class(sigma_tension_max)
             sigma_vals = sigma_rows["value_cmp"].to_numpy(dtype=float)
             sigma_errs = sigma_rows["error_cmp"].to_numpy(dtype=float)
-            if len(sigma_vals) >= 2 and np.all(np.isfinite(sigma_errs)) and np.all(sigma_errs > 0.0):
+            if (
+                len(sigma_vals) >= 2
+                and np.all(np.isfinite(sigma_errs))
+                and np.all(sigma_errs > 0.0)
+            ):
                 weights = 1.0 / np.square(sigma_errs)
                 wmean = float(np.average(sigma_vals, weights=weights))
                 chi2 = float(np.sum(np.square((sigma_vals - wmean) / sigma_errs)))
@@ -1092,7 +1107,12 @@ def _build_pairwise_comparison(df: pd.DataFrame) -> pd.DataFrame:
                 right = work.iloc[j]
                 lv = _safe_float(str(left["_value_cmp"]))
                 rv = _safe_float(str(right["_value_cmp"]))
-                if lv is None or rv is None or not np.isfinite(lv) or not np.isfinite(rv):
+                if (
+                    lv is None
+                    or rv is None
+                    or not np.isfinite(lv)
+                    or not np.isfinite(rv)
+                ):
                     continue
                 le = _safe_float(str(left["_error_cmp"]))
                 re_ = _safe_float(str(right["_error_cmp"]))
@@ -1123,11 +1143,21 @@ def _build_pairwise_comparison(df: pd.DataFrame) -> pd.DataFrame:
                         "right_kind": str(right.get("source_kind", "public")),
                         "left_value": float(lv),
                         "right_value": float(rv),
-                        "left_error": float(le) if le is not None and np.isfinite(le) else np.nan,
-                        "right_error": float(re_) if re_ is not None and np.isfinite(re_) else np.nan,
+                        "left_error": (
+                            float(le) if le is not None and np.isfinite(le) else np.nan
+                        ),
+                        "right_error": (
+                            float(re_)
+                            if re_ is not None and np.isfinite(re_)
+                            else np.nan
+                        ),
                         "abs_delta": abs(float(lv) - float(rv)),
                         "sigma_tension": float(sigma) if np.isfinite(sigma) else np.nan,
-                        "agreement_class": _agreement_class(float(sigma)) if np.isfinite(sigma) else "no_error_metric",
+                        "agreement_class": (
+                            _agreement_class(float(sigma))
+                            if np.isfinite(sigma)
+                            else "no_error_metric"
+                        ),
                     }
                 )
     return pd.DataFrame(rows, columns=columns)
@@ -1204,7 +1234,9 @@ def _build_local_vs_public_summary(local_pair_df: pd.DataFrame) -> pd.DataFrame:
         ["pulsar", "local_variant", "public_provider"], dropna=False
     ):
         sigma = pd.to_numeric(sub["sigma_tension"], errors="coerce")
-        sigma_sub = sub[np.isfinite(sigma.to_numpy(dtype=float, na_value=np.nan))].copy()
+        sigma_sub = sub[
+            np.isfinite(sigma.to_numpy(dtype=float, na_value=np.nan))
+        ].copy()
         if len(sigma_sub):
             sigma_sub = sigma_sub.assign(_sigma=sigma.loc[sigma_sub.index]).sort_values(
                 "_sigma", ascending=False, kind="stable"
@@ -1212,7 +1244,9 @@ def _build_local_vs_public_summary(local_pair_df: pd.DataFrame) -> pd.DataFrame:
             worst = sigma_sub.iloc[0]
             worst_param = str(worst["param"])
             worst_sigma = float(worst["_sigma"])
-            median_sigma = float(pd.to_numeric(sigma_sub["_sigma"], errors="coerce").median())
+            median_sigma = float(
+                pd.to_numeric(sigma_sub["_sigma"], errors="coerce").median()
+            )
         else:
             worst_param = ""
             worst_sigma = np.nan
@@ -1227,7 +1261,9 @@ def _build_local_vs_public_summary(local_pair_df: pd.DataFrame) -> pd.DataFrame:
                 "worst_param": worst_param,
                 "worst_sigma_tension": worst_sigma,
                 "median_sigma_tension": median_sigma,
-                "n_strong_tension": int((sub["agreement_class"] == "strong_tension").sum()),
+                "n_strong_tension": int(
+                    (sub["agreement_class"] == "strong_tension").sum()
+                ),
             }
         )
     return pd.DataFrame(rows, columns=columns)
@@ -1299,8 +1335,12 @@ def _build_pulsar_summary(cmp_df: pd.DataFrame) -> pd.DataFrame:
                 "mean_reduced_chi2": mean_reduced_chi2,
                 "n_consistent": int((sub["agreement_class"] == "consistent").sum()),
                 "n_mild_tension": int((sub["agreement_class"] == "mild_tension").sum()),
-                "n_moderate_tension": int((sub["agreement_class"] == "moderate_tension").sum()),
-                "n_strong_tension": int((sub["agreement_class"] == "strong_tension").sum()),
+                "n_moderate_tension": int(
+                    (sub["agreement_class"] == "moderate_tension").sum()
+                ),
+                "n_strong_tension": int(
+                    (sub["agreement_class"] == "strong_tension").sum()
+                ),
             }
         )
     return pd.DataFrame(rows, columns=columns)
@@ -1441,7 +1481,11 @@ def _write_comparison_report(
                         str(int(getattr(row, "n_params_compared"))),
                         str(int(getattr(row, "n_params_with_sigma_metric"))),
                         str(getattr(row, "worst_param") or ""),
-                        f"{float(worst_sigma):.3f}" if np.isfinite(float(worst_sigma)) else "nan",
+                        (
+                            f"{float(worst_sigma):.3f}"
+                            if np.isfinite(float(worst_sigma))
+                            else "nan"
+                        ),
                         str(int(getattr(row, "n_strong_tension"))),
                     ]
                 )
@@ -1457,7 +1501,9 @@ def _write_comparison_report(
                 "| --- | ---: | ---: | --- | ---: | ---: | ---: |",
             ]
         )
-        for row in summary_df.sort_values(by="worst_sigma_tension", ascending=False, kind="stable").itertuples(index=False):
+        for row in summary_df.sort_values(
+            by="worst_sigma_tension", ascending=False, kind="stable"
+        ).itertuples(index=False):
             worst_sigma = getattr(row, "worst_sigma_tension")
             median_sigma = getattr(row, "median_sigma_tension")
             lines.append(
@@ -1468,8 +1514,16 @@ def _write_comparison_report(
                         str(int(getattr(row, "n_params_compared"))),
                         str(int(getattr(row, "n_params_with_sigma_metric"))),
                         str(getattr(row, "worst_param") or ""),
-                        f"{float(worst_sigma):.3f}" if np.isfinite(float(worst_sigma)) else "nan",
-                        f"{float(median_sigma):.3f}" if np.isfinite(float(median_sigma)) else "nan",
+                        (
+                            f"{float(worst_sigma):.3f}"
+                            if np.isfinite(float(worst_sigma))
+                            else "nan"
+                        ),
+                        (
+                            f"{float(median_sigma):.3f}"
+                            if np.isfinite(float(median_sigma))
+                            else "nan"
+                        ),
                         str(int(getattr(row, "n_strong_tension"))),
                     ]
                 )
@@ -1641,7 +1695,9 @@ def compare_public_releases(
                 aliases=aliases,
             )
             if not local_specs:
-                logger.warning("No local variant par files were discovered under %s", ds_root)
+                logger.warning(
+                    "No local variant par files were discovered under %s", ds_root
+                )
             for pulsar, variant, path in local_specs:
                 try:
                     d = _parse_parfile(path, aliases=aliases, pulsar_override=pulsar)
@@ -1671,7 +1727,9 @@ def compare_public_releases(
     cmp_out = out_dir / "public_release_parameters.comparison.tsv"
     pair_out = out_dir / "public_release_parameters.pairwise.tsv"
     local_pair_out = out_dir / "public_release_parameters.local_vs_public.tsv"
-    local_summary_out = out_dir / "public_release_parameters.local_vs_public.summary.tsv"
+    local_summary_out = (
+        out_dir / "public_release_parameters.local_vs_public.summary.tsv"
+    )
     summary_out = out_dir / "public_release_parameters.summary.tsv"
     report_out = out_dir / "public_release_parameters.report.md"
     raw_df.to_csv(raw_out, sep="\t", index=False)

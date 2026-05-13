@@ -144,9 +144,11 @@ def _best_profile_override_path(path: Path, raw: Dict[str, Any]) -> str:
     home_dir = raw.get("home_dir")
     if home_dir not in (None, ""):
         try:
-            return path.resolve().relative_to(
-                Path(str(home_dir)).expanduser().resolve()
-            ).as_posix()
+            return (
+                path.resolve()
+                .relative_to(Path(str(home_dir)).expanduser().resolve())
+                .as_posix()
+            )
         except Exception:
             pass
     return str(path.resolve())
@@ -250,12 +252,10 @@ def _score_trial(cfg, trial, fold_cfg, objective, space) -> None:
             raise
     if pipeline_cfg is not None:
         backend_col = _resolve_trial_backend_col(pipeline_cfg, fold_cfg)
-    parameter_complexity_penalty = active_parameter_count(
-        space, trial.params
-    ) / max(len(space.parameters), 1)
-    variant_strategy = _resolve_trial_variant_strategy(
-        cfg, trial.run_dir, pipeline_cfg
+    parameter_complexity_penalty = active_parameter_count(space, trial.params) / max(
+        len(space.parameters), 1
     )
+    variant_strategy = _resolve_trial_variant_strategy(cfg, trial.run_dir, pipeline_cfg)
     selected_variant: str | None = None
     if variant_strategy == "select_best":
         selected_variant, full_metrics = _select_trial_variant(
@@ -397,7 +397,9 @@ def _resolve_trial_variant_strategy(
     labels = [label for label in list_variant_labels(run_dir) if label != "base"]
     if labels:
         return "consensus"
-    if pipeline_cfg is not None and bool(getattr(pipeline_cfg, "pqc_run_variants", False)):
+    if pipeline_cfg is not None and bool(
+        getattr(pipeline_cfg, "pqc_run_variants", False)
+    ):
         return "consensus"
     return "single"
 
@@ -518,9 +520,7 @@ def _build_pipeline_config_for_trial(
     return PipelineConfig.from_dict(raw)
 
 
-def _resolve_trial_backend_col(
-    pipeline_cfg: PipelineConfig | None, fold_cfg
-) -> str:
+def _resolve_trial_backend_col(pipeline_cfg: PipelineConfig | None, fold_cfg) -> str:
     if pipeline_cfg is not None:
         backend_col = str(getattr(pipeline_cfg, "pqc_backend_col", "") or "").strip()
         if backend_col:

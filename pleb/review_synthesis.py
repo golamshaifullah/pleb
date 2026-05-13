@@ -20,7 +20,9 @@ class ReviewSynthesisResult:
 
 @lru_cache(maxsize=1)
 def _load_script_module() -> ModuleType:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "make_review_synthesis.py"
+    script_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "make_review_synthesis.py"
+    )
     spec = importlib_util.spec_from_file_location(
         "pleb._review_synthesis_script", script_path
     )
@@ -32,7 +34,9 @@ def _load_script_module() -> ModuleType:
     return module
 
 
-def _append_repeated(argv: list[str], flag: str, values: Optional[Iterable[str]]) -> None:
+def _append_repeated(
+    argv: list[str], flag: str, values: Optional[Iterable[str]]
+) -> None:
     for value in values or []:
         text = str(value).strip()
         if text:
@@ -79,7 +83,9 @@ def run_review_synthesis(
         str(int(top_n_rows)),
     ]
     if workflow_config not in (None, ""):
-        argv.extend(["--workflow-config", str(Path(workflow_config).expanduser().resolve())])
+        argv.extend(
+            ["--workflow-config", str(Path(workflow_config).expanduser().resolve())]
+        )
     if overrides not in (None, ""):
         argv.extend(["--overrides", str(Path(overrides).expanduser().resolve())])
     _append_repeated(argv, "--stage-branch", stage_branch)

@@ -25,9 +25,7 @@ def test_validate_fixdataset_qc_inputs_fails_before_apply_when_csv_missing(
 
     with pytest.raises(
         RuntimeError,
-        match=re.escape(
-            "FixDataset QC input validation failed for branch step3_apply"
-        ),
+        match=re.escape("FixDataset QC input validation failed for branch step3_apply"),
     ):
         _validate_fixdataset_qc_inputs(
             ["J0636+5128", "J1713+0747"], cfg, branch="step3_apply"
@@ -66,9 +64,7 @@ def test_validate_fixdataset_qc_inputs_checks_explicit_flag_write_mode(
 
     with pytest.raises(
         RuntimeError,
-        match=re.escape(
-            "FixDataset QC input validation failed for branch step3_apply"
-        ),
+        match=re.escape("FixDataset QC input validation failed for branch step3_apply"),
     ):
         _validate_fixdataset_qc_inputs(["J0636+5128"], cfg, branch="step3_apply")
 

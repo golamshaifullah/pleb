@@ -30,7 +30,9 @@ def _write(path: Path, text: str) -> None:
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    )
 
 
 def test_parse_parfile_extracts_value_and_error(tmp_path: Path) -> None:
@@ -307,11 +309,25 @@ def test_resolve_latest_assets_for_direct_url() -> None:
 
 
 def test_find_par_files_uses_provider_specific_glob(tmp_path: Path) -> None:
-    keep = tmp_path / "NANOGrav15yr_PulsarTiming_v2.1.0" / "narrowband" / "par" / "J1909-3744.nb.par"
-    skip = tmp_path / "NANOGrav15yr_PulsarTiming_v2.1.0" / "wideband" / "par" / "J1909-3744.wb.par"
+    keep = (
+        tmp_path
+        / "NANOGrav15yr_PulsarTiming_v2.1.0"
+        / "narrowband"
+        / "par"
+        / "J1909-3744.nb.par"
+    )
+    skip = (
+        tmp_path
+        / "NANOGrav15yr_PulsarTiming_v2.1.0"
+        / "wideband"
+        / "par"
+        / "J1909-3744.wb.par"
+    )
     _write(keep, "F0 1\n")
     _write(skip, "F0 2\n")
-    found = _find_par_files(tmp_path, "NANOGrav15yr_PulsarTiming_v2.1.0/narrowband/par/*.nb.par")
+    found = _find_par_files(
+        tmp_path, "NANOGrav15yr_PulsarTiming_v2.1.0/narrowband/par/*.nb.par"
+    )
     assert found == [keep]
 
 
@@ -319,7 +335,14 @@ def test_download_and_extract_assets_uses_git_clone_par_glob(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo_root = tmp_path / "fake_repo"
-    keep = repo_root / "IPTADR2" / "release" / "VersionA" / "J1909-3744" / "J1909-3744.IPTADR2.par"
+    keep = (
+        repo_root
+        / "IPTADR2"
+        / "release"
+        / "VersionA"
+        / "J1909-3744"
+        / "J1909-3744.IPTADR2.par"
+    )
     skip = repo_root / "other" / "J1909-3744.par"
     _write(keep, "F0 1\n")
     _write(skip, "F0 2\n")
@@ -351,12 +374,7 @@ def test_download_and_extract_assets_reuses_cached_downloads_and_extraction(
 ) -> None:
     cache_root = tmp_path / "cache"
     extracted_par = (
-        cache_root
-        / "TEST"
-        / "test-release"
-        / "extracted"
-        / "pars"
-        / "J1909-3744.par"
+        cache_root / "TEST" / "test-release" / "extracted" / "pars" / "J1909-3744.par"
     )
     archive = cache_root / "TEST" / "test-release" / "release.tar.gz"
     archive.parent.mkdir(parents=True, exist_ok=True)
@@ -433,7 +451,9 @@ def test_compare_public_releases_writes_assets_tsv_for_slots_dataclass(
     ) -> dict[str, list[Path]]:
         return {"TEST_A": [par], "TEST_B": [par_b]}
 
-    monkeypatch.setattr("pleb.public_release_compare.resolve_latest_assets", fake_resolve)
+    monkeypatch.setattr(
+        "pleb.public_release_compare.resolve_latest_assets", fake_resolve
+    )
     monkeypatch.setattr(
         "pleb.public_release_compare._download_and_extract_assets",
         fake_download_extract,
@@ -495,7 +515,9 @@ def test_compare_public_releases_uses_shared_cache_dir(
         captured["cache_root"] = Path(cache_root)
         return {"TEST": [par]}
 
-    monkeypatch.setattr("pleb.public_release_compare.resolve_latest_assets", fake_resolve)
+    monkeypatch.setattr(
+        "pleb.public_release_compare.resolve_latest_assets", fake_resolve
+    )
     monkeypatch.setattr(
         "pleb.public_release_compare._download_and_extract_assets",
         fake_download_extract,
@@ -561,7 +583,9 @@ def test_compare_public_releases_writes_local_variant_vs_public_outputs(
     ) -> dict[str, list[Path]]:
         return {"TEST_A": [public_a], "TEST_B": [public_b]}
 
-    monkeypatch.setattr("pleb.public_release_compare.resolve_latest_assets", fake_resolve)
+    monkeypatch.setattr(
+        "pleb.public_release_compare.resolve_latest_assets", fake_resolve
+    )
     monkeypatch.setattr(
         "pleb.public_release_compare._download_and_extract_assets",
         fake_download_extract,
@@ -603,8 +627,7 @@ type = "direct_url"
 url = "https://example.test/release_a.tar.gz"
 asset_regex = ".*"
 par_glob = "pars/*.par"
-""".strip()
-        + "\n",
+""".strip() + "\n",
     )
 
     public_a = tmp_path / "pars_public_a" / "J1909-3744.par"
@@ -627,7 +650,9 @@ par_glob = "pars/*.par"
     ) -> dict[str, list[Path]]:
         return {"TEST_A": [public_a]}
 
-    monkeypatch.setattr("pleb.public_release_compare.resolve_latest_assets", fake_resolve)
+    monkeypatch.setattr(
+        "pleb.public_release_compare.resolve_latest_assets", fake_resolve
+    )
     monkeypatch.setattr(
         "pleb.public_release_compare._download_and_extract_assets",
         fake_download_extract,

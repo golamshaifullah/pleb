@@ -183,7 +183,9 @@ class _LinearSolveResult:
 
 
 def _coerce_alignment_dataframe(
-    records: pd.DataFrame | Sequence[BackendAlignmentObservation | Mapping[str, object]],
+    records: (
+        pd.DataFrame | Sequence[BackendAlignmentObservation | Mapping[str, object]]
+    ),
 ) -> pd.DataFrame:
     if isinstance(records, pd.DataFrame):
         df = records.copy()
@@ -223,7 +225,9 @@ def _coerce_alignment_dataframe(
     return out.sort_values(["backend", "toa"]).reset_index(drop=True)
 
 
-def _normalize_metric(values: Sequence[float], *, higher_is_better: bool) -> list[float]:
+def _normalize_metric(
+    values: Sequence[float], *, higher_is_better: bool
+) -> list[float]:
     arr = np.asarray(values, dtype=float)
     finite = arr[np.isfinite(arr)]
     if finite.size == 0:
@@ -397,7 +401,9 @@ def _estimate_pairwise_offset(
         sigma=float(sigma_edge),
         weight=float(1.0 / max(sigma_edge, error_floor) ** 2),
         n_pairs=int(len(matches)),
-        median_toa_separation=float(np.median(matches["toa_separation"].to_numpy(dtype=float))),
+        median_toa_separation=float(
+            np.median(matches["toa_separation"].to_numpy(dtype=float))
+        ),
         residual_rms=float(residual_rms),
         chi2_red=float(chi2_red),
         inflation_factor=float(inflation * template_penalty),
@@ -406,7 +412,9 @@ def _estimate_pairwise_offset(
 
 
 def estimate_pairwise_backend_offsets(
-    records: pd.DataFrame | Sequence[BackendAlignmentObservation | Mapping[str, object]],
+    records: (
+        pd.DataFrame | Sequence[BackendAlignmentObservation | Mapping[str, object]]
+    ),
     *,
     max_toa_separation: float = 7.0,
     min_overlap_pairs: int = 3,
@@ -451,7 +459,9 @@ def estimate_pairwise_backend_offsets(
     return backends, edges, template_diags
 
 
-def _connected_backends(backends: Sequence[str], edges: Sequence[PairwiseOffsetEstimate]) -> list[str]:
+def _connected_backends(
+    backends: Sequence[str], edges: Sequence[PairwiseOffsetEstimate]
+) -> list[str]:
     if not backends:
         return []
     adjacency = {backend: set() for backend in backends}
@@ -525,7 +535,9 @@ def _solve_constrained_wls(
         robust_new = np.ones_like(z)
         mask = np.abs(z) > huber_k
         robust_new[mask] = huber_k / np.abs(z[mask])
-        if np.linalg.norm(b_new - b) <= tol * max(1.0, np.linalg.norm(b), np.linalg.norm(b_new)):
+        if np.linalg.norm(b_new - b) <= tol * max(
+            1.0, np.linalg.norm(b), np.linalg.norm(b_new)
+        ):
             b = b_new
             robust_w = robust_new
             kkt_inv = np.linalg.pinv(kkt)
@@ -567,11 +579,14 @@ def _leave_one_out_stability(
     full_offsets: Mapping[str, float],
     huber_k: float,
 ) -> float:
-    incident = [edge for edge in edges if candidate in (edge.left_backend, edge.right_backend)]
+    incident = [
+        edge for edge in edges if candidate in (edge.left_backend, edge.right_backend)
+    ]
     if not incident:
         return float("inf")
     full_rel = np.asarray(
-        [float(full_offsets[b] - full_offsets[candidate]) for b in backends], dtype=float
+        [float(full_offsets[b] - full_offsets[candidate]) for b in backends],
+        dtype=float,
     )
     shifts: list[float] = []
     weights: list[float] = []
@@ -597,7 +612,11 @@ def _leave_one_out_stability(
         return float("inf")
     if not np.isfinite(np.asarray(shifts, dtype=float)).all():
         return float("inf")
-    return float(np.average(np.asarray(shifts, dtype=float), weights=np.asarray(weights, dtype=float)))
+    return float(
+        np.average(
+            np.asarray(shifts, dtype=float), weights=np.asarray(weights, dtype=float)
+        )
+    )
 
 
 def _rank_reference_candidates(
@@ -611,11 +630,15 @@ def _rank_reference_candidates(
     huber_k: float,
 ) -> list[ReferenceCandidate]:
     weight_by_backend = {backend: 0.0 for backend in backends}
-    edge_rms_by_backend: dict[str, list[tuple[float, float]]] = {backend: [] for backend in backends}
+    edge_rms_by_backend: dict[str, list[tuple[float, float]]] = {
+        backend: [] for backend in backends
+    }
     for edge in edges:
         for backend in (edge.left_backend, edge.right_backend):
             weight_by_backend[backend] += float(edge.weight)
-            edge_rms_by_backend[backend].append((float(edge.residual_rms), float(edge.weight)))
+            edge_rms_by_backend[backend].append(
+                (float(edge.residual_rms), float(edge.weight))
+            )
 
     uncertainty_raw: list[float] = []
     connectivity_raw: list[float] = []
@@ -700,7 +723,9 @@ def _rank_reference_candidates(
 
 
 def select_backend_alignment_reference(
-    records: pd.DataFrame | Sequence[BackendAlignmentObservation | Mapping[str, object]],
+    records: (
+        pd.DataFrame | Sequence[BackendAlignmentObservation | Mapping[str, object]]
+    ),
     *,
     max_toa_separation: float = 7.0,
     min_overlap_pairs: int = 3,
@@ -808,7 +833,10 @@ def _plot_offset_graph(result: BackendAlignmentResult, path: Path) -> None:
     offsets = result.offset_table().set_index("backend")
     x = np.arange(len(result.backends), dtype=float)
     y = np.asarray(
-        [offsets.loc[backend, "offset_relative_to_reference"] for backend in result.backends],
+        [
+            offsets.loc[backend, "offset_relative_to_reference"]
+            for backend in result.backends
+        ],
         dtype=float,
     )
     yerr = np.asarray(
@@ -847,7 +875,9 @@ def _plot_covariance_heatmap(result: BackendAlignmentResult, path: Path) -> None
     import matplotlib.pyplot as plt
 
     cov = result.covariance_table().to_numpy(dtype=float)
-    fig, ax = plt.subplots(figsize=(max(5, 0.9 * len(result.backends)), max(4, 0.9 * len(result.backends))))
+    fig, ax = plt.subplots(
+        figsize=(max(5, 0.9 * len(result.backends)), max(4, 0.9 * len(result.backends)))
+    )
     im = ax.imshow(cov, cmap="viridis")
     ax.set_xticks(np.arange(len(result.backends)))
     ax.set_xticklabels(result.backends, rotation=45, ha="right")

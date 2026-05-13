@@ -63,6 +63,7 @@ except Exception:  # pragma: no cover
     def tqdm(x, **kwargs):
         return x
 
+
 try:  # Python 3.11+
     import tomllib
 except Exception:  # pragma: no cover
@@ -659,6 +660,7 @@ def _normalize_reference_metric(
     values: Sequence[float], *, higher_is_better: bool
 ) -> List[float]:
     """Normalize one reference-selection metric onto ``[0, 1]``."""
+
     def _as_float(value: object) -> float:
         try:
             return float(value)
@@ -683,7 +685,9 @@ def _normalize_reference_metric(
     return out
 
 
-def _rank_reference_system_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
+def _rank_reference_system_rows(
+    rows: Sequence[Dict[str, object]],
+) -> List[Dict[str, object]]:
     """Rank reference-JUMP candidates using timing quality and overlap support.
 
     Weighting follows the current policy:
@@ -697,6 +701,7 @@ def _rank_reference_system_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[
 
     Number of TOAs remains diagnostic only and does not contribute to the score.
     """
+
     def _as_float(value: object) -> float:
         try:
             return float(value)
@@ -720,9 +725,7 @@ def _rank_reference_system_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[
     )
     rms_scores = _normalize_reference_metric(rms_vals, higher_is_better=False)
     tspan_scores = _normalize_reference_metric(tspan_vals, higher_is_better=True)
-    cadence_scores = _normalize_reference_metric(
-        cadence_vals, higher_is_better=False
-    )
+    cadence_scores = _normalize_reference_metric(cadence_vals, higher_is_better=False)
     backend_overlap_scores = _normalize_reference_metric(
         backend_overlap_vals, higher_is_better=True
     )
@@ -805,7 +808,9 @@ def _variant_name_from_alltim(psr: str, alltim: Path) -> str:
 def _parse_tim_system_rows(
     timfile: Path,
     system_flag: str = "-sys",
-) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[float]], Dict[str, List[float]]]:
+) -> Tuple[
+    Dict[str, List[str]], List[str], Dict[str, List[float]], Dict[str, List[float]]
+]:
     """Split TOAs into per-system buffers using the selected tim flag.
 
     Parameters
@@ -1028,7 +1033,9 @@ def build_variant_reference_jump_pars(
                 # Temp jump-reference files now live under:
                 #   <dataset_root>/results/jump_reference_tmp/<PSR>/
                 # and the dataset root is bound to /data inside the container.
-                par_target = f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
+                par_target = (
+                    f"/data/results/jump_reference_tmp/{psr}/{no_jump_par.name}"
+                )
                 tim_target = f"/data/results/jump_reference_tmp/{psr}/{sys_all.name}"
             log_path = tmp_root / f"{psr}_{vname}_{sysv}.tempo2.log"
             rc = run_subprocess(
@@ -1048,7 +1055,9 @@ def build_variant_reference_jump_pars(
                 "{post} {err}\n",
             ]
             gen_rc = run_subprocess(gen2_cmd, gen2_log)
-            timing_rms_us = _parse_tempo2_timing_rms_us(gen2_log) if gen_rc == 0 else None
+            timing_rms_us = (
+                _parse_tempo2_timing_rms_us(gen2_log) if gen_rc == 0 else None
+            )
             system_rows[sysv]["timing_rms_us"] = timing_rms_us
 
         # Finalize metrics and choose reference system.
@@ -1057,7 +1066,9 @@ def build_variant_reference_jump_pars(
             errs = np.asarray(r.pop("toa_err_us", []), dtype=float)
             med = float(np.median(errs)) if errs.size else np.nan
             mjds = np.asarray(r.pop("toa_mjd", []), dtype=float)
-            uniq_mjds = np.unique(np.sort(mjds)) if mjds.size else np.asarray([], dtype=float)
+            uniq_mjds = (
+                np.unique(np.sort(mjds)) if mjds.size else np.asarray([], dtype=float)
+            )
             if mjds.size >= 2:
                 tspan_days = float(np.nanmax(mjds) - np.nanmin(mjds))
                 if uniq_mjds.size >= 2:
@@ -2185,7 +2196,10 @@ def _filter_qc_rows_for_cfg(
             "selected_rows": int(len(filtered)),
             "selected_action_counts": {
                 str(k): int(v)
-                for k, v in actions.loc[mask].value_counts(dropna=False).to_dict().items()
+                for k, v in actions.loc[mask]
+                .value_counts(dropna=False)
+                .to_dict()
+                .items()
             },
         }
     )
@@ -2451,9 +2465,8 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     manifest_rows = _load_qc_manifest_rows(psr, cfg)
     if manifest_rows:
         statuses = {
-            str(r.get("qc_status", "")).strip() or (
-                "pqc_failed" if str(r.get("qc_error", "")).strip() else "success"
-            )
+            str(r.get("qc_status", "")).strip()
+            or ("pqc_failed" if str(r.get("qc_error", "")).strip() else "success")
             for r in manifest_rows
         }
         if statuses == {"empty_variant"}:
@@ -3465,7 +3478,11 @@ def canonicalize_system_flags_dataset(
 
             idx = sub.index
             new_centres = (
-                numeric.loc[idx, "centre_mhz"].astype(float).round().astype(int).map(mapping)
+                numeric.loc[idx, "centre_mhz"]
+                .astype(float)
+                .round()
+                .astype(int)
+                .map(mapping)
             )
             numeric.loc[idx, "centre_mhz"] = new_centres.astype(int)
             numeric.loc[idx, "sys"] = family + "." + new_centres.astype(int).astype(str)
@@ -3517,7 +3534,10 @@ def canonicalize_system_flags_dataset(
                 for fname in ("system_flag_table.json", "system_flag_table.toml"):
                     per_psr = psr_dir / fname
                     try:
-                        if per_psr.exists() and per_psr.resolve() != mapping_path.resolve():
+                        if (
+                            per_psr.exists()
+                            and per_psr.resolve() != mapping_path.resolve()
+                        ):
                             per_psr.unlink()
                     except Exception:
                         pass
@@ -3584,19 +3604,27 @@ def apply_fixdataset_branch(
         ready_for_global.append(psr_name)
 
     if ready_for_global:
-        global_reports = canonicalize_system_flags_dataset(dataset_root, ready_for_global, cfg)
+        global_reports = canonicalize_system_flags_dataset(
+            dataset_root, ready_for_global, cfg
+        )
         for psr_name, global_rep in global_reports.items():
-            report_map[psr_name]["steps"].append({"canonicalize_system_flags": global_rep})
+            report_map[psr_name]["steps"].append(
+                {"canonicalize_system_flags": global_rep}
+            )
             if global_rep.get("error"):
                 report_map[psr_name]["error"] = str(global_rep["error"])
 
     ready_for_post = [
-        psr_name for psr_name in ready_for_global if not report_map[psr_name].get("error")
+        psr_name
+        for psr_name in ready_for_global
+        if not report_map[psr_name].get("error")
     ]
 
     def _run_post(psr_name: str) -> Dict[str, object]:
         try:
-            return {"steps": _fix_pulsar_post_system_steps(dataset_root / psr_name, cfg)}
+            return {
+                "steps": _fix_pulsar_post_system_steps(dataset_root / psr_name, cfg)
+            }
         except Exception as e:
             return {"error": str(e), "steps": []}
 
@@ -3605,7 +3633,9 @@ def apply_fixdataset_branch(
     else:
         post_results = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as ex:
-            futures = {ex.submit(_run_post, psr_name): psr_name for psr_name in ready_for_post}
+            futures = {
+                ex.submit(_run_post, psr_name): psr_name for psr_name in ready_for_post
+            }
             for fut in tqdm(
                 as_completed(futures),
                 total=len(futures),
@@ -3682,9 +3712,7 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
     return detail_path
 
 
-def _draw_fix_text_page(
-    pdf, title: str, sections: List[Tuple[str, List[str]]]
-) -> None:
+def _draw_fix_text_page(pdf, title: str, sections: List[Tuple[str, List[str]]]) -> None:
     import matplotlib.pyplot as plt
 
     fig = plt.figure(figsize=_A4_FIGSIZE)
@@ -3807,7 +3835,9 @@ def _write_fix_report_pdf(
                             "reference_system",
                         ):
                             if key in payload:
-                                step_lines.append(f"{step_name}.{key} = {payload.get(key)}")
+                                step_lines.append(
+                                    f"{step_name}.{key} = {payload.get(key)}"
+                                )
                     elif isinstance(payload, list):
                         step_lines.append(f"{step_name}: {len(payload)} item(s)")
                     else:

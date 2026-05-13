@@ -53,7 +53,9 @@ def test_sync_plot_selection_copies_plot_widget_state(monkeypatch) -> None:
     assert fake_streamlit.session_state["selected_review_ids"] == ["rid-42"]
 
 
-def test_numeric_axis_options_prioritises_mjd_uncertainty_and_phase(monkeypatch) -> None:
+def test_numeric_axis_options_prioritises_mjd_uncertainty_and_phase(
+    monkeypatch,
+) -> None:
     module, _ = _load_qc_review_script(monkeypatch)
     df = pd.DataFrame(
         {
@@ -86,7 +88,9 @@ def test_default_reviewed_path_uses_selected_qc_basename(monkeypatch) -> None:
     assert out == Path("/tmp/run/qc_review/J1909-3744.combined_qc.csv")
 
 
-def test_sync_reviewed_output_default_tracks_auto_path_but_preserves_manual(monkeypatch) -> None:
+def test_sync_reviewed_output_default_tracks_auto_path_but_preserves_manual(
+    monkeypatch,
+) -> None:
     module, fake_streamlit = _load_qc_review_script(monkeypatch)
 
     first = module._sync_reviewed_output_default(

@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PREPARE_SCRIPT = REPO_ROOT / "scripts/htcondor/prepare_optimize_submit.py"
 RUN_SCRIPT = REPO_ROOT / "scripts/htcondor/run_optimize_one.sh"
@@ -24,9 +23,7 @@ def _init_dataset_repo(repo: Path, pulsars: list[str]) -> None:
     subprocess.run(["git", "config", "user.name", "test"], cwd=repo, check=True)
     subprocess.run(["git", "add", "EPTA-DR3"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
-    subprocess.run(
-        ["git", "branch", "step2_pqc_variant_smoke"], cwd=repo, check=True
-    )
+    subprocess.run(["git", "branch", "step2_pqc_variant_smoke"], cwd=repo, check=True)
 
 
 def test_prepare_optimize_submit_writes_queue_files(tmp_path: Path) -> None:
@@ -93,7 +90,9 @@ def test_run_optimize_one_dry_run_creates_isolated_worktree(tmp_path: Path) -> N
 
     assert len(cfgs) == 2
     assert worktrees
-    base_text = next(p.read_text(encoding="utf-8") for p in cfgs if p.name.endswith(".base.toml"))
+    base_text = next(
+        p.read_text(encoding="utf-8") for p in cfgs if p.name.endswith(".base.toml")
+    )
     opt_text = next(
         p.read_text(encoding="utf-8") for p in cfgs if p.name.endswith(".optimize.toml")
     )

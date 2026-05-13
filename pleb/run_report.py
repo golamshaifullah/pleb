@@ -157,25 +157,25 @@ def _summarize_fix_reports(run_dir: Path) -> pd.DataFrame:
                 if "added_includes" in df.columns:
                     added_includes = str(
                         int(
-                            pd.to_numeric(
-                                df["added_includes"], errors="coerce"
-                            ).fillna(0).sum()
+                            pd.to_numeric(df["added_includes"], errors="coerce")
+                            .fillna(0)
+                            .sum()
                         )
                     )
                 if "missing_jumps" in df.columns:
                     missing_jumps = str(
                         int(
-                            pd.to_numeric(
-                                df["missing_jumps"], errors="coerce"
-                            ).fillna(0).sum()
+                            pd.to_numeric(df["missing_jumps"], errors="coerce")
+                            .fillna(0)
+                            .sum()
                         )
                     )
                 if "removed_lines" in df.columns:
                     removed_lines = str(
                         int(
-                            pd.to_numeric(
-                                df["removed_lines"], errors="coerce"
-                            ).fillna(0).sum()
+                            pd.to_numeric(df["removed_lines"], errors="coerce")
+                            .fillna(0)
+                            .sum()
                         )
                     )
             except Exception:
@@ -364,9 +364,7 @@ def _build_compact_summary_sections(
                 "ingest",
                 present=not ingest_df.empty,
                 detail=(
-                    f"{len(ingest_df)} summary metrics"
-                    if not ingest_df.empty
-                    else ""
+                    f"{len(ingest_df)} summary metrics" if not ingest_df.empty else ""
                 ),
             ),
             _stage_status_line(
@@ -390,12 +388,18 @@ def _build_compact_summary_sections(
             _stage_status_line(
                 "workflow",
                 present=not workflow_df.empty,
-                detail=f"{len(workflow_df)} step records" if not workflow_df.empty else "",
+                detail=(
+                    f"{len(workflow_df)} step records" if not workflow_df.empty else ""
+                ),
             ),
             _stage_status_line(
                 "artifacts",
                 present=not artifact_df.empty,
-                detail=f"{len(artifact_df)} tracked artifacts" if not artifact_df.empty else "",
+                detail=(
+                    f"{len(artifact_df)} tracked artifacts"
+                    if not artifact_df.empty
+                    else ""
+                ),
             ),
         ]
     )
@@ -422,7 +426,9 @@ def _build_compact_summary_sections(
                 ]
             )
     if not attention_lines:
-        attention_lines.append("No immediate fix/QC blockers summarized on the cover page.")
+        attention_lines.append(
+            "No immediate fix/QC blockers summarized on the cover page."
+        )
 
     key_paths = []
     for rel in (
@@ -439,7 +445,9 @@ def _build_compact_summary_sections(
         key_paths = [str(run_dir / str(v)) for v in artifact_df["artifact"].head(5)]
 
     command_lines = (
-        _read_lines(command_path, limit=8) if command_path and command_path.exists() else ["No command.txt found."]
+        _read_lines(command_path, limit=8)
+        if command_path and command_path.exists()
+        else ["No command.txt found."]
     )
 
     return [
@@ -470,16 +478,16 @@ def generate_run_report(
     stages = normalize_report_stages(include_stages)
     settings_dir = _find_run_settings_dir(run_dir)
     command_path = settings_dir / "command.txt" if settings_dir else None
-    config_path = settings_dir / "pipeline_config.resolved.toml" if settings_dir else None
+    config_path = (
+        settings_dir / "pipeline_config.resolved.toml" if settings_dir else None
+    )
 
     ingest_df = _summarize_ingest(run_dir)
     fix_df = _summarize_fix_reports(run_dir)
     qc_df = _summarize_qc(run_dir)
     artifact_df = _artifact_inventory(run_dir)
     workflow_df = (
-        pd.DataFrame(list(workflow_steps or []))
-        if workflow_steps
-        else pd.DataFrame()
+        pd.DataFrame(list(workflow_steps or [])) if workflow_steps else pd.DataFrame()
     )
 
     with PdfPages(pdf_path) as pdf:

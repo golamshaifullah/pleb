@@ -172,7 +172,9 @@ def find_qc_csvs(run_dir: str | Path) -> list[Path]:
     if root.is_file():
         return [] if is_review_artifact_path(root) else [root]
     return sorted(
-        p for p in root.rglob("*_qc.csv") if p.is_file() and not is_review_artifact_path(p)
+        p
+        for p in root.rglob("*_qc.csv")
+        if p.is_file() and not is_review_artifact_path(p)
     )
 
 
@@ -285,7 +287,9 @@ def make_review_id(row: Mapping[str, object]) -> str:
     return f"{prefix}_{digest}"
 
 
-def _series_or_default(df: pd.DataFrame, col: str | None, default: object = "") -> pd.Series:
+def _series_or_default(
+    df: pd.DataFrame, col: str | None, default: object = ""
+) -> pd.Series:
     if col is None or col not in df.columns:
         return pd.Series([default] * len(df), index=df.index)
     return df[col]
@@ -482,10 +486,20 @@ def attach_tempo2_general2_residuals(
         ["_tempo2_mjd_key", "_tempo2_freq_key"], dropna=False
     ).cumcount()
 
-    keep_cols = ["_tempo2_mjd_key", "_tempo2_freq_key", "_tempo2_dup_index", "post", "err"]
+    keep_cols = [
+        "_tempo2_mjd_key",
+        "_tempo2_freq_key",
+        "_tempo2_dup_index",
+        "post",
+        "err",
+    ]
     if "pre" in g.columns:
         keep_cols.append("pre")
-    merged = q.merge(g[keep_cols], on=["_tempo2_mjd_key", "_tempo2_freq_key", "_tempo2_dup_index"], how="left")
+    merged = q.merge(
+        g[keep_cols],
+        on=["_tempo2_mjd_key", "_tempo2_freq_key", "_tempo2_dup_index"],
+        how="left",
+    )
 
     if "pre" in merged.columns:
         merged["tempo2_pre"] = pd.to_numeric(merged["pre"], errors="coerce")
@@ -518,7 +532,11 @@ def load_qc_csv(path: str | Path, *, root: str | Path | None = None) -> pd.DataF
     out = df.copy()
 
     try:
-        qc_csv = path.resolve().relative_to(Path(root).expanduser().resolve()).as_posix() if root else path.resolve().as_posix()
+        qc_csv = (
+            path.resolve().relative_to(Path(root).expanduser().resolve()).as_posix()
+            if root
+            else path.resolve().as_posix()
+        )
     except Exception:
         qc_csv = path.resolve().as_posix()
 
@@ -532,9 +550,15 @@ def load_qc_csv(path: str | Path, *, root: str | Path | None = None) -> pd.DataF
     out["auto_decision"] = infer_auto_decision(out)
 
     out["mjd"] = pd.to_numeric(_series_or_default(out, cols.time), errors="coerce")
-    out["residual"] = pd.to_numeric(_series_or_default(out, cols.residual), errors="coerce")
-    out["uncertainty"] = pd.to_numeric(_series_or_default(out, cols.uncertainty), errors="coerce")
-    out["freq"] = pd.to_numeric(_series_or_default(out, cols.frequency), errors="coerce")
+    out["residual"] = pd.to_numeric(
+        _series_or_default(out, cols.residual), errors="coerce"
+    )
+    out["uncertainty"] = pd.to_numeric(
+        _series_or_default(out, cols.uncertainty), errors="coerce"
+    )
+    out["freq"] = pd.to_numeric(
+        _series_or_default(out, cols.frequency), errors="coerce"
+    )
     out["backend"] = _series_or_default(out, cols.backend).fillna("").astype(str)
     out["timfile"] = _series_or_default(out, cols.timfile).fillna("").astype(str)
     out = attach_tempo2_general2_residuals(
@@ -601,11 +625,15 @@ def validate_overrides(overrides: pd.DataFrame) -> None:
 
     if overrides.empty:
         return
-    actions = overrides.get("manual_action", pd.Series(dtype=object)).fillna("").astype(str)
+    actions = (
+        overrides.get("manual_action", pd.Series(dtype=object)).fillna("").astype(str)
+    )
     invalid = sorted(set(actions) - set(REVIEW_ACTIONS) - {""})
     if invalid:
         allowed = ", ".join(REVIEW_ACTIONS)
-        raise ValueError(f"Unsupported manual_action values {invalid}; allowed: {allowed}")
+        raise ValueError(
+            f"Unsupported manual_action values {invalid}; allowed: {allowed}"
+        )
 
 
 def write_overrides(overrides: pd.DataFrame, path: str | Path) -> Path:
@@ -696,7 +724,9 @@ def _latest_effective_overrides(overrides: pd.DataFrame) -> pd.DataFrame:
     return latest.drop(columns=["_order"], errors="ignore")
 
 
-def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.DataFrame:
+def apply_overrides(
+    qc_df: pd.DataFrame, overrides: pd.DataFrame | None
+) -> pd.DataFrame:
     """Merge manual overrides into a QC dataframe.
 
     Manual columns are additive; raw automatic columns are preserved. The final
@@ -706,19 +736,25 @@ def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.D
     """
 
     if "review_id" not in qc_df.columns:
-        raise ValueError("qc_df must contain review_id; load via load_qc_frames/load_qc_csv")
+        raise ValueError(
+            "qc_df must contain review_id; load via load_qc_frames/load_qc_csv"
+        )
 
     out = qc_df.copy()
     if "auto_decision" not in out.columns:
         out["auto_decision"] = infer_auto_decision(out)
-    out["reviewed_decision"] = out["auto_decision"].fillna("KEEP").astype(str).str.upper()
+    out["reviewed_decision"] = (
+        out["auto_decision"].fillna("KEEP").astype(str).str.upper()
+    )
     out["manual_action"] = ""
     out["manual_reason"] = ""
     out["manual_reviewer"] = ""
     out["manual_reviewed_at"] = ""
     out["manual_override_id"] = ""
 
-    latest = _latest_effective_overrides(overrides if overrides is not None else empty_overrides())
+    latest = _latest_effective_overrides(
+        overrides if overrides is not None else empty_overrides()
+    )
     if not latest.empty:
         cols = [
             "review_id",
@@ -742,7 +778,9 @@ def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.D
         merged["manual_action"] = action
         merged["manual_reason"] = merged["_override_reason"].fillna("").astype(str)
         merged["manual_reviewer"] = merged["_override_reviewer"].fillna("").astype(str)
-        merged["manual_reviewed_at"] = merged["_override_reviewed_at"].fillna("").astype(str)
+        merged["manual_reviewed_at"] = (
+            merged["_override_reviewed_at"].fillna("").astype(str)
+        )
         merged["manual_override_id"] = merged["_override_id"].fillna("").astype(str)
 
         reviewed = merged["reviewed_decision"].copy()
@@ -812,12 +850,26 @@ def selection_frame(df: pd.DataFrame, review_ids: Sequence[str]) -> pd.DataFrame
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Merge manual QC overrides into PLEB/PQC CSVs.")
-    p.add_argument("--run-dir", type=Path, help="Run directory to search for *_qc.csv files.")
-    p.add_argument("--qc-csv", type=Path, action="append", default=[], help="Explicit QC CSV; may be repeated.")
+    p = argparse.ArgumentParser(
+        description="Merge manual QC overrides into PLEB/PQC CSVs."
+    )
+    p.add_argument(
+        "--run-dir", type=Path, help="Run directory to search for *_qc.csv files."
+    )
+    p.add_argument(
+        "--qc-csv",
+        type=Path,
+        action="append",
+        default=[],
+        help="Explicit QC CSV; may be repeated.",
+    )
     p.add_argument("--overrides", type=Path, help="Manual overrides CSV.")
-    p.add_argument("--out", type=Path, required=True, help="Reviewed QC CSV output path.")
-    p.add_argument("--init-overrides", type=Path, help="Create an empty overrides CSV and exit.")
+    p.add_argument(
+        "--out", type=Path, required=True, help="Reviewed QC CSV output path."
+    )
+    p.add_argument(
+        "--init-overrides", type=Path, help="Create an empty overrides CSV and exit."
+    )
     return p
 
 

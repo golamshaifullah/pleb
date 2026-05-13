@@ -34,13 +34,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import matplotlib
+os.environ.setdefault("MPLBACKEND", "Agg")
 
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.table import Table
@@ -110,7 +108,9 @@ STAGES: tuple[StageSpec, ...] = (
         creates_branch=True,
         optional=False,
         default_branch_template="{slug}_step2_detect_variants",
-        default_run_templates=("{slug}_step2_detect_variants/{slug}_step2_detect_variants",),
+        default_run_templates=(
+            "{slug}_step2_detect_variants/{slug}_step2_detect_variants",
+        ),
     ),
     StageSpec(
         key="step4_detect_selected",
@@ -118,7 +118,9 @@ STAGES: tuple[StageSpec, ...] = (
         creates_branch=True,
         optional=False,
         default_branch_template="{slug}_step4_detect_selected",
-        default_run_templates=("{slug}_step4_detect_selected/{slug}_step4_detect_selected",),
+        default_run_templates=(
+            "{slug}_step4_detect_selected/{slug}_step4_detect_selected",
+        ),
     ),
     StageSpec(
         key="step5_apply_comments",
@@ -126,7 +128,9 @@ STAGES: tuple[StageSpec, ...] = (
         creates_branch=True,
         optional=False,
         default_branch_template="{slug}_step5_apply_comments",
-        default_run_templates=("{slug}_step5_apply_comments/{slug}_step5_apply_comments",),
+        default_run_templates=(
+            "{slug}_step5_apply_comments/{slug}_step5_apply_comments",
+        ),
     ),
     StageSpec(
         key="step6_apply_delete",
@@ -241,13 +245,27 @@ PDF_TABLE_DOCS: tuple[tuple[str, str, tuple[str, ...], int], ...] = (
     (
         "10_model_checks/param_scan_summary.tsv",
         "Parameter scan summary",
-        ("stage", "candidate", "redchisq", "lrt_delta_chisq", "lrt_p_value", "max_param_z"),
+        (
+            "stage",
+            "candidate",
+            "redchisq",
+            "lrt_delta_chisq",
+            "lrt_p_value",
+            "max_param_z",
+        ),
         32,
     ),
     (
         "10_model_checks/change_report_model_summary.tsv",
         "Model comparison summary",
-        ("stage", "reference", "delta_redchisq", "delta_wrms_post", "lrt_delta_chisq", "lrt_p_value"),
+        (
+            "stage",
+            "reference",
+            "delta_redchisq",
+            "delta_wrms_post",
+            "lrt_delta_chisq",
+            "lrt_p_value",
+        ),
         32,
     ),
 )
@@ -411,17 +429,26 @@ def _parse_markdown_pdf_blocks(text: str) -> list[dict[str, Any]]:
     while idx < len(raw_lines):
         line = raw_lines[idx]
         next_line = raw_lines[idx + 1] if idx + 1 < len(raw_lines) else ""
-        if _looks_like_markdown_table_row(line) and _is_markdown_table_separator(next_line):
+        if _looks_like_markdown_table_row(line) and _is_markdown_table_separator(
+            next_line
+        ):
             if text_lines:
                 blocks.append({"kind": "text", "lines": text_lines})
                 text_lines = []
             fields = _split_markdown_table_row(line)
             idx += 2
             row_dicts: list[dict[str, Any]] = []
-            while idx < len(raw_lines) and _looks_like_markdown_table_row(raw_lines[idx]):
+            while idx < len(raw_lines) and _looks_like_markdown_table_row(
+                raw_lines[idx]
+            ):
                 cells = _split_markdown_table_row(raw_lines[idx])
                 padded = cells + [""] * max(0, len(fields) - len(cells))
-                row_dicts.append({field: padded[pos] if pos < len(padded) else "" for pos, field in enumerate(fields)})
+                row_dicts.append(
+                    {
+                        field: padded[pos] if pos < len(padded) else ""
+                        for pos, field in enumerate(fields)
+                    }
+                )
                 idx += 1
             blocks.append({"kind": "table", "fields": tuple(fields), "rows": row_dicts})
             continue
@@ -466,7 +493,10 @@ def _write_pdf_text_pages(
     wrapped = _wrap_pdf_lines(lines)
     if not wrapped:
         wrapped = ["No content."]
-    chunks = [wrapped[i : i + page_height_lines] for i in range(0, len(wrapped), page_height_lines)]
+    chunks = [
+        wrapped[i : i + page_height_lines]
+        for i in range(0, len(wrapped), page_height_lines)
+    ]
     for page_no, chunk in enumerate(chunks, start=1):
         fig = plt.figure(figsize=(8.27, 11.69))
         fig.text(0.05, 0.972, title, fontsize=15, fontweight="bold", va="top")
@@ -480,7 +510,14 @@ def _write_pdf_text_pages(
             family="DejaVu Sans Mono",
             va="top",
         )
-        fig.text(0.95, 0.02, f"Page {page_no}/{len(chunks)}", fontsize=8, ha="right", color="#6b7280")
+        fig.text(
+            0.95,
+            0.02,
+            f"Page {page_no}/{len(chunks)}",
+            fontsize=8,
+            ha="right",
+            color="#6b7280",
+        )
         pdf.savefig(fig, bbox_inches="tight")
         plt.close(fig)
 
@@ -491,7 +528,9 @@ def _read_pdf_table_rows(
     rows = read_delimited(path)
     if not rows:
         return [], f"No rows found in {path.name}."
-    selected = [{field: row.get(field, "") for field in fields} for row in rows[:max_rows]]
+    selected = [
+        {field: row.get(field, "") for field in fields} for row in rows[:max_rows]
+    ]
     if len(rows) > max_rows:
         note = f"Showing {len(selected)} of {len(rows)} rows from {path.name}."
     else:
@@ -515,7 +554,10 @@ def _wrap_pdf_table_cell(text: str, *, width: int) -> list[str]:
 
 
 def _compute_pdf_table_column_layout(
-    fields: Sequence[str], rows: Sequence[dict[str, Any]], *, total_char_budget: int = 92
+    fields: Sequence[str],
+    rows: Sequence[dict[str, Any]],
+    *,
+    total_char_budget: int = 92,
 ) -> tuple[list[float], list[int]]:
     weights: list[int] = []
     for field in fields:
@@ -655,7 +697,14 @@ def _write_pdf_table_pages(
         ax.add_table(table)
         if footer_note:
             fig.text(0.05, 0.038, footer_note, fontsize=8, color="#4b5563", va="bottom")
-        fig.text(0.95, 0.02, f"Page {page_idx}/{total_pages}", fontsize=8, ha="right", color="#6b7280")
+        fig.text(
+            0.95,
+            0.02,
+            f"Page {page_idx}/{total_pages}",
+            fontsize=8,
+            ha="right",
+            color="#6b7280",
+        )
         pdf.savefig(fig, bbox_inches="tight")
         plt.close(fig)
 
@@ -683,7 +732,10 @@ def build_pdf_with_matplotlib(
     decision: str,
 ) -> Path:
     """Build a single reviewer PDF from generated review-package artifacts."""
-    pdf_name = getattr(args, "pdf_name", "") or f"{safe_filename(args.psr)}_review_synthesis.pdf"
+    pdf_name = (
+        getattr(args, "pdf_name", "")
+        or f"{safe_filename(args.psr)}_review_synthesis.pdf"
+    )
     dest = out_root / pdf_name
     with PdfPages(dest) as pdf:
         meta = pdf.infodict()
@@ -698,7 +750,9 @@ def build_pdf_with_matplotlib(
             f"Generated: {now_iso()}",
             f"Automatic synthesis decision: {decision}",
         ]
-        _write_pdf_text_pages(pdf, title=f"Review synthesis package: {args.psr}", lines=overview_lines)
+        _write_pdf_text_pages(
+            pdf, title=f"Review synthesis package: {args.psr}", lines=overview_lines
+        )
 
         for rel_path, title in PDF_TEXT_DOCS:
             doc_path = out_root / rel_path
@@ -742,11 +796,16 @@ def build_pdf_with_matplotlib(
         plots_dir = out_root / "03_postfit_review" / "plots"
         for image_path in sorted(plots_dir.glob("*.png")):
             plot_title = image_path.stem.replace("_", " ")
-            _write_pdf_image_page(pdf, image_path=image_path, title=f"Post-fit review plot: {plot_title}")
+            _write_pdf_image_page(
+                pdf, image_path=image_path, title=f"Post-fit review plot: {plot_title}"
+            )
 
     if not dest.exists() or dest.stat().st_size <= 0:
-        raise RuntimeError(f"Native PDF build completed but no PDF was written to {dest}.")
+        raise RuntimeError(
+            f"Native PDF build completed but no PDF was written to {dest}."
+        )
     return dest
+
 
 def scalar(value: Any) -> str:
     if value is None:
@@ -761,7 +820,9 @@ def scalar(value: Any) -> str:
 def write_tsv(path: Path, rows: list[dict[str, Any]], fields: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t", extrasaction="ignore")
+        writer = csv.DictWriter(
+            f, fieldnames=fields, delimiter="\t", extrasaction="ignore"
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow({k: scalar(row.get(k, "")) for k in fields})
@@ -800,7 +861,9 @@ def is_number(s: str) -> bool:
         return False
 
 
-def choose_col(columns: Iterable[str], candidates: Iterable[str], contains: Iterable[str] = ()) -> Optional[str]:
+def choose_col(
+    columns: Iterable[str], candidates: Iterable[str], contains: Iterable[str] = ()
+) -> Optional[str]:
     cols = list(columns)
     lower = {c.lower(): c for c in cols}
     for cand in candidates:
@@ -857,7 +920,9 @@ def parse_key_value_args(items: list[str]) -> dict[str, str]:
     return out
 
 
-def run_cmd(args: list[str], cwd: Path, text: bool = True) -> subprocess.CompletedProcess:
+def run_cmd(
+    args: list[str], cwd: Path, text: bool = True
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         args,
         cwd=str(cwd),
@@ -895,7 +960,9 @@ def git_bytes(repo_root: Path, args: list[str]) -> Optional[bytes]:
 
 
 def git_commit(repo_root: Path, ref: str) -> str:
-    return (git_text(repo_root, ["rev-parse", "--verify", ref]) or "").strip() or "UNKNOWN"
+    return (
+        git_text(repo_root, ["rev-parse", "--verify", ref]) or ""
+    ).strip() or "UNKNOWN"
 
 
 def git_ref_exists(repo_root: Path, ref: str) -> bool:
@@ -958,9 +1025,13 @@ def discover_run_dir(
         return p, "override"
     candidates: list[Path] = []
     for template in spec.default_run_templates:
-        pattern = format_template(template, slug=slug, psr=psr, final_branch=final_branch)
+        pattern = format_template(
+            template, slug=slug, psr=psr, final_branch=final_branch
+        )
         if "*" in pattern:
-            candidates.extend(sorted(p for p in results_root.glob(pattern) if p.is_dir()))
+            candidates.extend(
+                sorted(p for p in results_root.glob(pattern) if p.is_dir())
+            )
         else:
             candidates.append(results_root / pattern)
     for p in candidates:
@@ -971,7 +1042,9 @@ def discover_run_dir(
     return None, "not_applicable"
 
 
-def build_stage_runtimes(args: argparse.Namespace, repo_root: Path, results_root: Path) -> list[StageRuntime]:
+def build_stage_runtimes(
+    args: argparse.Namespace, repo_root: Path, results_root: Path
+) -> list[StageRuntime]:
     branch_overrides = parse_key_value_args(args.stage_branch)
     run_overrides = parse_key_value_args(args.stage_run)
     runtimes: list[StageRuntime] = []
@@ -1020,7 +1093,11 @@ def build_stage_runtimes(args: argparse.Namespace, repo_root: Path, results_root
 def artifact_priority(path: Path) -> str:
     if path.name in PRIMARY_ARTIFACT_NAMES:
         return "primary"
-    if "diagnostics" in path.parts or path.suffix.lower() in {".log", ".covmat", ".general2"}:
+    if "diagnostics" in path.parts or path.suffix.lower() in {
+        ".log",
+        ".covmat",
+        ".general2",
+    }:
         return "forensic"
     if path.suffix.lower() in {".png", ".pdf", ".tsv", ".csv", ".json", ".md"}:
         return "secondary"
@@ -1142,7 +1219,9 @@ def add_branch_artifact_rows(
         )
 
 
-def discover_artifacts(runtimes: list[StageRuntime], dataset_root: Path, repo_root: Path) -> list[dict[str, Any]]:
+def discover_artifacts(
+    runtimes: list[StageRuntime], dataset_root: Path, repo_root: Path
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     ingest_dir = dataset_root / "ingest_reports"
     if ingest_dir.exists():
@@ -1192,7 +1271,9 @@ def discover_artifacts(runtimes: list[StageRuntime], dataset_root: Path, repo_ro
     for rt in runtimes:
         if not rt.run_dir_exists or not rt.run_dir:
             continue
-        patterns = public_patterns if rt.spec.key == "step8_compare_public" else run_patterns
+        patterns = (
+            public_patterns if rt.spec.key == "step8_compare_public" else run_patterns
+        )
         if rt.run_dir.exists() and rt.run_dir.is_dir():
             add_artifact_rows(
                 rows,
@@ -1214,7 +1295,12 @@ def discover_artifacts(runtimes: list[StageRuntime], dataset_root: Path, repo_ro
     return rows
 
 
-def make_raw_links(runtimes: list[StageRuntime], dataset_root: Path, out_raw_links: Path, repo_root: Path) -> None:
+def make_raw_links(
+    runtimes: list[StageRuntime],
+    dataset_root: Path,
+    out_raw_links: Path,
+    repo_root: Path,
+) -> None:
     def link_or_note(name: str, target: Path) -> None:
         link = out_raw_links / name
         if link.exists() or link.is_symlink():
@@ -1226,7 +1312,9 @@ def make_raw_links(runtimes: list[StageRuntime], dataset_root: Path, out_raw_lin
             rel = os.path.relpath(target.resolve(), start=link.parent.resolve())
             link.symlink_to(rel, target_is_directory=target.is_dir())
         except Exception:
-            write_text(link.with_suffix(".path.txt"), clean_rel(target, repo_root) + "\n")
+            write_text(
+                link.with_suffix(".path.txt"), clean_rel(target, repo_root) + "\n"
+            )
 
     ingest_dir = dataset_root / "ingest_reports"
     if ingest_dir.exists():
@@ -1311,7 +1399,9 @@ def parse_tim_line(file_path: str, line: str) -> Optional[TimLine]:
     mjd = tokens[2] if len(tokens) > 2 else ""
     err = tokens[3] if len(tokens) > 3 else ""
     observatory = tokens[4] if len(tokens) > 4 else ""
-    if safe_float(mjd) is None or not (30000 <= float(mjd) <= 90000 if is_number(mjd) else False):
+    if safe_float(mjd) is None or not (
+        30000 <= float(mjd) <= 90000 if is_number(mjd) else False
+    ):
         for i, tok in enumerate(tokens[:6]):
             v = safe_float(tok)
             if v is not None and 30000 <= v <= 90000:
@@ -1321,7 +1411,10 @@ def parse_tim_line(file_path: str, line: str) -> Optional[TimLine]:
                 observatory = tokens[i + 2] if i + 2 < len(tokens) else observatory
                 break
     backend = extract_flag(tokens, ("-be", "-backend", "-f", "-fe", "-receiver"))
-    telescope = extract_flag(tokens, ("-tel", "-telescope", "-obs", "-observatory")) or observatory
+    telescope = (
+        extract_flag(tokens, ("-tel", "-telescope", "-obs", "-observatory"))
+        or observatory
+    )
     system = extract_flag(tokens, ("-sys", "-system", "-group", "-pta", "-name"))
     if not system:
         if telescope and backend:
@@ -1345,7 +1438,9 @@ def parse_tim_line(file_path: str, line: str) -> Optional[TimLine]:
     )
 
 
-def branch_file_bytes(repo_root: Path, dataset_root: Path, branch: str, path_in_repo_: str) -> Optional[bytes]:
+def branch_file_bytes(
+    repo_root: Path, dataset_root: Path, branch: str, path_in_repo_: str
+) -> Optional[bytes]:
     data = git_show_file(repo_root, branch, path_in_repo_)
     if data is not None:
         return data
@@ -1364,7 +1459,9 @@ def branch_file_bytes(repo_root: Path, dataset_root: Path, branch: str, path_in_
     return None
 
 
-def list_dataset_files(repo_root: Path, dataset_root: Path, psr: str, branch: str) -> list[str]:
+def list_dataset_files(
+    repo_root: Path, dataset_root: Path, psr: str, branch: str
+) -> list[str]:
     prefix = path_in_repo(repo_root, dataset_root / psr)
     if prefix:
         files = git_ls_files_at_ref(repo_root, branch, prefix)
@@ -1381,7 +1478,9 @@ def list_dataset_files(repo_root: Path, dataset_root: Path, psr: str, branch: st
     return []
 
 
-def collect_dataset_inventory(repo_root: Path, dataset_root: Path, psr: str, final_branch: str) -> list[dict[str, Any]]:
+def collect_dataset_inventory(
+    repo_root: Path, dataset_root: Path, psr: str, final_branch: str
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     files = list_dataset_files(repo_root, dataset_root, psr, final_branch)
     for f in files:
@@ -1395,16 +1494,23 @@ def collect_dataset_inventory(repo_root: Path, dataset_root: Path, psr: str, fin
                 "file_name": Path(f).name,
                 "suffix": Path(f).suffix.lower(),
                 "size_bytes": len(data),
-                "line_count": data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0),
+                "line_count": data.count(b"\n")
+                + (1 if data and not data.endswith(b"\n") else 0),
                 "sha256": sha256_bytes(data),
             }
         )
     return rows
 
 
-def read_tim_snapshot(repo_root: Path, dataset_root: Path, psr: str, branch: str) -> dict[str, list[TimLine]]:
+def read_tim_snapshot(
+    repo_root: Path, dataset_root: Path, psr: str, branch: str
+) -> dict[str, list[TimLine]]:
     snapshot: dict[str, list[TimLine]] = {}
-    files = [f for f in list_dataset_files(repo_root, dataset_root, psr, branch) if f.lower().endswith(".tim")]
+    files = [
+        f
+        for f in list_dataset_files(repo_root, dataset_root, psr, branch)
+        if f.lower().endswith(".tim")
+    ]
     for f in files:
         data = branch_file_bytes(repo_root, dataset_root, branch, f)
         if data is None:
@@ -1511,7 +1617,9 @@ def diff_tim_snapshots(
     return rows
 
 
-def branch_file_hashes(repo_root: Path, dataset_root: Path, psr: str, branch: str, suffix: str) -> dict[str, str]:
+def branch_file_hashes(
+    repo_root: Path, dataset_root: Path, psr: str, branch: str, suffix: str
+) -> dict[str, str]:
     hashes: dict[str, str] = {}
     for f in list_dataset_files(repo_root, dataset_root, psr, branch):
         if not f.lower().endswith(suffix.lower()):
@@ -1534,7 +1642,9 @@ def collect_branch_diffs(
     dataset_root: Path,
     psr: str,
     runtimes: list[StageRuntime],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, dict[str, list[TimLine]]]]:
+) -> tuple[
+    list[dict[str, Any]], list[dict[str, Any]], dict[str, dict[str, list[TimLine]]]
+]:
     branches = {rt.spec.key: rt.branch for rt in runtimes if rt.branch}
     transitions = [
         ("ingest_to_step1", "ingest", "step1_fix"),
@@ -1568,10 +1678,26 @@ def collect_branch_diffs(
             else []
         )
         action_rows.extend(actions)
-        par_before = branch_file_hashes(repo_root, dataset_root, psr, before_branch, ".par") if before_branch else {}
-        par_after = branch_file_hashes(repo_root, dataset_root, psr, after_branch, ".par") if after_branch else {}
-        tim_before = branch_file_hashes(repo_root, dataset_root, psr, before_branch, ".tim") if before_branch else {}
-        tim_after = branch_file_hashes(repo_root, dataset_root, psr, after_branch, ".tim") if after_branch else {}
+        par_before = (
+            branch_file_hashes(repo_root, dataset_root, psr, before_branch, ".par")
+            if before_branch
+            else {}
+        )
+        par_after = (
+            branch_file_hashes(repo_root, dataset_root, psr, after_branch, ".par")
+            if after_branch
+            else {}
+        )
+        tim_before = (
+            branch_file_hashes(repo_root, dataset_root, psr, before_branch, ".tim")
+            if before_branch
+            else {}
+        )
+        tim_after = (
+            branch_file_hashes(repo_root, dataset_root, psr, after_branch, ".tim")
+            if after_branch
+            else {}
+        )
         diff_rows.append(
             {
                 "transition": transition,
@@ -1581,9 +1707,14 @@ def collect_branch_diffs(
                 "to_active_toas": after_counts["active_toas"],
                 "from_commented_toas": before_counts["commented_toas"],
                 "to_commented_toas": after_counts["commented_toas"],
-                "active_toa_delta": after_counts["active_toas"] - before_counts["active_toas"],
-                "comments_added_detected": sum(1 for r in actions if r["action"] == "commented"),
-                "deletions_detected": sum(1 for r in actions if r["action"] == "deleted"),
+                "active_toa_delta": after_counts["active_toas"]
+                - before_counts["active_toas"],
+                "comments_added_detected": sum(
+                    1 for r in actions if r["action"] == "commented"
+                ),
+                "deletions_detected": sum(
+                    1 for r in actions if r["action"] == "deleted"
+                ),
                 "par_files_changed": changed_file_count(par_before, par_after),
                 "tim_files_changed": changed_file_count(tim_before, tim_after),
                 "status": "ok" if before_branch and after_branch else "missing_branch",
@@ -1595,7 +1726,10 @@ def collect_branch_diffs(
 def collect_qc_index(artifact_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for a in artifact_rows:
-        if a.get("artifact_type") in {"qc_summary", "outlier_summary"} or "qc" in str(a.get("path", "")).lower():
+        if (
+            a.get("artifact_type") in {"qc_summary", "outlier_summary"}
+            or "qc" in str(a.get("path", "")).lower()
+        ):
             rows.append(
                 {
                     "stage": a.get("stage", ""),
@@ -1608,11 +1742,15 @@ def collect_qc_index(artifact_rows: list[dict[str, Any]]) -> list[dict[str, Any]
     return rows
 
 
-def collect_system_quality_matrix(final_snapshot: dict[str, list[TimLine]], action_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def collect_system_quality_matrix(
+    final_snapshot: dict[str, list[TimLine]], action_rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     systems: dict[str, Counter] = defaultdict(Counter)
     for lines in final_snapshot.values():
         for x in lines:
-            systems[x.system]["final_active_toas" if x.active else "final_commented_toas"] += 1
+            systems[x.system][
+                "final_active_toas" if x.active else "final_commented_toas"
+            ] += 1
     for r in action_rows:
         sysname = r.get("system") or "UNKNOWN"
         if r.get("action") == "commented":
@@ -1623,7 +1761,11 @@ def collect_system_quality_matrix(final_snapshot: dict[str, list[TimLine]], acti
     for sysname, c in sorted(systems.items()):
         denominator = c["final_active_toas"] + c["deleted_actions"]
         frac = (c["deleted_actions"] / denominator) if denominator else 0.0
-        status = "red" if c["deleted_actions"] >= 5 and frac >= 0.20 else "amber" if c["deleted_actions"] > 0 else "green"
+        status = (
+            "red"
+            if c["deleted_actions"] >= 5 and frac >= 0.20
+            else "amber" if c["deleted_actions"] > 0 else "green"
+        )
         rows.append(
             {
                 "system": sysname,
@@ -1638,7 +1780,9 @@ def collect_system_quality_matrix(final_snapshot: dict[str, list[TimLine]], acti
     return rows
 
 
-def collect_residual_synthesis(runtimes: list[StageRuntime], repo_root: Path) -> list[dict[str, Any]]:
+def collect_residual_synthesis(
+    runtimes: list[StageRuntime], repo_root: Path
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for rt in runtimes:
         if not rt.run_dir_exists or not rt.run_dir:
@@ -1650,10 +1794,16 @@ def collect_residual_synthesis(runtimes: list[StageRuntime], repo_root: Path) ->
         for i, row in enumerate(data):
             cols = row.keys()
             n_col = choose_col(cols, ("n_toas", "ntoa", "n", "num_toas"), ("toa",))
-            rms_col = choose_col(cols, ("rms_residual", "rms", "wrms", "weighted_rms"), ("rms",))
-            chi_col = choose_col(cols, ("reduced_chi2", "red_chi2", "chisq", "chi2"), ("chi",))
+            rms_col = choose_col(
+                cols, ("rms_residual", "rms", "wrms", "weighted_rms"), ("rms",)
+            )
+            chi_col = choose_col(
+                cols, ("reduced_chi2", "red_chi2", "chisq", "chi2"), ("chi",)
+            )
             status_col = choose_col(cols, ("fit_status", "status"), ("status",))
-            variant_col = choose_col(cols, ("variant", "dataset_variant", "kind"), ("variant",))
+            variant_col = choose_col(
+                cols, ("variant", "dataset_variant", "kind"), ("variant",)
+            )
             rows.append(
                 {
                     "stage": rt.spec.key,
@@ -1685,11 +1835,16 @@ def _iter_stage_files(
     return found
 
 
-def collect_model_check_index(artifact_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def collect_model_check_index(
+    artifact_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for row in artifact_rows:
         path = str(row.get("path", ""))
-        if not any(part in path for part in ("binary_analysis/", "param_scan/", "change_report/")):
+        if not any(
+            part in path
+            for part in ("binary_analysis/", "param_scan/", "change_report/")
+        ):
             continue
         rows.append(
             {
@@ -1707,7 +1862,9 @@ def extract_binary_analysis_rows(
     runtimes: list[StageRuntime], repo_root: Path
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for stage, path in _iter_stage_files(runtimes, "binary_analysis/binary_analysis.tsv"):
+    for stage, path in _iter_stage_files(
+        runtimes, "binary_analysis/binary_analysis.tsv"
+    ):
         for row in read_delimited(path):
             rows.append(
                 {
@@ -1749,9 +1906,11 @@ def extract_param_scan_summary_rows(
             best = sorted(
                 pulsar_rows,
                 key=lambda row: (
-                    safe_float(row.get("lrt_p_value"))
-                    if safe_float(row.get("lrt_p_value")) is not None
-                    else math.inf,
+                    (
+                        safe_float(row.get("lrt_p_value"))
+                        if safe_float(row.get("lrt_p_value")) is not None
+                        else math.inf
+                    ),
                     -(
                         safe_float(row.get("lrt_delta_chisq"))
                         if safe_float(row.get("lrt_delta_chisq")) is not None
@@ -1781,7 +1940,9 @@ def extract_change_report_model_rows(
     runtimes: list[StageRuntime], repo_root: Path
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for stage, path in _iter_stage_files(runtimes, "change_report/MODEL_COMPARISON_*.tsv"):
+    for stage, path in _iter_stage_files(
+        runtimes, "change_report/MODEL_COMPARISON_*.tsv"
+    ):
         for row in read_delimited(path):
             rows.append(
                 {
@@ -1809,7 +1970,9 @@ def extract_new_param_significance_rows(
     runtimes: list[StageRuntime], repo_root: Path
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for stage, path in _iter_stage_files(runtimes, "change_report/NEW_PARAM_SIGNIFICANCE_*.tsv"):
+    for stage, path in _iter_stage_files(
+        runtimes, "change_report/NEW_PARAM_SIGNIFICANCE_*.tsv"
+    ):
         for row in read_delimited(path):
             threshold_col = next(
                 (key for key in row if str(key).startswith("n_new_sig_z>=")),
@@ -1852,7 +2015,11 @@ def build_model_check_package(
     new_param_rows = extract_new_param_significance_rows(runtimes, repo_root)
 
     binary_models = sorted(
-        {str(row.get("BINARY", "")).strip() for row in binary_rows if str(row.get("BINARY", "")).strip()}
+        {
+            str(row.get("BINARY", "")).strip()
+            for row in binary_rows
+            if str(row.get("BINARY", "")).strip()
+        }
     )
     review_lines = [
         "# Model checks",
@@ -1874,17 +2041,27 @@ def build_model_check_package(
             sorted(
                 param_scan_rows,
                 key=lambda row: (
-                    safe_float(row.get('lrt_p_value'))
-                    if safe_float(row.get('lrt_p_value')) is not None
-                    else math.inf,
+                    (
+                        safe_float(row.get("lrt_p_value"))
+                        if safe_float(row.get("lrt_p_value")) is not None
+                        else math.inf
+                    ),
                     -(
-                        safe_float(row.get('lrt_delta_chisq'))
-                        if safe_float(row.get('lrt_delta_chisq')) is not None
+                        safe_float(row.get("lrt_delta_chisq"))
+                        if safe_float(row.get("lrt_delta_chisq")) is not None
                         else -math.inf
                     ),
                 ),
             ),
-            ["stage", "pulsar", "candidate", "lrt_p_value", "lrt_delta_chisq", "max_param_z", "source_path"],
+            [
+                "stage",
+                "pulsar",
+                "candidate",
+                "lrt_p_value",
+                "lrt_delta_chisq",
+                "max_param_z",
+                "source_path",
+            ],
             max_rows=12,
         ),
         "## Change-report model comparison",
@@ -1893,17 +2070,28 @@ def build_model_check_package(
             sorted(
                 change_model_rows,
                 key=lambda row: (
-                    safe_float(row.get('lrt_p_value'))
-                    if safe_float(row.get('lrt_p_value')) is not None
-                    else math.inf,
+                    (
+                        safe_float(row.get("lrt_p_value"))
+                        if safe_float(row.get("lrt_p_value")) is not None
+                        else math.inf
+                    ),
                     -(
-                        safe_float(row.get('lrt_delta_chisq'))
-                        if safe_float(row.get('lrt_delta_chisq')) is not None
+                        safe_float(row.get("lrt_delta_chisq"))
+                        if safe_float(row.get("lrt_delta_chisq")) is not None
                         else -math.inf
                     ),
                 ),
             ),
-            ["stage", "pulsar", "branch", "reference", "delta_redchisq", "lrt_delta_chisq", "lrt_p_value", "source_path"],
+            [
+                "stage",
+                "pulsar",
+                "branch",
+                "reference",
+                "delta_redchisq",
+                "lrt_delta_chisq",
+                "lrt_p_value",
+                "source_path",
+            ],
             max_rows=12,
         ),
         "## New-parameter significance",
@@ -1917,14 +2105,34 @@ def build_model_check_package(
                     else -math.inf
                 ),
             ),
-            ["stage", "pulsar", "branch", "n_new_params", "n_new_sig_z", "max_new_param_z", "max_new_param", "source_path"],
+            [
+                "stage",
+                "pulsar",
+                "branch",
+                "n_new_params",
+                "n_new_sig_z",
+                "max_new_param_z",
+                "max_new_param",
+                "source_path",
+            ],
             max_rows=12,
         ),
         "## Binary analysis",
         "",
         md_table(
             binary_rows,
-            ["stage", "pulsar", "branch", "BINARY", "PB", "A1", "ECC", "T0", "TASC", "source_path"],
+            [
+                "stage",
+                "pulsar",
+                "branch",
+                "BINARY",
+                "PB",
+                "A1",
+                "ECC",
+                "T0",
+                "TASC",
+                "source_path",
+            ],
             max_rows=12,
         ),
     ]
@@ -1938,7 +2146,9 @@ def build_model_check_package(
     }
 
 
-def extract_public_metrics(public_dir: Optional[Path], repo_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+def extract_public_metrics(
+    public_dir: Optional[Path], repo_root: Path
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     if not public_dir or not public_dir.exists():
         return [], [], {}
     metrics: dict[str, Any] = {}
@@ -1962,16 +2172,30 @@ def extract_public_metrics(public_dir: Optional[Path], repo_root: Path) -> tuple
                     }:
                         metrics[k] = v
         for k in sorted(metrics):
-            metric_rows.append({"metric": k, "value": metrics[k], "source_path": clean_rel(summary, repo_root)})
+            metric_rows.append(
+                {
+                    "metric": k,
+                    "value": metrics[k],
+                    "source_path": clean_rel(summary, repo_root),
+                }
+            )
     comparison = public_dir / "public_release_parameters.comparison.tsv"
     if comparison.exists():
         rows = read_delimited(comparison)
         for row in rows:
             cols = row.keys()
-            param_col = choose_col(cols, ("parameter", "param", "name"), ("parameter", "param"))
+            param_col = choose_col(
+                cols, ("parameter", "param", "name"), ("parameter", "param")
+            )
             sigma_col = choose_col(cols, ("sigma_tension",), ("sigma",))
-            pair_col = choose_col(cols, ("provider_pair", "worst_provider_pair"), ("pair",))
-            class_col = choose_col(cols, ("agreement_class", "status", "class"), ("agreement", "class", "status"))
+            pair_col = choose_col(
+                cols, ("provider_pair", "worst_provider_pair"), ("pair",)
+            )
+            class_col = choose_col(
+                cols,
+                ("agreement_class", "status", "class"),
+                ("agreement", "class", "status"),
+            )
             parameter = row.get(param_col, "") if param_col else ""
             sigma = row.get(sigma_col, "") if sigma_col else ""
             if parameter in {"RA_ICRS_DEG", "DEC_ICRS_DEG"} or sigma:
@@ -2011,7 +2235,9 @@ def _guess_variant(path: Path) -> str:
     return "base"
 
 
-def _numeric_series(df: pd.DataFrame, col: str | None, *, microseconds: bool = False) -> pd.Series:
+def _numeric_series(
+    df: pd.DataFrame, col: str | None, *, microseconds: bool = False
+) -> pd.Series:
     if col is None or col not in df.columns:
         return pd.Series(np.nan, index=df.index, dtype=float)
     out = pd.to_numeric(df[col], errors="coerce")
@@ -2032,7 +2258,9 @@ def choose_postfit_residual_column(df: pd.DataFrame) -> ResidualChoice:
         name = str(col).lower()
         if col in seen:
             continue
-        if any(k in name for k in ("resid", "residual", "post", "postfit", "detrended")):
+        if any(
+            k in name for k in ("resid", "residual", "post", "postfit", "detrended")
+        ):
             numeric = pd.to_numeric(df[col], errors="coerce")
             if numeric.notna().any():
                 available.append(str(col))
@@ -2078,12 +2306,20 @@ def choose_postfit_residual_column(df: pd.DataFrame) -> ResidualChoice:
 
 
 def decision_series(df: pd.DataFrame) -> pd.Series:
-    base = df.get("reviewed_decision", df.get("auto_decision", pd.Series("KEEP", index=df.index)))
+    base = df.get(
+        "reviewed_decision", df.get("auto_decision", pd.Series("KEEP", index=df.index))
+    )
     return base.fillna("KEEP").astype(str).str.upper()
 
 
 def manual_mask(df: pd.DataFrame) -> pd.Series:
-    return df.get("manual_action", pd.Series("", index=df.index)).fillna("").astype(str).str.strip() != ""
+    return (
+        df.get("manual_action", pd.Series("", index=df.index))
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        != ""
+    )
 
 
 def build_plot_subset(df: pd.DataFrame, *, max_keep_points: int) -> pd.DataFrame:
@@ -2229,7 +2465,11 @@ def _scatter_by_decision(
         size = 7 if dec == "KEEP" else 16
         alpha = 0.35 if dec == "KEEP" else 0.9
         yraw = pd.to_numeric(group[y], errors="coerce")
-        yplot = yraw.clip(-display_limit, display_limit) if display_limit is not None else yraw
+        yplot = (
+            yraw.clip(-display_limit, display_limit)
+            if display_limit is not None
+            else yraw
+        )
         if yerr and yerr in group.columns:
             err_visible = group
             if display_limit is not None:
@@ -2266,7 +2506,9 @@ def _scatter_by_decision(
     manual = frame[frame["_manual"]]
     if not manual.empty:
         my = pd.to_numeric(manual[y], errors="coerce")
-        my_plot = my.clip(-display_limit, display_limit) if display_limit is not None else my
+        my_plot = (
+            my.clip(-display_limit, display_limit) if display_limit is not None else my
+        )
         ax.scatter(
             pd.to_numeric(manual[x], errors="coerce"),
             my_plot,
@@ -2340,11 +2582,28 @@ def _add_axis_legend(
     )
 
 
-def _plot_backend_strip(ax: plt.Axes, frame: pd.DataFrame, *, ylabel: str, display_limit: float | None = None) -> None:
-    xvals = frame.get("backend_group", pd.Series("", index=frame.index)).fillna("").astype(str)
+def _plot_backend_strip(
+    ax: plt.Axes,
+    frame: pd.DataFrame,
+    *,
+    ylabel: str,
+    display_limit: float | None = None,
+) -> None:
+    xvals = (
+        frame.get("backend_group", pd.Series("", index=frame.index))
+        .fillna("")
+        .astype(str)
+    )
     uniq = [x for x in dict.fromkeys(xvals.tolist()) if x]
     if not uniq:
-        ax.text(0.5, 0.5, "No backend labels", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "No backend labels",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
         ax.set_axis_off()
         return
     xpos = {name: i for i, name in enumerate(uniq)}
@@ -2355,17 +2614,29 @@ def _plot_backend_strip(ax: plt.Axes, frame: pd.DataFrame, *, ylabel: str, displ
         group = frame[decision == dec]
         if group.empty:
             continue
-        gx = group["backend_group"].fillna("").astype(str).map(xpos).to_numpy(dtype=float)
+        gx = (
+            group["backend_group"]
+            .fillna("")
+            .astype(str)
+            .map(xpos)
+            .to_numpy(dtype=float)
+        )
         gx = gx + jitter_rng.uniform(-0.22, 0.22, size=len(group))
         gy = pd.to_numeric(group["plot_residual_us"], errors="coerce")
-        gy_plot = gy.clip(-display_limit, display_limit) if display_limit is not None else gy
+        gy_plot = (
+            gy.clip(-display_limit, display_limit) if display_limit is not None else gy
+        )
         if "plot_err_us" in group.columns:
             err_visible = group
             if display_limit is not None:
                 err_visible = group.loc[np.abs(gy) <= display_limit]
             _draw_vertical_errorbars(
                 ax,
-                gx[np.abs(gy.to_numpy(dtype=float)) <= display_limit] if display_limit is not None else gx,
+                (
+                    gx[np.abs(gy.to_numpy(dtype=float)) <= display_limit]
+                    if display_limit is not None
+                    else gx
+                ),
                 err_visible["plot_residual_us"],
                 err_visible["plot_err_us"],
                 color=DECISION_COLORS.get(dec, "#111827"),
@@ -2394,10 +2665,18 @@ def _plot_backend_strip(ax: plt.Axes, frame: pd.DataFrame, *, ylabel: str, displ
         )
     manual = frame[frame["_manual"]]
     if not manual.empty:
-        mx = manual["backend_group"].fillna("").astype(str).map(xpos).to_numpy(dtype=float)
+        mx = (
+            manual["backend_group"]
+            .fillna("")
+            .astype(str)
+            .map(xpos)
+            .to_numpy(dtype=float)
+        )
         mx = mx + jitter_rng.uniform(-0.22, 0.22, size=len(manual))
         my = pd.to_numeric(manual["plot_residual_us"], errors="coerce")
-        my_plot = my.clip(-display_limit, display_limit) if display_limit is not None else my
+        my_plot = (
+            my.clip(-display_limit, display_limit) if display_limit is not None else my
+        )
         ax.scatter(
             mx,
             my_plot,
@@ -2425,18 +2704,29 @@ def _plot_backend_strip(ax: plt.Axes, frame: pd.DataFrame, *, ylabel: str, displ
     ax.set_xlabel("backend")
 
 
-def _plot_backend_time(ax: plt.Axes, frame: pd.DataFrame, *, ylabel: str, display_limit: float | None = None) -> None:
+def _plot_backend_time(
+    ax: plt.Axes,
+    frame: pd.DataFrame,
+    *,
+    ylabel: str,
+    display_limit: float | None = None,
+) -> None:
     ax.axhline(0.0, color="#d1d5db", lw=1.0, zorder=0)
     palette = _backend_palette(frame["backend_group"].fillna("").astype(str).tolist())
     for backend, group in frame.groupby("backend_group", sort=False):
         if not str(backend):
             continue
-        flagged = decision_series(group).isin(FLAGGED_DECISIONS).any() or manual_mask(group).any()
+        flagged = (
+            decision_series(group).isin(FLAGGED_DECISIONS).any()
+            or manual_mask(group).any()
+        )
         alpha = 0.75 if flagged else 0.25
         size = 10 if flagged else 5
         color = palette.get(str(backend), "#6b7280")
         gy = pd.to_numeric(group["plot_residual_us"], errors="coerce")
-        gy_plot = gy.clip(-display_limit, display_limit) if display_limit is not None else gy
+        gy_plot = (
+            gy.clip(-display_limit, display_limit) if display_limit is not None else gy
+        )
         if "plot_err_us" in group.columns:
             err_visible = group
             if display_limit is not None:
@@ -2473,7 +2763,9 @@ def _plot_backend_time(ax: plt.Axes, frame: pd.DataFrame, *, ylabel: str, displa
     manual = frame[frame["_manual"]]
     if not manual.empty:
         my = pd.to_numeric(manual["plot_residual_us"], errors="coerce")
-        my_plot = my.clip(-display_limit, display_limit) if display_limit is not None else my
+        my_plot = (
+            my.clip(-display_limit, display_limit) if display_limit is not None else my
+        )
         ax.scatter(
             pd.to_numeric(manual["mjd"], errors="coerce"),
             my_plot,
@@ -2524,7 +2816,10 @@ def make_variant_overview_plot(
         display_limit=display_limit,
     )
     axes[0, 0].set_title("Residual vs MJD by decision")
-    if "freq" in frame.columns and pd.to_numeric(frame["freq"], errors="coerce").notna().any():
+    if (
+        "freq" in frame.columns
+        and pd.to_numeric(frame["freq"], errors="coerce").notna().any()
+    ):
         _scatter_by_decision(
             axes[0, 1],
             frame,
@@ -2537,14 +2832,35 @@ def make_variant_overview_plot(
         )
         axes[0, 1].set_title("Residual vs frequency by decision")
     else:
-        axes[0, 1].text(0.5, 0.5, "No numeric frequency column", ha="center", va="center", transform=axes[0, 1].transAxes)
+        axes[0, 1].text(
+            0.5,
+            0.5,
+            "No numeric frequency column",
+            ha="center",
+            va="center",
+            transform=axes[0, 1].transAxes,
+        )
         axes[0, 1].set_axis_off()
-    _plot_backend_strip(axes[1, 0], frame, ylabel=residual_label, display_limit=display_limit)
+    _plot_backend_strip(
+        axes[1, 0], frame, ylabel=residual_label, display_limit=display_limit
+    )
     axes[1, 0].set_title("Residual vs backend by decision")
-    _plot_backend_time(axes[1, 1], frame, ylabel=residual_label, display_limit=display_limit)
+    _plot_backend_time(
+        axes[1, 1], frame, ylabel=residual_label, display_limit=display_limit
+    )
     axes[1, 1].set_title("Residual vs MJD by backend")
     _add_axis_legend(axes[0, 0], loc="upper left", fontsize=8.0, title="decision")
-    backend_n = max(1, len(frame.get("backend_group", pd.Series(dtype=str)).dropna().astype(str).replace("", np.nan).dropna().unique()))
+    backend_n = max(
+        1,
+        len(
+            frame.get("backend_group", pd.Series(dtype=str))
+            .dropna()
+            .astype(str)
+            .replace("", np.nan)
+            .dropna()
+            .unique()
+        ),
+    )
     _add_axis_legend(
         axes[1, 1],
         loc="upper left",
@@ -2553,7 +2869,15 @@ def make_variant_overview_plot(
         title="backend",
     )
     if display_limit is not None and np.isfinite(display_limit):
-        fig.text(0.99, 0.01, f"bulk display clipped at +/-{display_limit:.1f} us", ha="right", va="bottom", fontsize=8, color="#4b5563")
+        fig.text(
+            0.99,
+            0.01,
+            f"bulk display clipped at +/-{display_limit:.1f} us",
+            ha="right",
+            va="bottom",
+            fontsize=8,
+            color="#4b5563",
+        )
     fig.suptitle(title, fontsize=14)
     savefig(fig, out_path)
 
@@ -2565,11 +2889,20 @@ def make_signed_sigma_plot(frame: pd.DataFrame, *, title: str, out_path: Path) -
     ax.axhline(-3.0, color="#9ca3af", lw=0.9, ls="--")
     ax.axhline(5.0, color="#b91c1c", lw=0.9, ls=":")
     ax.axhline(-5.0, color="#b91c1c", lw=0.9, ls=":")
-    _scatter_by_decision(ax, frame, "mjd", "plot_sigma", xlabel="MJD", ylabel="post-fit residual / tempo2 error")
+    _scatter_by_decision(
+        ax,
+        frame,
+        "mjd",
+        "plot_sigma",
+        xlabel="MJD",
+        ylabel="post-fit residual / tempo2 error",
+    )
     ax.set_title(title)
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        ax.legend(handles, labels, loc="upper right", frameon=False, ncol=min(5, len(labels)))
+        ax.legend(
+            handles, labels, loc="upper right", frameon=False, ncol=min(5, len(labels))
+        )
     savefig(fig, out_path)
 
 
@@ -2633,7 +2966,11 @@ def build_qc_review_package(
 ) -> dict[str, Any]:
     output: dict[str, Any] = {
         "stage": qc_stage.spec.key if qc_stage else "",
-        "run_dir": clean_rel(qc_stage.run_dir, repo_root) if qc_stage and qc_stage.run_dir else "",
+        "run_dir": (
+            clean_rel(qc_stage.run_dir, repo_root)
+            if qc_stage and qc_stage.run_dir
+            else ""
+        ),
         "warnings": [],
         "variant_summary_rows": [],
         "backend_rows": [],
@@ -2652,7 +2989,11 @@ def build_qc_review_package(
         output["warnings"].append(f"No raw *_qc.csv files were found for {args.psr}.")
         return output
 
-    overrides_path = Path(args.overrides).expanduser() if args.overrides else _guess_qc_override_csv(qc_run_dir)
+    overrides_path = (
+        Path(args.overrides).expanduser()
+        if args.overrides
+        else _guess_qc_override_csv(qc_run_dir)
+    )
     overrides = load_overrides(overrides_path if overrides_path.exists() else None)
     if overrides_path.exists():
         output["overrides_path"] = clean_rel(overrides_path, repo_root)
@@ -2676,8 +3017,14 @@ def build_qc_review_package(
         reviewed["decision"] = decision_series(reviewed)
         choice = choose_postfit_residual_column(reviewed)
         guessed_variant = _guess_variant(qc_csv)
-        qc_variant = str(reviewed.get("variant", pd.Series([guessed_variant])).iloc[0] or "").strip()
-        variant = guessed_variant if qc_variant.lower() in {"", "base"} and guessed_variant else qc_variant or guessed_variant or "base"
+        qc_variant = str(
+            reviewed.get("variant", pd.Series([guessed_variant])).iloc[0] or ""
+        ).strip()
+        variant = (
+            guessed_variant
+            if qc_variant.lower() in {"", "base"} and guessed_variant
+            else qc_variant or guessed_variant or "base"
+        )
         available_cols = ",".join(choice.available_residual_columns)
         availability_row = {
             "variant": variant,
@@ -2694,7 +3041,9 @@ def build_qc_review_package(
         output["availability_rows"].append(availability_row)
 
         if choice.column is None:
-            output["warnings"].append(f"{variant}: no numeric post-fit residual column was found.")
+            output["warnings"].append(
+                f"{variant}: no numeric post-fit residual column was found."
+            )
             review_lines.extend(
                 [
                     f"## Variant `{variant}`",
@@ -2708,18 +3057,28 @@ def build_qc_review_package(
             continue
 
         if choice.units == "us":
-            reviewed["plot_residual_us"] = _numeric_series(reviewed, choice.column, microseconds=False)
+            reviewed["plot_residual_us"] = _numeric_series(
+                reviewed, choice.column, microseconds=False
+            )
         else:
-            reviewed["plot_residual_us"] = _numeric_series(reviewed, choice.column, microseconds=True)
+            reviewed["plot_residual_us"] = _numeric_series(
+                reviewed, choice.column, microseconds=True
+            )
         if choice.error_column == "tempo2_err":
-            reviewed["plot_err_us"] = _numeric_series(reviewed, choice.error_column, microseconds=False)
+            reviewed["plot_err_us"] = _numeric_series(
+                reviewed, choice.error_column, microseconds=False
+            )
         elif choice.error_column == "tempo2_err_us":
-            reviewed["plot_err_us"] = _numeric_series(reviewed, choice.error_column, microseconds=False)
+            reviewed["plot_err_us"] = _numeric_series(
+                reviewed, choice.error_column, microseconds=False
+            )
         else:
             reviewed["plot_err_us"] = np.nan
         reviewed["plot_sigma"] = reviewed["plot_residual_us"] / reviewed["plot_err_us"]
         reviewed.loc[~np.isfinite(reviewed["plot_sigma"]), "plot_sigma"] = np.nan
-        reviewed["backend_group"] = _group_backend_names(reviewed.get("backend", pd.Series("", index=reviewed.index)))
+        reviewed["backend_group"] = _group_backend_names(
+            reviewed.get("backend", pd.Series("", index=reviewed.index))
+        )
 
         n_postfit = int(reviewed["plot_residual_us"].notna().sum())
         if n_postfit < len(reviewed):
@@ -2746,11 +3105,28 @@ def build_qc_review_package(
             .groupby("backend_group", dropna=False)
             .agg(
                 n_rows=("backend_group", "size"),
-                n_postfit=("plot_residual_us", lambda s: int(pd.to_numeric(s, errors="coerce").notna().sum())),
+                n_postfit=(
+                    "plot_residual_us",
+                    lambda s: int(pd.to_numeric(s, errors="coerce").notna().sum()),
+                ),
                 n_flagged=("_is_flagged", "sum"),
                 n_manual=("_is_manual", "sum"),
-                median_abs_postfit_us=("plot_residual_us", lambda s: float(pd.to_numeric(s, errors="coerce").abs().median()) if pd.to_numeric(s, errors="coerce").notna().any() else math.nan),
-                max_abs_postfit_us=("plot_residual_us", lambda s: float(pd.to_numeric(s, errors="coerce").abs().max()) if pd.to_numeric(s, errors="coerce").notna().any() else math.nan),
+                median_abs_postfit_us=(
+                    "plot_residual_us",
+                    lambda s: (
+                        float(pd.to_numeric(s, errors="coerce").abs().median())
+                        if pd.to_numeric(s, errors="coerce").notna().any()
+                        else math.nan
+                    ),
+                ),
+                max_abs_postfit_us=(
+                    "plot_residual_us",
+                    lambda s: (
+                        float(pd.to_numeric(s, errors="coerce").abs().max())
+                        if pd.to_numeric(s, errors="coerce").notna().any()
+                        else math.nan
+                    ),
+                ),
             )
             .reset_index()
             .rename(columns={"backend_group": "backend"})
@@ -2766,9 +3142,19 @@ def build_qc_review_package(
                     "n_postfit": int(row["n_postfit"]),
                     "n_flagged": n_flagged,
                     "n_manual": int(row["n_manual"]),
-                    "flagged_fraction": _round_stat(n_flagged / n_rows if n_rows else None),
-                    "median_abs_postfit_us": _round_stat(float(row["median_abs_postfit_us"]) if math.isfinite(float(row["median_abs_postfit_us"])) else None),
-                    "max_abs_postfit_us": _round_stat(float(row["max_abs_postfit_us"]) if math.isfinite(float(row["max_abs_postfit_us"])) else None),
+                    "flagged_fraction": _round_stat(
+                        n_flagged / n_rows if n_rows else None
+                    ),
+                    "median_abs_postfit_us": _round_stat(
+                        float(row["median_abs_postfit_us"])
+                        if math.isfinite(float(row["median_abs_postfit_us"]))
+                        else None
+                    ),
+                    "max_abs_postfit_us": _round_stat(
+                        float(row["max_abs_postfit_us"])
+                        if math.isfinite(float(row["max_abs_postfit_us"]))
+                        else None
+                    ),
                 }
             )
 
@@ -2777,10 +3163,16 @@ def build_qc_review_package(
         if not backend_summary.empty:
             tmp = backend_summary.copy()
             tmp["_frac"] = tmp["n_flagged"] / tmp["n_rows"].replace({0: np.nan})
-            tmp = tmp.sort_values(["_frac", "n_flagged"], ascending=[False, False], kind="stable")
+            tmp = tmp.sort_values(
+                ["_frac", "n_flagged"], ascending=[False, False], kind="stable"
+            )
             if len(tmp):
                 worst_backend = str(tmp.iloc[0]["backend"])
-                worst_backend_frac = float(tmp.iloc[0]["_frac"]) if pd.notna(tmp.iloc[0]["_frac"]) else None
+                worst_backend_frac = (
+                    float(tmp.iloc[0]["_frac"])
+                    if pd.notna(tmp.iloc[0]["_frac"])
+                    else None
+                )
 
         output["variant_summary_rows"].append(
             {
@@ -2795,13 +3187,29 @@ def build_qc_review_package(
                 "n_event": n_event,
                 "n_review_event": n_review_event,
                 "n_manual_override_rows": n_manual,
-                "median_abs_postfit_us": _round_stat(float(abs_resid.median()) if abs_resid.notna().any() else None),
-                "p95_abs_postfit_us": _round_stat(float(abs_resid.quantile(0.95)) if abs_resid.notna().any() else None),
-                "max_abs_postfit_us": _round_stat(float(abs_resid.max()) if abs_resid.notna().any() else None),
-                "median_abs_sigma": _round_stat(float(abs_sigma.median()) if abs_sigma.notna().any() else None),
-                "p95_abs_sigma": _round_stat(float(abs_sigma.quantile(0.95)) if abs_sigma.notna().any() else None),
-                "max_abs_sigma": _round_stat(float(abs_sigma.max()) if abs_sigma.notna().any() else None),
-                "max_abs_sigma_keep": _round_stat(float(keep_abs_sigma.max()) if keep_abs_sigma.notna().any() else None),
+                "median_abs_postfit_us": _round_stat(
+                    float(abs_resid.median()) if abs_resid.notna().any() else None
+                ),
+                "p95_abs_postfit_us": _round_stat(
+                    float(abs_resid.quantile(0.95)) if abs_resid.notna().any() else None
+                ),
+                "max_abs_postfit_us": _round_stat(
+                    float(abs_resid.max()) if abs_resid.notna().any() else None
+                ),
+                "median_abs_sigma": _round_stat(
+                    float(abs_sigma.median()) if abs_sigma.notna().any() else None
+                ),
+                "p95_abs_sigma": _round_stat(
+                    float(abs_sigma.quantile(0.95)) if abs_sigma.notna().any() else None
+                ),
+                "max_abs_sigma": _round_stat(
+                    float(abs_sigma.max()) if abs_sigma.notna().any() else None
+                ),
+                "max_abs_sigma_keep": _round_stat(
+                    float(keep_abs_sigma.max())
+                    if keep_abs_sigma.notna().any()
+                    else None
+                ),
                 "worst_backend_by_flagged_fraction": worst_backend,
                 "worst_backend_flagged_fraction": _round_stat(worst_backend_frac),
             }
@@ -2811,9 +3219,17 @@ def build_qc_review_package(
         scored["_abs_residual_us"] = scored["plot_residual_us"].abs()
         scored["_abs_sigma"] = scored["plot_sigma"].abs()
         scored["_manual"] = manual_mask(scored)
-        sort_col = "_abs_sigma" if scored["_abs_sigma"].notna().any() else "_abs_residual_us"
-        top_rows = scored.sort_values(sort_col, ascending=False, kind="stable").head(args.top_n_rows)
-        keep_rows = scored[decision_series(scored) == "KEEP"].sort_values(sort_col, ascending=False, kind="stable").head(args.top_n_rows)
+        sort_col = (
+            "_abs_sigma" if scored["_abs_sigma"].notna().any() else "_abs_residual_us"
+        )
+        top_rows = scored.sort_values(sort_col, ascending=False, kind="stable").head(
+            args.top_n_rows
+        )
+        keep_rows = (
+            scored[decision_series(scored) == "KEEP"]
+            .sort_values(sort_col, ascending=False, kind="stable")
+            .head(args.top_n_rows)
+        )
         for _, row in top_rows.iterrows():
             output["worst_rows"].append(
                 {
@@ -2854,7 +3270,9 @@ def build_qc_review_package(
                 }
             )
 
-        overview_path = postfit_dir / "plots" / f"{args.psr}.{variant}.postfit_overview.png"
+        overview_path = (
+            postfit_dir / "plots" / f"{args.psr}.{variant}.postfit_overview.png"
+        )
         make_variant_overview_plot(
             plot_df,
             title=f"{args.psr} {variant}: post-fit residual review",
@@ -2871,7 +3289,9 @@ def build_qc_review_package(
         )
         sigma_path = None
         if reviewed["plot_sigma"].notna().any():
-            sigma_path = postfit_dir / "plots" / f"{args.psr}.{variant}.postfit_sigma_vs_mjd.png"
+            sigma_path = (
+                postfit_dir / "plots" / f"{args.psr}.{variant}.postfit_sigma_vs_mjd.png"
+            )
             make_signed_sigma_plot(
                 plot_df.dropna(subset=["plot_sigma"]).copy(),
                 title=f"{args.psr} {variant}: signed post-fit sigma residuals",
@@ -2886,7 +3306,9 @@ def build_qc_review_package(
                 }
             )
 
-        max_keep_sigma = float(keep_abs_sigma.max()) if keep_abs_sigma.notna().any() else None
+        max_keep_sigma = (
+            float(keep_abs_sigma.max()) if keep_abs_sigma.notna().any() else None
+        )
         review_lines.extend(
             [
                 f"## Variant `{variant}`",
@@ -2912,7 +3334,9 @@ def build_qc_review_package(
                 ]
             )
         if max_keep_sigma is not None and max_keep_sigma >= 5:
-            output["warnings"].append(f"{variant}: surviving KEEP rows reach |post-fit sigma|={max_keep_sigma:.3g}.")
+            output["warnings"].append(
+                f"{variant}: surviving KEEP rows reach |post-fit sigma|={max_keep_sigma:.3g}."
+            )
 
     output["warnings"] = list(dict.fromkeys(output["warnings"]))
     if output["warnings"]:
@@ -2925,10 +3349,25 @@ def build_qc_review_package(
 
 
 def severity_rank(sev: str) -> int:
-    return {"info": 0, "green": 0, "warning": 1, "amber": 1, "critical": 2, "red": 2}.get(sev.lower(), 0)
+    return {
+        "info": 0,
+        "green": 0,
+        "warning": 1,
+        "amber": 1,
+        "critical": 2,
+        "red": 2,
+    }.get(sev.lower(), 0)
 
 
-def add_risk(rows: list[dict[str, Any]], severity: str, area: str, description: str, evidence: str, required_action: str, status: str = "open") -> None:
+def add_risk(
+    rows: list[dict[str, Any]],
+    severity: str,
+    area: str,
+    description: str,
+    evidence: str,
+    required_action: str,
+    status: str = "open",
+) -> None:
     rows.append(
         {
             "risk_id": f"R{len(rows) + 1:03d}",
@@ -3070,7 +3509,11 @@ def build_risk_register(
     keep_rows = qc_package.get("surviving_keep_rows", [])
     if keep_rows:
         max_keep_sigma = max(
-            [x for x in (safe_float(r.get("abs_sigma")) for r in keep_rows) if x is not None],
+            [
+                x
+                for x in (safe_float(r.get("abs_sigma")) for r in keep_rows)
+                if x is not None
+            ],
             default=None,
         )
         if max_keep_sigma is not None:
@@ -3118,24 +3561,44 @@ def build_acceptance_checklist(
 ) -> list[dict[str, Any]]:
     criticals = [r for r in risks if severity_rank(str(r.get("severity", ""))) >= 2]
     warnings = [r for r in risks if severity_rank(str(r.get("severity", ""))) == 1]
-    branch_ok = all(rt.branch_exists for rt in runtimes if rt.spec.creates_branch and not rt.spec.optional)
-    run_ok = all(rt.run_dir_exists for rt in runtimes if not rt.spec.optional and rt.spec.key != "ingest")
-    final_rt = next((rt for rt in runtimes if rt.spec.key == "step6_apply_delete"), None)
+    branch_ok = all(
+        rt.branch_exists
+        for rt in runtimes
+        if rt.spec.creates_branch and not rt.spec.optional
+    )
+    run_ok = all(
+        rt.run_dir_exists
+        for rt in runtimes
+        if not rt.spec.optional and rt.spec.key != "ingest"
+    )
+    final_rt = next(
+        (rt for rt in runtimes if rt.spec.key == "step6_apply_delete"), None
+    )
     postfit_rows = qc_package.get("availability_rows", [])
-    postfit_ok = bool(postfit_rows) and all(r.get("postfit_available") == "yes" for r in postfit_rows)
+    postfit_ok = bool(postfit_rows) and all(
+        r.get("postfit_available") == "yes" for r in postfit_rows
+    )
 
     return [
         {
             "check": "Expected dataset branches exist",
             "status": "pass" if branch_ok else "fail",
             "evidence": "01_provenance/branch_run_manifest.tsv",
-            "comment": "Required branch refs resolved by git rev-parse." if branch_ok else "At least one required branch is missing.",
+            "comment": (
+                "Required branch refs resolved by git rev-parse."
+                if branch_ok
+                else "At least one required branch is missing."
+            ),
         },
         {
             "check": "Expected run directories exist",
             "status": "pass" if run_ok else "warn",
             "evidence": "01_provenance/branch_run_manifest.tsv",
-            "comment": "Required run directories were found." if run_ok else "At least one required run directory was not found.",
+            "comment": (
+                "Required run directories were found."
+                if run_ok
+                else "At least one required run directory was not found."
+            ),
         },
         {
             "check": "Final branch resolved",
@@ -3177,7 +3640,11 @@ def build_acceptance_checklist(
             "check": "Public comparison available or explicitly absent",
             "status": "pass" if public_metric_rows else "warn",
             "evidence": "09_public_comparison/public_synthesis.tsv",
-            "comment": "Public comparison metrics found." if public_metric_rows else "Public comparison output not found; this may be valid if Step 8 was not run.",
+            "comment": (
+                "Public comparison metrics found."
+                if public_metric_rows
+                else "Public comparison output not found; this may be valid if Step 8 was not run."
+            ),
         },
         {
             "check": "Binary / param-scan / change-report artifacts indexed",
@@ -3239,7 +3706,9 @@ def generate_decision_sheet(
     qc_package: dict[str, Any],
     model_package: dict[str, Any],
 ) -> str:
-    final_rt = next((rt for rt in runtimes if rt.spec.key == "step6_apply_delete"), None)
+    final_rt = next(
+        (rt for rt in runtimes if rt.spec.key == "step6_apply_delete"), None
+    )
     total_deleted = sum(1 for r in action_rows if r.get("action") == "deleted")
     total_commented = sum(1 for r in action_rows if r.get("action") == "commented")
     criticals = [r for r in risks if severity_rank(str(r.get("severity", ""))) >= 2]
@@ -3247,14 +3716,24 @@ def generate_decision_sheet(
     variant_rows = qc_package.get("variant_summary_rows", [])
 
     public_lines = []
-    for k in ("agreement_class", "sigma_tension_max", "sigma_tension_mean", "reduced_chi2", "worst_provider_pair"):
+    for k in (
+        "agreement_class",
+        "sigma_tension_max",
+        "sigma_tension_mean",
+        "reduced_chi2",
+        "worst_provider_pair",
+    ):
         if k in public_metrics:
             public_lines.append(f"- **{k}:** {public_metrics[k]}")
     if not public_lines:
-        public_lines.append("- Public comparison metrics were not found in the expected Step 8 location.")
+        public_lines.append(
+            "- Public comparison metrics were not found in the expected Step 8 location."
+        )
 
     warning_lines = qc_package.get("warnings", [])
-    warning_block = "\n".join(f"- {line}" for line in warning_lines) if warning_lines else "- None"
+    warning_block = (
+        "\n".join(f"- {line}" for line in warning_lines) if warning_lines else "- None"
+    )
 
     return f"""# Final data-quality decision sheet
 
@@ -3394,24 +3873,74 @@ The `raw_links/` directory contains symlinks, or `.path.txt` fallbacks, pointing
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Generate a reviewer-facing synthesis package for one pulsar workflow.")
+    p = argparse.ArgumentParser(
+        description="Generate a reviewer-facing synthesis package for one pulsar workflow."
+    )
     p.add_argument("--psr", required=True, help="Pulsar name, e.g. J1909-3744")
-    p.add_argument("--slug", required=True, help="Workflow slug used in results dirs, e.g. j1909")
-    p.add_argument("--workflow-config", default="", help="Path to workflow TOML config, recorded for provenance")
+    p.add_argument(
+        "--slug", required=True, help="Workflow slug used in results dirs, e.g. j1909"
+    )
+    p.add_argument(
+        "--workflow-config",
+        default="",
+        help="Path to workflow TOML config, recorded for provenance",
+    )
     p.add_argument("--repo-root", default=".", help="Dataset Git repository root")
-    p.add_argument("--dataset-root", required=True, help="Path to EPTA-DR3/epta-dr3-data")
+    p.add_argument(
+        "--dataset-root", required=True, help="Path to EPTA-DR3/epta-dr3-data"
+    )
     p.add_argument("--results-root", required=True, help="Path to results/")
-    p.add_argument("--final-branch", required=True, help="Final dataset branch, usually <slug>_step6_apply_delete")
+    p.add_argument(
+        "--final-branch",
+        required=True,
+        help="Final dataset branch, usually <slug>_step6_apply_delete",
+    )
     p.add_argument("--out", required=True, help="Output review package directory")
-    p.add_argument("--overrides", default="", help="Optional manual_qc_overrides.csv; defaults to <qc-run>/qc_review/manual_qc_overrides.csv")
-    p.add_argument("--max-keep-points", type=int, default=4000, help="Maximum KEEP points to render per plot before sampling.")
-    p.add_argument("--top-n-rows", type=int, default=50, help="Number of top suspicious rows to keep in TSV summaries.")
-    p.add_argument("--stage-branch", action="append", default=[], help="Override stage branch as STAGE=BRANCH. Can be repeated.")
-    p.add_argument("--stage-run", action="append", default=[], help="Override stage run directory as STAGE=PATH. Can be repeated.")
+    p.add_argument(
+        "--overrides",
+        default="",
+        help="Optional manual_qc_overrides.csv; defaults to <qc-run>/qc_review/manual_qc_overrides.csv",
+    )
+    p.add_argument(
+        "--max-keep-points",
+        type=int,
+        default=4000,
+        help="Maximum KEEP points to render per plot before sampling.",
+    )
+    p.add_argument(
+        "--top-n-rows",
+        type=int,
+        default=50,
+        help="Number of top suspicious rows to keep in TSV summaries.",
+    )
+    p.add_argument(
+        "--stage-branch",
+        action="append",
+        default=[],
+        help="Override stage branch as STAGE=BRANCH. Can be repeated.",
+    )
+    p.add_argument(
+        "--stage-run",
+        action="append",
+        default=[],
+        help="Override stage run directory as STAGE=PATH. Can be repeated.",
+    )
     p.add_argument("--no-pdf", action="store_true", help="Skip the PDF build.")
-    p.add_argument("--pdf-name", default="", help="PDF filename written inside --out. Defaults to <psr>_review_synthesis.pdf.")
-    p.add_argument("--pandoc", default="pandoc", help="Ignored legacy option; native PDF generation no longer uses pandoc.")
-    p.add_argument("--pdf-engine", default="xelatex", help="Ignored legacy option; native PDF generation no longer uses an external PDF engine.")
+    p.add_argument(
+        "--pdf-name",
+        default="",
+        help="PDF filename written inside --out. Defaults to <psr>_review_synthesis.pdf.",
+    )
+    p.add_argument(
+        "--pandoc",
+        default="pandoc",
+        help="Ignored legacy option; native PDF generation no longer uses pandoc.",
+    )
+    p.add_argument(
+        "--pdf-engine",
+        default="xelatex",
+        help="Ignored legacy option; native PDF generation no longer uses an external PDF engine.",
+    )
     return p.parse_args(argv)
 
 
@@ -3428,7 +3957,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     dirs = mkdirs(out_root)
 
     if not git_available(repo_root):
-        print(f"WARNING: {repo_root} is not a Git working tree. Git-derived provenance will be UNKNOWN.", file=sys.stderr)
+        print(
+            f"WARNING: {repo_root} is not a Git working tree. Git-derived provenance will be UNKNOWN.",
+            file=sys.stderr,
+        )
 
     runtimes = build_stage_runtimes(args, repo_root, results_root)
     artifact_rows = discover_artifacts(runtimes, dataset_root, repo_root)
@@ -3447,14 +3979,26 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "commit": rt.commit,
                 "run_dir": clean_rel(rt.run_dir, repo_root) if rt.run_dir else "NA",
                 "run_dir_exists": "yes" if rt.run_dir_exists else "no",
-                "run_report": clean_rel(rt.run_dir / "run_report.pdf", repo_root) if rt.run_dir else "NA",
-                "workflow_report": clean_rel(rt.run_dir / "workflow_report.pdf", repo_root) if rt.run_dir else "NA",
+                "run_report": (
+                    clean_rel(rt.run_dir / "run_report.pdf", repo_root)
+                    if rt.run_dir
+                    else "NA"
+                ),
+                "workflow_report": (
+                    clean_rel(rt.run_dir / "workflow_report.pdf", repo_root)
+                    if rt.run_dir
+                    else "NA"
+                ),
                 "notes": rt.notes,
             }
         )
 
-    dataset_inventory = collect_dataset_inventory(repo_root, dataset_root, args.psr, args.final_branch)
-    diff_rows, action_rows, snapshots = collect_branch_diffs(repo_root, dataset_root, args.psr, runtimes)
+    dataset_inventory = collect_dataset_inventory(
+        repo_root, dataset_root, args.psr, args.final_branch
+    )
+    diff_rows, action_rows, snapshots = collect_branch_diffs(
+        repo_root, dataset_root, args.psr, runtimes
+    )
     final_snapshot = snapshots.get("step6_apply_delete", {})
     system_rows = collect_system_quality_matrix(final_snapshot, action_rows)
     qc_index_rows = collect_qc_index(artifact_rows)
@@ -3466,11 +4010,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         model_dir=dirs["model_checks"],
     )
 
-    public_rt = next((rt for rt in runtimes if rt.spec.key == "step8_compare_public"), None)
-    public_metric_rows, public_tension_rows, public_metrics = extract_public_metrics(public_rt.run_dir if public_rt else None, repo_root)
+    public_rt = next(
+        (rt for rt in runtimes if rt.spec.key == "step8_compare_public"), None
+    )
+    public_metric_rows, public_tension_rows, public_metrics = extract_public_metrics(
+        public_rt.run_dir if public_rt else None, repo_root
+    )
 
     qc_stage = choose_qc_review_stage(runtimes)
-    qc_package = build_qc_review_package(args=args, repo_root=repo_root, qc_stage=qc_stage, postfit_dir=dirs["postfit"])
+    qc_package = build_qc_review_package(
+        args=args, repo_root=repo_root, qc_stage=qc_stage, postfit_dir=dirs["postfit"]
+    )
 
     risks = build_risk_register(
         runtimes,
@@ -3496,12 +4046,34 @@ def main(argv: Optional[list[str]] = None) -> int:
     write_tsv(
         dirs["provenance"] / "branch_run_manifest.tsv",
         branch_manifest_rows,
-        ["stage", "label", "creates_dataset_branch", "optional", "branch", "branch_exists", "commit", "run_dir", "run_dir_exists", "run_report", "workflow_report", "notes"],
+        [
+            "stage",
+            "label",
+            "creates_dataset_branch",
+            "optional",
+            "branch",
+            "branch_exists",
+            "commit",
+            "run_dir",
+            "run_dir_exists",
+            "run_report",
+            "workflow_report",
+            "notes",
+        ],
     )
     write_tsv(
         dirs["provenance"] / "artifact_manifest.tsv",
         artifact_rows,
-        ["stage", "category", "artifact_type", "priority", "path", "exists", "size_bytes", "row_count"],
+        [
+            "stage",
+            "category",
+            "artifact_type",
+            "priority",
+            "path",
+            "exists",
+            "size_bytes",
+            "row_count",
+        ],
     )
     write_tsv(
         dirs["dataset"] / "final_dataset_inventory.tsv",
@@ -3511,12 +4083,42 @@ def main(argv: Optional[list[str]] = None) -> int:
     write_tsv(
         dirs["lineage"] / "dataset_diff_summary.tsv",
         diff_rows,
-        ["transition", "from_branch", "to_branch", "from_active_toas", "to_active_toas", "from_commented_toas", "to_commented_toas", "active_toa_delta", "comments_added_detected", "deletions_detected", "par_files_changed", "tim_files_changed", "status"],
+        [
+            "transition",
+            "from_branch",
+            "to_branch",
+            "from_active_toas",
+            "to_active_toas",
+            "from_commented_toas",
+            "to_commented_toas",
+            "active_toa_delta",
+            "comments_added_detected",
+            "deletions_detected",
+            "par_files_changed",
+            "tim_files_changed",
+            "status",
+        ],
     )
     write_tsv(
         dirs["toa"] / "toa_action_ledger.tsv",
         action_rows,
-        ["toa_id", "transition", "from_branch", "to_branch", "relative_tim_file", "mjd", "freq", "observatory", "system", "backend", "telescope", "action", "final_state", "normalized_toa_line_sha1", "evidence"],
+        [
+            "toa_id",
+            "transition",
+            "from_branch",
+            "to_branch",
+            "relative_tim_file",
+            "mjd",
+            "freq",
+            "observatory",
+            "system",
+            "backend",
+            "telescope",
+            "action",
+            "final_state",
+            "normalized_toa_line_sha1",
+            "evidence",
+        ],
     )
     write_tsv(
         dirs["qc"] / "qc_artifact_index.tsv",
@@ -3526,12 +4128,31 @@ def main(argv: Optional[list[str]] = None) -> int:
     write_tsv(
         dirs["qc"] / "system_quality_matrix.tsv",
         system_rows,
-        ["system", "final_active_toas", "final_commented_toas", "commented_actions", "deleted_actions", "deletion_fraction_vs_final_plus_deleted", "auto_status"],
+        [
+            "system",
+            "final_active_toas",
+            "final_commented_toas",
+            "commented_actions",
+            "deleted_actions",
+            "deletion_fraction_vs_final_plus_deleted",
+            "auto_status",
+        ],
     )
     write_tsv(
         dirs["timing"] / "residual_comparison_across_branches.tsv",
         residual_rows,
-        ["stage", "branch", "source_path", "row_index", "variant", "n_toas", "rms_or_wrms", "reduced_chi2", "fit_status", "raw_columns_json"],
+        [
+            "stage",
+            "branch",
+            "source_path",
+            "row_index",
+            "variant",
+            "n_toas",
+            "rms_or_wrms",
+            "reduced_chi2",
+            "fit_status",
+            "raw_columns_json",
+        ],
     )
     write_tsv(
         dirs["public"] / "public_synthesis.tsv",
@@ -3541,7 +4162,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     write_tsv(
         dirs["public"] / "public_parameter_tension_table.tsv",
         public_tension_rows,
-        ["parameter", "sigma_tension", "provider_pair", "agreement_class", "source_path", "raw_columns_json"],
+        [
+            "parameter",
+            "sigma_tension",
+            "provider_pair",
+            "agreement_class",
+            "source_path",
+            "raw_columns_json",
+        ],
     )
     write_tsv(
         dirs["model_checks"] / "model_check_artifact_index.tsv",
@@ -3551,47 +4179,175 @@ def main(argv: Optional[list[str]] = None) -> int:
     write_tsv(
         dirs["model_checks"] / "binary_analysis_summary.tsv",
         model_package.get("binary_rows", []),
-        ["stage", "pulsar", "branch", "BINARY", "PB", "A1", "ECC", "EPS1", "EPS2", "T0", "TASC", "source_path", "raw_columns_json"],
+        [
+            "stage",
+            "pulsar",
+            "branch",
+            "BINARY",
+            "PB",
+            "A1",
+            "ECC",
+            "EPS1",
+            "EPS2",
+            "T0",
+            "TASC",
+            "source_path",
+            "raw_columns_json",
+        ],
     )
     write_tsv(
         dirs["model_checks"] / "param_scan_summary.tsv",
         model_package.get("param_scan_rows", []),
-        ["stage", "pulsar", "branch", "candidate", "redchisq", "delta_k_fit", "lrt_delta_chisq", "lrt_p_value", "max_param_z", "source_path", "raw_columns_json"],
+        [
+            "stage",
+            "pulsar",
+            "branch",
+            "candidate",
+            "redchisq",
+            "delta_k_fit",
+            "lrt_delta_chisq",
+            "lrt_p_value",
+            "max_param_z",
+            "source_path",
+            "raw_columns_json",
+        ],
     )
     write_tsv(
         dirs["model_checks"] / "change_report_model_summary.tsv",
         model_package.get("change_model_rows", []),
-        ["stage", "pulsar", "branch", "reference", "ref_k_fit", "br_k_fit", "delta_redchisq", "delta_wrms_post", "delta_aic", "delta_bic", "delta_k_fit", "lrt_delta_chisq", "lrt_p_value", "source_path", "raw_columns_json"],
+        [
+            "stage",
+            "pulsar",
+            "branch",
+            "reference",
+            "ref_k_fit",
+            "br_k_fit",
+            "delta_redchisq",
+            "delta_wrms_post",
+            "delta_aic",
+            "delta_bic",
+            "delta_k_fit",
+            "lrt_delta_chisq",
+            "lrt_p_value",
+            "source_path",
+            "raw_columns_json",
+        ],
     )
     write_tsv(
         dirs["model_checks"] / "change_report_new_param_summary.tsv",
         model_package.get("new_param_rows", []),
-        ["stage", "pulsar", "branch", "reference", "n_new_params", "n_new_with_numeric_sigma", "n_new_sig_z", "n_new_sig_threshold", "max_new_param_z", "max_new_param", "source_path", "raw_columns_json"],
+        [
+            "stage",
+            "pulsar",
+            "branch",
+            "reference",
+            "n_new_params",
+            "n_new_with_numeric_sigma",
+            "n_new_sig_z",
+            "n_new_sig_threshold",
+            "max_new_param_z",
+            "max_new_param",
+            "source_path",
+            "raw_columns_json",
+        ],
     )
     write_tsv(
         dirs["postfit"] / "postfit_residual_availability.tsv",
         qc_package.get("availability_rows", []),
-        ["variant", "qc_csv", "postfit_available", "selected_residual_column", "selected_error_column", "n_rows", "n_numeric_postfit", "n_numeric_error", "available_residual_columns", "warning"],
+        [
+            "variant",
+            "qc_csv",
+            "postfit_available",
+            "selected_residual_column",
+            "selected_error_column",
+            "n_rows",
+            "n_numeric_postfit",
+            "n_numeric_error",
+            "available_residual_columns",
+            "warning",
+        ],
     )
     write_tsv(
         dirs["postfit"] / "variant_postfit_summary.tsv",
         qc_package.get("variant_summary_rows", []),
-        ["variant", "qc_csv", "selected_postfit_column", "selected_error_column", "n_rows", "n_postfit", "n_keep", "n_bad_toa", "n_event", "n_review_event", "n_manual_override_rows", "median_abs_postfit_us", "p95_abs_postfit_us", "max_abs_postfit_us", "median_abs_sigma", "p95_abs_sigma", "max_abs_sigma", "max_abs_sigma_keep", "worst_backend_by_flagged_fraction", "worst_backend_flagged_fraction"],
+        [
+            "variant",
+            "qc_csv",
+            "selected_postfit_column",
+            "selected_error_column",
+            "n_rows",
+            "n_postfit",
+            "n_keep",
+            "n_bad_toa",
+            "n_event",
+            "n_review_event",
+            "n_manual_override_rows",
+            "median_abs_postfit_us",
+            "p95_abs_postfit_us",
+            "max_abs_postfit_us",
+            "median_abs_sigma",
+            "p95_abs_sigma",
+            "max_abs_sigma",
+            "max_abs_sigma_keep",
+            "worst_backend_by_flagged_fraction",
+            "worst_backend_flagged_fraction",
+        ],
     )
     write_tsv(
         dirs["qc"] / "backend_flag_summary.tsv",
         qc_package.get("backend_rows", []),
-        ["variant", "backend", "n_rows", "n_postfit", "n_flagged", "n_manual", "flagged_fraction", "median_abs_postfit_us", "max_abs_postfit_us"],
+        [
+            "variant",
+            "backend",
+            "n_rows",
+            "n_postfit",
+            "n_flagged",
+            "n_manual",
+            "flagged_fraction",
+            "median_abs_postfit_us",
+            "max_abs_postfit_us",
+        ],
     )
     write_tsv(
         dirs["postfit"] / "worst_postfit_rows.tsv",
         qc_package.get("worst_rows", []),
-        ["variant", "review_id", "decision", "manual_action", "backend", "timfile", "mjd", "freq_mhz", "postfit_us", "tempo2_err_us", "abs_sigma", "bad_point", "event_member", "transient_id", "qc_csv"],
+        [
+            "variant",
+            "review_id",
+            "decision",
+            "manual_action",
+            "backend",
+            "timfile",
+            "mjd",
+            "freq_mhz",
+            "postfit_us",
+            "tempo2_err_us",
+            "abs_sigma",
+            "bad_point",
+            "event_member",
+            "transient_id",
+            "qc_csv",
+        ],
     )
     write_tsv(
         dirs["postfit"] / "surviving_keep_outliers.tsv",
         qc_package.get("surviving_keep_rows", []),
-        ["variant", "review_id", "backend", "timfile", "mjd", "freq_mhz", "postfit_us", "tempo2_err_us", "abs_sigma", "manual_action", "bad_point", "event_member", "transient_id", "qc_csv"],
+        [
+            "variant",
+            "review_id",
+            "backend",
+            "timfile",
+            "mjd",
+            "freq_mhz",
+            "postfit_us",
+            "tempo2_err_us",
+            "abs_sigma",
+            "manual_action",
+            "bad_point",
+            "event_member",
+            "transient_id",
+            "qc_csv",
+        ],
     )
     write_tsv(
         dirs["postfit"] / "plot_manifest.tsv",
@@ -3601,7 +4357,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     write_tsv(
         dirs["decision"] / "risk_register.tsv",
         risks,
-        ["risk_id", "severity", "area", "description", "evidence", "required_action", "status"],
+        [
+            "risk_id",
+            "severity",
+            "area",
+            "description",
+            "evidence",
+            "required_action",
+            "status",
+        ],
     )
     write_tsv(
         dirs["decision"] / "acceptance_checklist.tsv",
@@ -3615,12 +4379,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         "slug": args.slug,
         "workflow_config": args.workflow_config,
         "final_branch": args.final_branch,
-        "final_commit": next((rt.commit for rt in runtimes if rt.spec.key == "step6_apply_delete"), "UNKNOWN"),
+        "final_commit": next(
+            (rt.commit for rt in runtimes if rt.spec.key == "step6_apply_delete"),
+            "UNKNOWN",
+        ),
         "auto_decision": decision,
         "dataset_inventory_rows": len(dataset_inventory),
         "toa_actions_detected": len(action_rows),
-        "toas_commented_detected": sum(1 for r in action_rows if r.get("action") == "commented"),
-        "toas_deleted_detected": sum(1 for r in action_rows if r.get("action") == "deleted"),
+        "toas_commented_detected": sum(
+            1 for r in action_rows if r.get("action") == "commented"
+        ),
+        "toas_deleted_detected": sum(
+            1 for r in action_rows if r.get("action") == "deleted"
+        ),
         "risk_counts": dict(Counter(str(r.get("severity", "")) for r in risks)),
         "public_metrics": public_metrics,
         "qc_review_warnings": qc_package.get("warnings", []),
@@ -3633,7 +4404,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         },
     }
     write_json(dirs["machine"] / "metrics.json", metrics)
-    write_json(dirs["machine"] / "review_package_manifest.json", {"stages": branch_manifest_rows, "artifacts": artifact_rows})
+    write_json(
+        dirs["machine"] / "review_package_manifest.json",
+        {"stages": branch_manifest_rows, "artifacts": artifact_rows},
+    )
 
     decision_sheet = generate_decision_sheet(
         args=args,
@@ -3652,24 +4426,34 @@ def main(argv: Optional[list[str]] = None) -> int:
         qc_package=qc_package,
         model_package=model_package,
     )
-    write_text(dirs["decision"] / "final_data_quality_decision_sheet.md", decision_sheet)
-    write_text(out_root / "index.md", generate_index(args=args, decision=decision, runtimes=runtimes, risks=risks))
+    write_text(
+        dirs["decision"] / "final_data_quality_decision_sheet.md", decision_sheet
+    )
+    write_text(
+        out_root / "index.md",
+        generate_index(args=args, decision=decision, runtimes=runtimes, risks=risks),
+    )
 
     step7 = next((rt for rt in runtimes if rt.spec.key == "step7_whitenoise"), None)
     if not step7 or not step7.run_dir_exists:
-        write_text(dirs["noise"] / "whitenoise_not_found.md", "# Whitenoise synthesis\n\nStep 7 whitenoise output was not found in the expected location.\n")
+        write_text(
+            dirs["noise"] / "whitenoise_not_found.md",
+            "# Whitenoise synthesis\n\nStep 7 whitenoise output was not found in the expected location.\n",
+        )
 
     pdf_path: Optional[Path] = None
     if not args.no_pdf:
         try:
-            pdf_path = build_pdf_with_matplotlib(args=args, out_root=out_root, decision=decision)
+            pdf_path = build_pdf_with_matplotlib(
+                args=args, out_root=out_root, decision=decision
+            )
         except RuntimeError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
-        
+
     print(f"Wrote review synthesis package: {out_root}")
     if pdf_path is not None:
-        print(f"Wrote PDF: {pdf_path}")    
+        print(f"Wrote PDF: {pdf_path}")
     print(f"Automatic synthesis decision: {decision}")
     return 0
 

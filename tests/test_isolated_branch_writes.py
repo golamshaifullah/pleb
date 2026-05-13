@@ -192,7 +192,9 @@ def test_commit_branch_artifacts_scopes_to_current_run_outputs(
     )
 
     show_current = _git(
-        repo_root, "show", "apply_branch:results/current_run/apply_branch/run_report.pdf"
+        repo_root,
+        "show",
+        "apply_branch:results/current_run/apply_branch/run_report.pdf",
     )
     assert "current" in show_current.stdout
     assert not (run_tag / "run_report.pdf").exists()

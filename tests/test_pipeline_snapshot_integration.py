@@ -51,7 +51,12 @@ def test_run_pipeline_readonly_branches_use_branch_snapshots(
     _git(repo_root, "checkout", "-b", "scanbranch")
     par_path.write_text("PSRJ J0000+0000\nF0 2.0 1\n", encoding="utf-8")
     tim_path.write_text("FORMAT 1\nA 1400 58001.0 1.0 ao\n", encoding="utf-8")
-    _git(repo_root, "add", "dataset/J0000+0000/J0000+0000.par", "dataset/J0000+0000/tims/A.tim")
+    _git(
+        repo_root,
+        "add",
+        "dataset/J0000+0000/J0000+0000.par",
+        "dataset/J0000+0000/tims/A.tim",
+    )
     _git(
         repo_root,
         "-c",
@@ -100,7 +105,9 @@ def test_run_pipeline_readonly_branches_use_branch_snapshots(
         psr_dir = Path(home_dir) / Path(dataset_name) / pulsar
         _assert_snapshot_par(psr_dir / f"{pulsar}.par", key="tempo2")
 
-    def _fake_run_pqc_for_parfile_subprocess(parfile: Path, out_csv: Path, _cfg, *, settings_out=None):
+    def _fake_run_pqc_for_parfile_subprocess(
+        parfile: Path, out_csv: Path, _cfg, *, settings_out=None
+    ):
         _ = settings_out
         _assert_snapshot_par(parfile, key="pqc")
         out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -160,7 +167,9 @@ def test_run_pipeline_readonly_branches_use_branch_snapshots(
     monkeypatch.setattr("pleb.pipeline._pqc_available", lambda: True)
     monkeypatch.setattr("pleb.pipeline.fix_pulsar_dataset", _fake_fix_pulsar_dataset)
     monkeypatch.setattr("pleb.pipeline.write_fix_report", _fake_write_fix_report)
-    monkeypatch.setattr("pleb.pipeline.run_tempo2_for_pulsar", _fake_run_tempo2_for_pulsar)
+    monkeypatch.setattr(
+        "pleb.pipeline.run_tempo2_for_pulsar", _fake_run_tempo2_for_pulsar
+    )
     monkeypatch.setattr(
         "pleb.pipeline.run_pqc_for_parfile_subprocess",
         _fake_run_pqc_for_parfile_subprocess,
@@ -173,8 +182,12 @@ def test_run_pipeline_readonly_branches_use_branch_snapshots(
         "pleb.pipeline.plot_pulsars_per_system",
         _fake_plot_pulsars_per_system,
     )
-    monkeypatch.setattr("pleb.pipeline.write_outlier_tables", _fake_write_outlier_tables)
-    monkeypatch.setattr("pleb.pipeline.analyse_binary_from_par", _fake_analyse_binary_from_par)
+    monkeypatch.setattr(
+        "pleb.pipeline.write_outlier_tables", _fake_write_outlier_tables
+    )
+    monkeypatch.setattr(
+        "pleb.pipeline.analyse_binary_from_par", _fake_analyse_binary_from_par
+    )
 
     cfg = PipelineConfig(
         home_dir=repo_root,
@@ -274,7 +287,9 @@ def test_run_pipeline_fix_apply_reads_new_branch_via_snapshot(
         "pleb.pipeline._validate_fixdataset_qc_inputs",
         lambda pulsars, cfg, *, branch: None,
     )
-    monkeypatch.setattr("pleb.pipeline.run_tempo2_for_pulsar", _fake_run_tempo2_for_pulsar)
+    monkeypatch.setattr(
+        "pleb.pipeline.run_tempo2_for_pulsar", _fake_run_tempo2_for_pulsar
+    )
 
     cfg = PipelineConfig(
         home_dir=repo_root,
@@ -321,16 +336,16 @@ def test_run_pipeline_fix_apply_reads_new_branch_via_snapshot(
     assert "refs/heads/apply_branch" not in worktrees.stdout
 
 
-def test_warn_backend_tim_drift_uses_snapshots(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_warn_backend_tim_drift_uses_snapshots(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     _git(repo_root, "init", "-b", "main")
 
     psr_dir = repo_root / "dataset" / "J0000+0000" / "tims"
     psr_dir.mkdir(parents=True)
-    (psr_dir.parent / "J0000+0000.par").write_text("PSRJ J0000+0000\n", encoding="utf-8")
+    (psr_dir.parent / "J0000+0000.par").write_text(
+        "PSRJ J0000+0000\n", encoding="utf-8"
+    )
     (psr_dir / "A.tim").write_text("FORMAT 1\n", encoding="utf-8")
     _git(repo_root, "add", ".")
     _git(

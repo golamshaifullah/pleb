@@ -98,8 +98,7 @@ def test_load_optimization_config_reads_variant_strategy(tmp_path: Path) -> None
 [optimize]
 base_config_path = "{base_cfg}"
 variant_strategy = "consensus"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
@@ -120,8 +119,7 @@ post_apply_eval = true
 post_apply_source_branch = "step2_branch"
 post_apply_qc_branch = "step4_branch"
 post_apply_qc_action = "delete"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
@@ -147,23 +145,32 @@ search_space_path = "configs/optimize/search_spaces/space.toml"
 objective_path = "configs/optimize/objectives/objective.toml"
 folds_path = "configs/optimize/folds/folds.toml"
 out_dir = "results/optimize/example"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
     cfg = load_optimization_config(optimize_cfg)
 
-    assert cfg.base_config_path == (repo_root / "configs" / "runs" / "pqc" / "base.toml").resolve()
-    assert cfg.search_space_path == (
-        repo_root / "configs" / "optimize" / "search_spaces" / "space.toml"
-    ).resolve()
-    assert cfg.objective_path == (
-        repo_root / "configs" / "optimize" / "objectives" / "objective.toml"
-    ).resolve()
-    assert cfg.folds_path == (
-        repo_root / "configs" / "optimize" / "folds" / "folds.toml"
-    ).resolve()
+    assert (
+        cfg.base_config_path
+        == (repo_root / "configs" / "runs" / "pqc" / "base.toml").resolve()
+    )
+    assert (
+        cfg.search_space_path
+        == (
+            repo_root / "configs" / "optimize" / "search_spaces" / "space.toml"
+        ).resolve()
+    )
+    assert (
+        cfg.objective_path
+        == (
+            repo_root / "configs" / "optimize" / "objectives" / "objective.toml"
+        ).resolve()
+    )
+    assert (
+        cfg.folds_path
+        == (repo_root / "configs" / "optimize" / "folds" / "folds.toml").resolve()
+    )
     assert cfg.out_dir == (repo_root / "results" / "optimize" / "example").resolve()
 
 
@@ -183,8 +190,7 @@ base_config_path = "configs/runs/pqc/base.toml"
 [optimize.fixed_overrides]
 home_dir = "../../../"
 dataset_name = "EPTA-DR3/epta-dr3-data"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
 
@@ -316,8 +322,7 @@ def test_run_optimization_with_pipeline_monkeypatch(
         """
 [backend_profiles]
 BASE = { robust_z_thresh = 5.5 }
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     base_cfg = tmp_path / "pipeline.toml"
@@ -333,8 +338,7 @@ pulsars = ["J0000+0000"]
 run_tempo2 = true
 run_pqc = true
 pqc_backend_profiles_path = "{base_profiles}"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     search_space = tmp_path / "space.toml"
@@ -394,9 +398,7 @@ jobs = 1
         assert _cfg.pqc_backend_profiles_path is not None
         profile_path = Path(str(_cfg.pqc_backend_profiles_path))
         seen_profile_paths.append(profile_path)
-        seen_profile_docs.append(
-            profile_path.read_text(encoding="utf-8")
-        )
+        seen_profile_docs.append(profile_path.read_text(encoding="utf-8"))
         pd.DataFrame(
             {
                 "mjd": [1.0, 2.0],
@@ -446,8 +448,7 @@ def test_run_fold_trial_materializes_backend_profiles(
         """
 [backend_profiles]
 BASE = { robust_z_thresh = 5.5 }
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     base_cfg = tmp_path / "pipeline.toml"
@@ -463,8 +464,7 @@ pulsars = ["J0000+0000"]
 run_tempo2 = true
 run_pqc = true
 pqc_backend_profiles_path = "{base_profiles}"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     cfg = OptimizationConfig(
@@ -577,8 +577,7 @@ reference_branch = "scanbranch"
 pulsars = ["J0000+0000"]
 run_tempo2 = true
 run_pqc = false
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     cfg = OptimizationConfig(
@@ -608,7 +607,9 @@ run_pqc = false
     trial = run_trial(cfg, 1, {})
 
     assert trial.status == "ok"
-    assert seen["dataset_name"].startswith(".pleb_optimize_trial_datasets/study/trial_0001/")
+    assert seen["dataset_name"].startswith(
+        ".pleb_optimize_trial_datasets/study/trial_0001/"
+    )
     assert not Path(seen["snapshot_root"]).exists()
 
 
@@ -620,8 +621,7 @@ def test_run_fold_trial_workflow_marks_materialized_dataset(
         """
 config = "pipeline.toml"
 mode = "serial"
-""".strip()
-        + "\n",
+""".strip() + "\n",
         encoding="utf-8",
     )
     cfg = OptimizationConfig(
@@ -659,7 +659,7 @@ mode = "serial"
     )
 
     assert run_dir == _Ctx.last_run_dir
-    assert 'readonly_materialized_dataset=true' in seen["set"]
+    assert "readonly_materialized_dataset=true" in seen["set"]
     assert 'home_dir="' + str(tmp_path / "repo") + '"' in seen["set"]
 
 
@@ -694,7 +694,9 @@ def test_true_fold_reruns_keep_repo_root_as_home_dir(
         metrics={},
         run_dir=repo_root / "results" / "optimize" / "study" / "trial_0001",
     )
-    fold_cfg = FoldConfig(mode="time_blocks", n_splits=1, time_col="mjd", backend_col="sys")
+    fold_cfg = FoldConfig(
+        mode="time_blocks", n_splits=1, time_col="mjd", backend_col="sys"
+    )
     seen: dict[str, object] = {}
 
     def fake_build_fold_dataset(*_args, **kwargs):
@@ -724,7 +726,9 @@ def test_true_fold_reruns_keep_repo_root_as_home_dir(
         pipeline_cfg,
         fold_cfg,
         load_search_space(
-            Path("/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml")
+            Path(
+                "/work/git_projects/pleb/configs/optimize/search_spaces/pqc_balanced_v1.toml"
+            )
         ),
         load_objective_config(
             Path(
@@ -738,7 +742,10 @@ def test_true_fold_reruns_keep_repo_root_as_home_dir(
 
     assert len(folds) == 1
     assert seen["home_dir"] == repo_root.resolve()
-    assert seen["dataset_name"] == ".pleb_optimize_fold_datasets/study/trial_0001/fold_00/dataset"
+    assert (
+        seen["dataset_name"]
+        == ".pleb_optimize_fold_datasets/study/trial_0001/fold_00/dataset"
+    )
 
 
 def test_parameter_override_helpers() -> None:

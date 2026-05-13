@@ -74,7 +74,9 @@ def run_fold_trial(
             raw["pqc_run_variants"] = False
         raw["outdir_name"] = f"{cfg.study_name}_trial_{trial_id:04d}_{fold_label}"
         raw["force_rerun"] = True
-        tmp_dir = _materialize_backend_profiles_for_run(raw, params, cfg.fixed_overrides)
+        tmp_dir = _materialize_backend_profiles_for_run(
+            raw, params, cfg.fixed_overrides
+        )
         try:
             pcfg = PipelineConfig.from_dict(raw)
             out_paths = run_pipeline(pcfg)
@@ -262,7 +264,10 @@ def _profile_source_path(raw: Dict[str, Any]) -> Path | None:
 
 
 def _make_backend_profile_tmp_dir(raw: Dict[str, Any]) -> Path:
-    outdir_name = str(raw.get("outdir_name") or "pqc_optimize_trial").strip() or "pqc_optimize_trial"
+    outdir_name = (
+        str(raw.get("outdir_name") or "pqc_optimize_trial").strip()
+        or "pqc_optimize_trial"
+    )
     safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in outdir_name)
     return Path(tempfile.mkdtemp(prefix=f"pleb_optimize_profiles_{safe}_"))
 
@@ -333,7 +338,11 @@ def _prepare_materialized_trial_dataset(
 
 
 def _single_trial_source_branch(pcfg: PipelineConfig) -> str | None:
-    branches = [str(b).strip() for b in list(getattr(pcfg, "branches", []) or []) if str(b).strip()]
+    branches = [
+        str(b).strip()
+        for b in list(getattr(pcfg, "branches", []) or [])
+        if str(b).strip()
+    ]
     reference = str(getattr(pcfg, "reference_branch", "") or "").strip()
     branch_set = list(dict.fromkeys([*branches, *([reference] if reference else [])]))
     if len(branch_set) != 1:

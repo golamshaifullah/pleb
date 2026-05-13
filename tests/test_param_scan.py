@@ -96,7 +96,9 @@ DM 10.0 1
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    )
 
 
 def test_run_param_scan_uses_branch_snapshot_without_checkout(

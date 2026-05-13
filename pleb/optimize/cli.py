@@ -74,11 +74,10 @@ def load_optimization_config(path: Path) -> OptimizationConfig:
             else _path(data["objective_path"])
         ),
         folds_path=(
-            None
-            if data.get("folds_path") in (None, "")
-            else _path(data["folds_path"])
+            None if data.get("folds_path") in (None, "") else _path(data["folds_path"])
         ),
-        out_dir=_path(data.get("out_dir", "results/optimize")) or Path("results/optimize"),
+        out_dir=_path(data.get("out_dir", "results/optimize"))
+        or Path("results/optimize"),
         study_name=str(data.get("study_name", "pqc_optimize")),
         baseline_run_dir=(
             None

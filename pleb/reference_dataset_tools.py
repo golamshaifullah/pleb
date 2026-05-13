@@ -115,5 +115,7 @@ def write_reference_manifest(
     }
     if metadata:
         payload["metadata"] = metadata
-    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return manifest_path

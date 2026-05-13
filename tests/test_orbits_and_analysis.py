@@ -90,7 +90,9 @@ TASC 50000.0
     assert math.isclose(float(out["ELL1_t0"]), 50000.0, abs_tol=1e-10)
 
 
-def test_write_binary_analysis_requires_branch_roots_for_multi_branch(tmp_path: Path) -> None:
+def test_write_binary_analysis_requires_branch_roots_for_multi_branch(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(ValueError, match="branch_dataset_roots"):
         write_binary_analysis(
             home_dir=tmp_path / "unused",

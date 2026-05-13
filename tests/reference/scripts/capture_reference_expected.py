@@ -5,7 +5,10 @@ import argparse
 import shutil
 from pathlib import Path
 
-from pleb.reference_dataset_tools import stage_expected_outputs, write_reference_manifest
+from pleb.reference_dataset_tools import (
+    stage_expected_outputs,
+    write_reference_manifest,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,7 +23,9 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="File or directory path relative to source-root to capture.",
     )
-    parser.add_argument("--clean", action="store_true", help="Remove existing expected/ before copying.")
+    parser.add_argument(
+        "--clean", action="store_true", help="Remove existing expected/ before copying."
+    )
     return parser
 
 

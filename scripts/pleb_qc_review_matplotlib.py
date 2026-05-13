@@ -48,7 +48,6 @@ from pleb.qc_review import (
     available_tempo2_general2_columns,
 )
 
-
 REVIEW_ACTIONS = (
     "mark_bad",
     "mark_event",
@@ -193,7 +192,10 @@ def _parse_args() -> argparse.Namespace:
 def _default_paths(run_dir: str) -> tuple[Path, Path]:
     root = Path(run_dir or ".").expanduser()
     review_dir = root / "qc_review"
-    return review_dir / "manual_qc_overrides.csv", review_dir / "reviewed_current_qc.csv"
+    return (
+        review_dir / "manual_qc_overrides.csv",
+        review_dir / "reviewed_current_qc.csv",
+    )
 
 
 def _normalise_scalar(value: object) -> str:
@@ -302,7 +304,9 @@ def residual_column_options(columns: Sequence[str]) -> list[str]:
     return options
 
 
-def _header_with_virtual_tempo2_columns(csv_path: Path, root_dir: Path, header: Sequence[str]) -> list[str]:
+def _header_with_virtual_tempo2_columns(
+    csv_path: Path, root_dir: Path, header: Sequence[str]
+) -> list[str]:
     extra = available_tempo2_general2_columns(csv_path, root=root_dir)
     out = [str(c) for c in header]
     for col in extra:
@@ -351,7 +355,9 @@ def infer_auto_decision(df: pd.DataFrame) -> pd.Series:
     return out
 
 
-def _series_or_default(df: pd.DataFrame, col: str | None, default: object = "") -> pd.Series:
+def _series_or_default(
+    df: pd.DataFrame, col: str | None, default: object = ""
+) -> pd.Series:
     if col is None or col not in df.columns:
         return pd.Series([default] * len(df), index=df.index)
     return df[col]
@@ -423,8 +429,12 @@ def load_qc_narrow(
     out["auto_decision"] = infer_auto_decision(out)
 
     out["mjd"] = pd.to_numeric(_series_or_default(out, time_col), errors="coerce")
-    out["residual"] = pd.to_numeric(_series_or_default(out, residual_col), errors="coerce")
-    out["uncertainty"] = pd.to_numeric(_series_or_default(out, unc_col), errors="coerce")
+    out["residual"] = pd.to_numeric(
+        _series_or_default(out, residual_col), errors="coerce"
+    )
+    out["uncertainty"] = pd.to_numeric(
+        _series_or_default(out, unc_col), errors="coerce"
+    )
     out["freq"] = pd.to_numeric(_series_or_default(out, freq_col), errors="coerce")
     out["backend"] = _series_or_default(out, backend_col).fillna("").astype(str)
     out["timfile"] = _series_or_default(out, timfile_col).fillna("").astype(str)
@@ -440,7 +450,16 @@ def load_qc_narrow(
     # Vectorizing the hash is awkward; this still avoids the old full-row dict
     # conversion and hashes only narrow identity fields.
     records = out[
-        ["qc_csv", "row_index", "pulsar", "variant", "timfile", "mjd", "freq", "backend"]
+        [
+            "qc_csv",
+            "row_index",
+            "pulsar",
+            "variant",
+            "timfile",
+            "mjd",
+            "freq",
+            "backend",
+        ]
     ].to_dict("records")
     out["review_id"] = [make_review_id(r) for r in records]
     return out
@@ -465,10 +484,14 @@ def load_overrides(path: Path | None) -> pd.DataFrame:
 def validate_overrides(overrides: pd.DataFrame) -> None:
     if overrides.empty:
         return
-    actions = overrides.get("manual_action", pd.Series(dtype=object)).fillna("").astype(str)
+    actions = (
+        overrides.get("manual_action", pd.Series(dtype=object)).fillna("").astype(str)
+    )
     invalid = sorted(set(actions) - set(REVIEW_ACTIONS) - {""})
     if invalid:
-        raise ValueError(f"Unsupported manual_action values {invalid}; allowed: {', '.join(REVIEW_ACTIONS)}")
+        raise ValueError(
+            f"Unsupported manual_action values {invalid}; allowed: {', '.join(REVIEW_ACTIONS)}"
+        )
 
 
 def write_overrides(overrides: pd.DataFrame, path: Path) -> Path:
@@ -496,21 +519,34 @@ def _latest_effective_overrides(overrides: pd.DataFrame) -> pd.DataFrame:
     return latest.drop(columns=["_order"], errors="ignore")
 
 
-def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.DataFrame:
+def apply_overrides(
+    qc_df: pd.DataFrame, overrides: pd.DataFrame | None
+) -> pd.DataFrame:
     out = qc_df.copy()
     if "auto_decision" not in out.columns:
         out["auto_decision"] = infer_auto_decision(out)
 
-    out["reviewed_decision"] = out["auto_decision"].fillna("KEEP").astype(str).str.upper()
+    out["reviewed_decision"] = (
+        out["auto_decision"].fillna("KEEP").astype(str).str.upper()
+    )
     out["manual_action"] = ""
     out["manual_reason"] = ""
     out["manual_reviewer"] = ""
     out["manual_reviewed_at"] = ""
     out["manual_override_id"] = ""
 
-    latest = _latest_effective_overrides(overrides if overrides is not None else empty_overrides())
+    latest = _latest_effective_overrides(
+        overrides if overrides is not None else empty_overrides()
+    )
     if not latest.empty:
-        cols = ["review_id", "override_id", "manual_action", "manual_reason", "reviewer", "reviewed_at"]
+        cols = [
+            "review_id",
+            "override_id",
+            "manual_action",
+            "manual_reason",
+            "reviewer",
+            "reviewed_at",
+        ]
         override_latest = latest[cols].rename(
             columns={
                 "override_id": "_override_id",
@@ -526,7 +562,9 @@ def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.D
         merged["manual_action"] = action
         merged["manual_reason"] = merged["_override_reason"].fillna("").astype(str)
         merged["manual_reviewer"] = merged["_override_reviewer"].fillna("").astype(str)
-        merged["manual_reviewed_at"] = merged["_override_reviewed_at"].fillna("").astype(str)
+        merged["manual_reviewed_at"] = (
+            merged["_override_reviewed_at"].fillna("").astype(str)
+        )
         merged["manual_override_id"] = merged["_override_id"].fillna("").astype(str)
 
         reviewed = merged["reviewed_decision"].copy()
@@ -534,7 +572,9 @@ def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.D
         reviewed.loc[action == "mark_event"] = "EVENT"
         reviewed.loc[action == "keep"] = "KEEP"
         reviewed.loc[action == "clear_auto_bad"] = "KEEP"
-        reviewed.loc[action == "clear_manual"] = merged.loc[action == "clear_manual", "auto_decision"]
+        reviewed.loc[action == "clear_manual"] = merged.loc[
+            action == "clear_manual", "auto_decision"
+        ]
         merged["reviewed_decision"] = reviewed.fillna("KEEP").astype(str).str.upper()
 
         out = merged.drop(
@@ -548,8 +588,12 @@ def apply_overrides(qc_df: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.D
             errors="ignore",
         )
 
-    out["reviewed_bad_point"] = out["reviewed_decision"].eq("BAD_TOA") | out["reviewed_decision"].eq("REVIEW_EVENT")
-    out["reviewed_event_member"] = out["reviewed_decision"].eq("EVENT") | out["reviewed_decision"].eq("REVIEW_EVENT")
+    out["reviewed_bad_point"] = out["reviewed_decision"].eq("BAD_TOA") | out[
+        "reviewed_decision"
+    ].eq("REVIEW_EVENT")
+    out["reviewed_event_member"] = out["reviewed_decision"].eq("EVENT") | out[
+        "reviewed_decision"
+    ].eq("REVIEW_EVENT")
     out["reviewed_keep"] = out["reviewed_decision"].eq("KEEP")
     return out
 
@@ -569,7 +613,9 @@ def make_override_rows(
     out_rows: list[dict[str, object]] = []
     for _, row in rows.iterrows():
         override_id = hashlib.sha1(
-            f"{row.get('review_id','')}\x1f{action}\x1f{timestamp}\x1f{len(out_rows)}".encode("utf-8")
+            f"{row.get('review_id','')}\x1f{action}\x1f{timestamp}\x1f{len(out_rows)}".encode(
+                "utf-8"
+            )
         ).hexdigest()[:16]
         out_rows.append(
             {
@@ -654,9 +700,15 @@ def _filter_view(
     if backends:
         view = view[view["backend"].astype(str).isin(backends)]
     if only_suspicious:
-        view = view[view["reviewed_decision"].astype(str).str.upper().isin(IMPORTANT_DECISIONS) | (view["manual_action"].astype(str) != "")]
+        view = view[
+            view["reviewed_decision"].astype(str).str.upper().isin(IMPORTANT_DECISIONS)
+            | (view["manual_action"].astype(str) != "")
+        ]
     if abs_resid_min is not None and abs_resid_min > 0:
-        view = view[pd.to_numeric(view["residual"], errors="coerce").abs() >= float(abs_resid_min)]
+        view = view[
+            pd.to_numeric(view["residual"], errors="coerce").abs()
+            >= float(abs_resid_min)
+        ]
     return view
 
 
@@ -671,7 +723,9 @@ def _plot_sample(
         return plot_df
 
     decision = plot_df["reviewed_decision"].fillna("KEEP").astype(str).str.upper()
-    important = decision.isin(IMPORTANT_DECISIONS) | (plot_df["manual_action"].fillna("").astype(str) != "")
+    important = decision.isin(IMPORTANT_DECISIONS) | (
+        plot_df["manual_action"].fillna("").astype(str) != ""
+    )
 
     important_df = plot_df[important].copy()
     keep_df = plot_df[~important].copy()
@@ -686,7 +740,14 @@ def _make_matplotlib_figure(plot_df: pd.DataFrame, *, residual_col: str) -> plt.
     fig, ax = plt.subplots(figsize=(11.5, 5.8), constrained_layout=True)
 
     if plot_df.empty:
-        ax.text(0.5, 0.5, "No plottable rows", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "No plottable rows",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
         ax.set_xlabel("MJD")
         ax.set_ylabel(residual_col)
         return fig
@@ -778,14 +839,27 @@ def _load_full_current_and_apply(
     out["row_index"] = np.arange(len(out), dtype=int)
     out["auto_decision"] = infer_auto_decision(out)
     out["mjd"] = pd.to_numeric(_series_or_default(out, time_col), errors="coerce")
-    out["residual"] = pd.to_numeric(_series_or_default(out, residual_col), errors="coerce")
-    out["uncertainty"] = pd.to_numeric(_series_or_default(out, unc_col), errors="coerce")
+    out["residual"] = pd.to_numeric(
+        _series_or_default(out, residual_col), errors="coerce"
+    )
+    out["uncertainty"] = pd.to_numeric(
+        _series_or_default(out, unc_col), errors="coerce"
+    )
     out["freq"] = pd.to_numeric(_series_or_default(out, freq_col), errors="coerce")
     out["backend"] = _series_or_default(out, backend_col).fillna("").astype(str)
     out["timfile"] = _series_or_default(out, timfile_col).fillna("").astype(str)
 
     records = out[
-        ["qc_csv", "row_index", "pulsar", "variant", "timfile", "mjd", "freq", "backend"]
+        [
+            "qc_csv",
+            "row_index",
+            "pulsar",
+            "variant",
+            "timfile",
+            "mjd",
+            "freq",
+            "backend",
+        ]
     ].to_dict("records")
     out["review_id"] = [make_review_id(r) for r in records]
     return apply_overrides(out, overrides)
@@ -802,17 +876,30 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Inputs")
-        run_dir_text = st.text_input("Run directory or QC CSV", value=args.run_dir or "")
+        run_dir_text = st.text_input(
+            "Run directory or QC CSV", value=args.run_dir or ""
+        )
         if not run_dir_text:
-            st.info("Enter a run directory containing `*_qc.csv` files, or a single QC CSV.")
+            st.info(
+                "Enter a run directory containing `*_qc.csv` files, or a single QC CSV."
+            )
             return
 
         run_path = Path(run_dir_text).expanduser()
         root_dir = run_path.parent if run_path.is_file() else run_path
 
         default_overrides, default_reviewed = _default_paths(str(root_dir))
-        overrides_path = Path(st.text_input("Overrides CSV", value=args.overrides or str(default_overrides))).expanduser()
-        reviewed_out = Path(st.text_input("Reviewed current QC output", value=args.reviewed_out or str(default_reviewed))).expanduser()
+        overrides_path = Path(
+            st.text_input(
+                "Overrides CSV", value=args.overrides or str(default_overrides)
+            )
+        ).expanduser()
+        reviewed_out = Path(
+            st.text_input(
+                "Reviewed current QC output",
+                value=args.reviewed_out or str(default_reviewed),
+            )
+        ).expanduser()
 
         reload_clicked = st.button("Reload file list / clear data cache")
         if reload_clicked:
@@ -924,8 +1011,12 @@ def main() -> None:
     reviewed = apply_overrides(qc, overrides)
 
     with st.sidebar:
-        decisions = sorted(str(x) for x in reviewed["reviewed_decision"].dropna().unique())
-        selected_decisions = st.multiselect("Decision filter", decisions, default=decisions)
+        decisions = sorted(
+            str(x) for x in reviewed["reviewed_decision"].dropna().unique()
+        )
+        selected_decisions = st.multiselect(
+            "Decision filter", decisions, default=decisions
+        )
         backends = sorted(str(x) for x in reviewed["backend"].dropna().unique())
         selected_backends = st.multiselect("Backend filter", backends, default=[])
 
@@ -949,7 +1040,9 @@ def main() -> None:
         "no display-time backend/JUMP centering is applied."
     )
 
-    plot_df = _plot_sample(view, max_keep_points=max_keep_plot, plot_all_keep=plot_all_keep)
+    plot_df = _plot_sample(
+        view, max_keep_points=max_keep_plot, plot_all_keep=plot_all_keep
+    )
     if len(plot_df) < len(view.dropna(subset=["mjd", "residual"])):
         st.caption(
             f"Plotting {len(plot_df):,} sampled/important rows. "
@@ -966,8 +1059,14 @@ def main() -> None:
         only_suspicious=only_suspicious,
         abs_resid_min=abs_resid_min,
     )
-    table_view = table_view.sort_values(["reviewed_decision", "mjd"], ascending=[True, True])
-    table_show = table_view[_compact_columns(table_view)].head(table_limit).reset_index(drop=True)
+    table_view = table_view.sort_values(
+        ["reviewed_decision", "mjd"], ascending=[True, True]
+    )
+    table_show = (
+        table_view[_compact_columns(table_view)]
+        .head(table_limit)
+        .reset_index(drop=True)
+    )
 
     st.subheader("Select rows to review")
     st.caption(

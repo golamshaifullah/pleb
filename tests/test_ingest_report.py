@@ -124,7 +124,9 @@ def test_ingest_verify_respects_pulsar_filter(tmp_path: Path) -> None:
     stale_all_tim = stale_dir / "J9999+0000_all.tim"
     stale_all_tim.write_text("INCLUDE tims/not_the_new_file.tim\n", encoding="utf-8")
     (stale_dir / "tims").mkdir()
-    (stale_dir / "tims" / "EFF.P200.1400.tim").write_text("FORMAT 1\n", encoding="utf-8")
+    (stale_dir / "tims" / "EFF.P200.1400.tim").write_text(
+        "FORMAT 1\n", encoding="utf-8"
+    )
 
     ingest_dataset(
         mapping_path,
@@ -134,7 +136,10 @@ def test_ingest_verify_respects_pulsar_filter(tmp_path: Path) -> None:
     )
 
     assert (output_root / "J1234+5678" / "J1234+5678_all.tim").exists()
-    assert stale_all_tim.read_text(encoding="utf-8") == "INCLUDE tims/not_the_new_file.tim\n"
+    assert (
+        stale_all_tim.read_text(encoding="utf-8")
+        == "INCLUDE tims/not_the_new_file.tim\n"
+    )
 
 
 def test_commit_ingest_changes_isolated_and_scoped(tmp_path: Path) -> None:

@@ -580,7 +580,9 @@ def run_compare_public(argv: list[str] | None) -> int:
         out_dir=Path(args.out_dir),
         providers_path=Path(args.providers) if args.providers else None,
         cache_dir=Path(args.cache_dir) if args.cache_dir else None,
-        local_dataset_root=Path(args.local_dataset_root) if args.local_dataset_root else None,
+        local_dataset_root=(
+            Path(args.local_dataset_root) if args.local_dataset_root else None
+        ),
         local_branch=str(args.local_branch).strip() if args.local_branch else None,
         local_pulsars=args.pulsar or None,
         alias_mapping_path=Path(args.alias_mapping) if args.alias_mapping else None,

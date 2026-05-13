@@ -51,7 +51,6 @@ from pleb.qc_review import (
     write_reviewed_qc,
 )
 
-
 DEFAULT_MAX_KEEP_POINTS = 3000
 DEFAULT_TABLE_PREVIEW_ROWS = 500
 IMPORTANT_DECISIONS = {"BAD_TOA", "REVIEW_EVENT", "EVENT"}
@@ -175,13 +174,13 @@ def _sync_reviewed_output_default(
         return chosen
 
     current = str(st.session_state.get("reviewed_out_path", "")).strip()
-    previous_auto = str(
-        st.session_state.get("_reviewed_out_auto_default", "")
-    ).strip()
+    previous_auto = str(st.session_state.get("_reviewed_out_auto_default", "")).strip()
     if not current or current == previous_auto:
         st.session_state["reviewed_out_path"] = str(auto_default)
     st.session_state["_reviewed_out_auto_default"] = str(auto_default)
-    return Path(str(st.session_state.get("reviewed_out_path", auto_default))).expanduser()
+    return Path(
+        str(st.session_state.get("reviewed_out_path", auto_default))
+    ).expanduser()
 
 
 def _resolved_path_key(path: str | Path) -> str:
@@ -578,7 +577,13 @@ def _add_trace(
         return
 
     custom_cols = ["review_id"]
-    for optional in ("backend", "timfile", "freq", "auto_decision", "reviewed_decision"):
+    for optional in (
+        "backend",
+        "timfile",
+        "freq",
+        "auto_decision",
+        "reviewed_decision",
+    ):
         if optional in frame.columns:
             custom_cols.append(optional)
 
@@ -592,17 +597,17 @@ def _add_trace(
     for idx, col in enumerate(custom_cols[1:], start=1):
         hovertemplate += f"<br>{col}=%{{customdata[{idx}]}}"
     hovertemplate += "<extra></extra>"
-    
+
     error_y = None
     if "_plot_error" in frame.columns and frame["_plot_error"].notna().any():
         error_y = {
             "type": "data",
-            "array": pd.to_numeric(frame["_plot_error"]*1e-6, errors="coerce"),
+            "array": pd.to_numeric(frame["_plot_error"] * 1e-6, errors="coerce"),
             "visible": True,
             "width": 0,
             "thickness": 0.5,
         }
-        
+
     fig.add_trace(
         go.Scattergl(
             x=pd.to_numeric(frame["_plot_x"], errors="coerce"),
@@ -725,9 +730,9 @@ def _select_current_pulsar(manifest: pd.DataFrame) -> str:
     if chosen_pulsar != str(st.session_state.get("current_pulsar", "")):
         st.session_state["current_pulsar"] = chosen_pulsar
         st.session_state["current_qc_csv"] = str(
-            manifest.loc[
-                manifest["pulsar"].astype(str) == chosen_pulsar, "path"
-            ].iloc[0]
+            manifest.loc[manifest["pulsar"].astype(str) == chosen_pulsar, "path"].iloc[
+                0
+            ]
         )
         st.session_state["selected_review_ids"] = []
     return str(st.session_state["current_pulsar"])
@@ -807,7 +812,9 @@ def main() -> None:
         run_dir = st.text_input("Run directory", value=args.run_dir or "")
         default_overrides, _default_reviewed = _default_paths(run_dir or ".")
         overrides_path = Path(
-            st.text_input("Overrides CSV", value=args.overrides or str(default_overrides))
+            st.text_input(
+                "Overrides CSV", value=args.overrides or str(default_overrides)
+            )
         ).expanduser()
         reviewer = st.text_input("Reviewer", value="")
         reason = st.text_input("Reason", value="manual review")
@@ -869,7 +876,11 @@ def main() -> None:
         variant = str(row.get("variant", "base") or "base")
         path_str = str(row["path"])
         status = availability_by_path.get(path_str, {})
-        tag = "post-fit" if bool(status.get("postfit_available", False)) else "no post-fit"
+        tag = (
+            "post-fit"
+            if bool(status.get("postfit_available", False))
+            else "no post-fit"
+        )
         if int(variant_counts.get(variant, 0)) > 1:
             base_label = f"{variant} | {Path(path_str).name}"
         else:
@@ -977,7 +988,11 @@ def main() -> None:
                 "Available residual columns here: " + ", ".join(residual_options) + "."
             )
             if other_postfit_variants:
-                msg += " Variants with post-fit residuals: " + ", ".join(other_postfit_variants) + "."
+                msg += (
+                    " Variants with post-fit residuals: "
+                    + ", ".join(other_postfit_variants)
+                    + "."
+                )
             st.warning(msg)
 
         load_error = str(current_status.get("load_error", "") or "").strip()
@@ -996,7 +1011,9 @@ def main() -> None:
                     "The dropdown hides all-NaN `tempo2_post*` columns by design."
                 )
 
-        decisions = sorted(str(x) for x in reviewed["reviewed_decision"].dropna().unique())
+        decisions = sorted(
+            str(x) for x in reviewed["reviewed_decision"].dropna().unique()
+        )
         selected_decisions = st.multiselect(
             "Reviewed decision",
             decisions,
@@ -1150,7 +1167,9 @@ def main() -> None:
             shown = view[_compact_columns(view)].head(table_preview_rows)
             st.dataframe(shown, use_container_width=True, height=360)
             if len(view) > len(shown):
-                st.caption(f"Showing first {len(shown):,} of {len(view):,} visible rows.")
+                st.caption(
+                    f"Showing first {len(shown):,} of {len(view):,} visible rows."
+                )
     else:
         st.caption(
             "Visible-row preview is hidden for speed. Enable it in the sidebar if needed."

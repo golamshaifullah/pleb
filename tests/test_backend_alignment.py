@@ -73,7 +73,9 @@ def test_estimate_pairwise_backend_offsets_is_robust_to_outliers() -> None:
     assert templates["B"].score == pytest.approx(1.0)
 
 
-def test_select_backend_alignment_reference_prefers_well_connected_precise_backend() -> None:
+def test_select_backend_alignment_reference_prefers_well_connected_precise_backend() -> (
+    None
+):
     offsets = {"A": 0.0, "B": 1.0, "C": -0.7, "D": 1.8}
     toas = {
         "A": list(range(0, 40)),
@@ -101,13 +103,16 @@ def test_select_backend_alignment_reference_prefers_well_connected_precise_backe
     offset_table = result.offset_table().set_index("backend")
     for backend, true_offset in offsets.items():
         truth = true_offset - offsets["A"]
-        assert offset_table.loc[backend, "offset_relative_to_reference"] == pytest.approx(
-            truth, abs=0.35
-        )
-    assert offset_table.loc["A", "uncertainty_relative_to_reference"] == pytest.approx(0.0)
-    assert result.reference_table().iloc[0]["weighted_connectivity"] >= result.reference_table().iloc[-1][
-        "weighted_connectivity"
-    ]
+        assert offset_table.loc[
+            backend, "offset_relative_to_reference"
+        ] == pytest.approx(truth, abs=0.35)
+    assert offset_table.loc["A", "uncertainty_relative_to_reference"] == pytest.approx(
+        0.0
+    )
+    assert (
+        result.reference_table().iloc[0]["weighted_connectivity"]
+        >= result.reference_table().iloc[-1]["weighted_connectivity"]
+    )
 
 
 def test_select_backend_alignment_reference_rejects_disconnected_graph() -> None:

@@ -269,10 +269,7 @@ JUMP -sys SYS1 0 0
 
 
 def test_parse_tim_flags_preserves_valueless_flags() -> None:
-    line = (
-        "toa 1400 55000 1 1 "
-        "-xyz -aaa -bcd -pta EPTA -padd -0.193655 -gis"
-    )
+    line = "toa 1400 55000 1 1 " "-xyz -aaa -bcd -pta EPTA -padd -0.193655 -gis"
 
     flags = parse_tim_flags_from_line(line)
 
@@ -459,12 +456,7 @@ def test_apply_pqc_outliers_can_write_pqc_and_explicit_flags_together(
     tim = psr_dir / "tims" / "BACKEND.tim"
     _write(
         tim,
-        (
-            "FORMAT 1\n"
-            "f 1400 56000 1 1\n"
-            "f 1400 56001 1 1\n"
-            "f 1400 56002 1 1\n"
-        ),
+        ("FORMAT 1\n" "f 1400 56000 1 1\n" "f 1400 56001 1 1\n" "f 1400 56002 1 1\n"),
     )
 
     qc_root = tmp_path / "qc"
@@ -495,7 +487,8 @@ def test_apply_pqc_outliers_can_write_pqc_and_explicit_flags_together(
     assert rep["explicit_flagged"] == 3
 
     flags_by_mjd = {
-        mjd: parse_tim_flags_from_line(raw) for mjd, raw in _toa_lines_by_mjd(tim).items()
+        mjd: parse_tim_flags_from_line(raw)
+        for mjd, raw in _toa_lines_by_mjd(tim).items()
     }
 
     assert flags_by_mjd["56000"]["-pqc"] == "good"
@@ -644,9 +637,7 @@ def test_find_qc_csvs_resolves_nested_run_layout(tmp_path: Path) -> None:
         / "qc"
     )
     _write(
-        actual_qc_root
-        / "j1909_step4_detect_selected"
-        / f"{psr}.combined_qc.csv",
+        actual_qc_root / "j1909_step4_detect_selected" / f"{psr}.combined_qc.csv",
         "_timfile,mjd,bad_point\nBACKEND.tim,55000,False\n",
     )
 
@@ -703,11 +694,13 @@ def test_apply_pqc_outliers_can_merge_variant_specific_qc_csvs(
         f"{psr}.legacy_qc.csv",
         f"{psr}.new_qc.csv",
     ]
-    assert legacy_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
-        "C QC_OUTLIER "
+    assert (
+        legacy_tim.read_text(encoding="utf-8")
+        .splitlines()[1]
+        .startswith("C QC_OUTLIER ")
     )
-    assert new_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
-        "C QC_OUTLIER "
+    assert (
+        new_tim.read_text(encoding="utf-8").splitlines()[1].startswith("C QC_OUTLIER ")
     )
 
 
@@ -896,8 +889,7 @@ def test_build_variant_reference_jump_pars_uses_underscore_outputs(
     )
     _write(
         psr_dir / "tims" / "BACKEND.tim",
-        "toa 1400 55000 1 1 -sys SYSA\n"
-        "toa 1400 55001 2 1 -sys SYSB\n",
+        "toa 1400 55000 1 1 -sys SYSA\n" "toa 1400 55001 2 1 -sys SYSB\n",
     )
 
     monkeypatch.setattr("pleb.dataset_fix.build_singularity_prefix", lambda *a, **k: [])
@@ -1089,7 +1081,9 @@ def test_rank_reference_system_rows_uses_precision_after_rms_and_tspan() -> None
     assert ranked[0]["system"] == "SYS_PRECISE"
 
 
-def test_rank_reference_system_rows_uses_cadence_after_rms_tspan_and_precision() -> None:
+def test_rank_reference_system_rows_uses_cadence_after_rms_tspan_and_precision() -> (
+    None
+):
     rows = [
         {
             "system": "SYS_DENSE",
@@ -1147,7 +1141,9 @@ def test_rank_reference_system_rows_prefers_mjd_overlap_over_backend_overlap() -
     assert ranked[0]["system"] == "SYS_MORE_MJDS"
 
 
-def test_rank_reference_system_rows_uses_backend_overlap_when_other_metrics_tie() -> None:
+def test_rank_reference_system_rows_uses_backend_overlap_when_other_metrics_tie() -> (
+    None
+):
     rows = [
         {
             "system": "SYS_FEWER_BACKENDS",

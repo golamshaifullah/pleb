@@ -111,17 +111,13 @@ def temporary_detached_worktree(repo_root: Path, ref: str) -> Iterator[Path]:
     try:
         yield worktree_path
     finally:
-        removed = False
         rm = _git(repo_root, "worktree", "remove", str(worktree_path))
-        if rm.returncode == 0:
-            removed = True
-        else:
+        if rm.returncode != 0:
             rm_force = _git(
                 repo_root, "worktree", "remove", "--force", str(worktree_path)
             )
             if rm_force.returncode == 0:
                 _git(repo_root, "worktree", "prune")
-                removed = True
             else:
                 logger.warning(
                     "Failed to remove temporary worktree %s: %s | force remove failed: %s",
