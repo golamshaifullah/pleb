@@ -84,6 +84,28 @@ def test_keep_override_clears_automatic_bad(tmp_path: Path) -> None:
     )
 
 
+def test_auto_decision_includes_new_feature_flags(tmp_path: Path) -> None:
+    qc_path = tmp_path / "J0000+0000_qc.csv"
+    pd.DataFrame(
+        {
+            "mjd": [58000.0, 58001.0, 58002.0, 58003.0],
+            "resid_us": [0.1, 0.2, 0.3, 0.4],
+            "sigma_us": [1.0, 1.0, 1.0, 1.0],
+            "freq": [1400.0, 1400.0, 1400.0, 1400.0],
+            "backend": ["A", "A", "A", "A"],
+            "_timfile": ["tims/a.tim"] * 4,
+            "bad_ou": [True, False, False, False],
+            "bad_hard": [False, True, False, False],
+            "step_id": [-1, -1, 0, -1],
+            "dm_step_id": [-1, -1, -1, "dm-step"],
+        }
+    ).to_csv(qc_path, index=False)
+
+    qc = load_qc_frames(tmp_path)
+
+    assert list(qc["auto_decision"]) == ["BAD_TOA", "BAD_TOA", "EVENT", "EVENT"]
+
+
 def test_override_csv_round_trip(tmp_path: Path) -> None:
     qc_path = tmp_path / "J0000+0000_qc.csv"
     _write_qc(qc_path)

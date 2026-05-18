@@ -156,6 +156,8 @@ TIMFILE_COLUMNS = (
 BAD_COLUMNS = (
     "bad_point",
     "bad_mad",
+    "bad_ou",
+    "bad_hard",
     "robust_outlier",
     "robust_global_outlier",
     "outlier_any",
@@ -173,6 +175,12 @@ EVENT_COLUMNS = (
     "exp_dip_member",
     "step_member",
     "dm_step_member",
+)
+
+EVENT_ID_COLUMNS = (
+    "transient_id",
+    "step_id",
+    "dm_step_id",
 )
 
 IMPORTANT_DECISIONS = {"BAD_TOA", "REVIEW_EVENT", "EVENT"}
@@ -328,7 +336,18 @@ def _bool_series(df: pd.DataFrame, col: str) -> pd.Series:
     if pd.api.types.is_numeric_dtype(s):
         return pd.to_numeric(s, errors="coerce").fillna(0) != 0
     text = s.fillna("").astype(str).str.strip().str.lower()
-    return text.isin({"1", "true", "t", "yes", "y", "bad", "outlier"})
+    return text.isin({"1", "true", "t", "yes", "y", "bad", "outlier", "event"})
+
+
+def _id_member_series(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(False, index=df.index)
+    raw = df[col]
+    numeric = pd.to_numeric(raw, errors="coerce")
+    text = raw.fillna("").astype(str).str.strip().str.lower()
+    return (numeric.fillna(-1) >= 0) | (
+        numeric.isna() & ~text.isin({"", "nan", "none", "null", "-1"})
+    )
 
 
 def infer_auto_decision(df: pd.DataFrame) -> pd.Series:
@@ -344,9 +363,8 @@ def infer_auto_decision(df: pd.DataFrame) -> pd.Series:
     for col in EVENT_COLUMNS:
         event |= _bool_series(df, col)
 
-    if "transient_id" in df.columns:
-        tid = pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1)
-        event |= tid >= 0
+    for col in EVENT_ID_COLUMNS:
+        event |= _id_member_series(df, col)
 
     out = pd.Series("KEEP", index=df.index, dtype=object)
     out.loc[bad & ~event] = "BAD_TOA"

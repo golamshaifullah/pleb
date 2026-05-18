@@ -77,6 +77,31 @@ def test_numeric_axis_options_prioritises_mjd_uncertainty_and_phase(
     assert "_plot_residual" not in options
 
 
+def test_feature_columns_and_masks_include_new_pqc_features(monkeypatch) -> None:
+    module, _ = _load_qc_review_script(monkeypatch)
+    df = pd.DataFrame(
+        {
+            "bad_ou": [True, False, False],
+            "bad_hard": [False, True, False],
+            "step_id": [-1, -1, 2],
+            "dm_step_id": ["", "dm-1", "-1"],
+            "orbital_phase_bad": [False, False, True],
+            "reviewed_bad_point": [False, False, True],
+        }
+    )
+
+    cols = module._feature_columns(df)
+
+    assert "bad_ou" in cols
+    assert "bad_hard" in cols
+    assert "step_id" in cols
+    assert "dm_step_id" in cols
+    assert "orbital_phase_bad" in cols
+    assert "reviewed_bad_point" not in cols
+    assert list(module._feature_mask(df, "step_id")) == [False, False, True]
+    assert list(module._feature_mask(df, "dm_step_id")) == [False, True, False]
+
+
 def test_default_reviewed_path_uses_selected_qc_basename(monkeypatch) -> None:
     module, _ = _load_qc_review_script(monkeypatch)
 

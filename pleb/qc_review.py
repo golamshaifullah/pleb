@@ -50,6 +50,8 @@ OVERRIDE_COLUMNS = [
 BAD_COLUMNS = (
     "bad_point",
     "bad_mad",
+    "bad_ou",
+    "bad_hard",
     "robust_outlier",
     "robust_global_outlier",
     "outlier_any",
@@ -61,11 +63,18 @@ EVENT_COLUMNS = (
     "solar_event_member",
     "orbital_phase_bad",
     "eclipse_member",
+    "eclipse_event_member",
     "gaussian_bump_member",
     "glitch_member",
     "transient_member",
     "step_member",
     "dm_step_member",
+)
+
+EVENT_ID_COLUMNS = (
+    "transient_id",
+    "step_id",
+    "dm_step_id",
 )
 
 TIME_COLUMNS = (
@@ -215,7 +224,20 @@ def _bool_series(df: pd.DataFrame, col: str) -> pd.Series:
     if pd.api.types.is_numeric_dtype(s):
         return pd.to_numeric(s, errors="coerce").fillna(0) != 0
     text = s.fillna("").astype(str).str.strip().str.lower()
-    return text.isin({"1", "true", "t", "yes", "y", "bad", "outlier"})
+    return text.isin({"1", "true", "t", "yes", "y", "bad", "outlier", "event"})
+
+
+def _id_member_series(df: pd.DataFrame, col: str) -> pd.Series:
+    """Return True for rows assigned to a non-negative feature/event id."""
+
+    if col not in df.columns:
+        return pd.Series(False, index=df.index)
+    raw = df[col]
+    numeric = pd.to_numeric(raw, errors="coerce")
+    numeric_member = numeric.fillna(-1) >= 0
+    text = raw.fillna("").astype(str).str.strip().str.lower()
+    text_member = ~text.isin({"", "nan", "none", "null", "-1"})
+    return numeric_member | (numeric.isna() & text_member)
 
 
 def infer_auto_decision(df: pd.DataFrame) -> pd.Series:
@@ -237,9 +259,8 @@ def infer_auto_decision(df: pd.DataFrame) -> pd.Series:
     event = pd.Series(False, index=df.index)
     for col in EVENT_COLUMNS:
         event |= _bool_series(df, col)
-    if "transient_id" in df.columns:
-        tid = pd.to_numeric(df["transient_id"], errors="coerce").fillna(-1)
-        event |= tid >= 0
+    for col in EVENT_ID_COLUMNS:
+        event |= _id_member_series(df, col)
 
     decision = pd.Series("KEEP", index=df.index, dtype=object)
     decision.loc[event] = "EVENT"

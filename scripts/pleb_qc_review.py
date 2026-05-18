@@ -132,6 +132,38 @@ POSTFIT_COLUMNS = (
     "tempo2_postfit",
 )
 
+FEATURE_COLUMN_PREFERENCE = (
+    "bad_point",
+    "bad_mad",
+    "bad_ou",
+    "bad_hard",
+    "robust_outlier",
+    "robust_global_outlier",
+    "outlier_any",
+    "event_member",
+    "event_any",
+    "transient_id",
+    "solar_event_member",
+    "orbital_phase",
+    "orbital_phase_bad",
+    "eclipse_member",
+    "eclipse_event_member",
+    "gaussian_bump_member",
+    "glitch_member",
+    "step_id",
+    "dm_step_id",
+    "step_member",
+    "dm_step_member",
+    "solar_elongation_deg",
+    "freq_bin",
+)
+
+FEATURE_VALUE_COLUMNS = (
+    "orbital_phase",
+    "solar_elongation_deg",
+    "freq_bin",
+)
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(add_help=False)
@@ -384,6 +416,7 @@ def _compact_columns(df: pd.DataFrame) -> list[str]:
         "manual_action",
         "manual_reason",
     ]
+    cols.extend(_feature_columns(df))
     return [c for c in cols if c in df.columns]
 
 
@@ -468,6 +501,82 @@ def _numeric_axis_options(df: pd.DataFrame) -> list[str]:
     return options
 
 
+def _feature_columns(df: pd.DataFrame) -> list[str]:
+    """Return review-relevant PQC feature columns present in a table."""
+
+    cols: list[str] = []
+    for col in FEATURE_COLUMN_PREFERENCE:
+        if col in df.columns and col not in cols:
+            cols.append(col)
+
+    keywords = (
+        "bad",
+        "outlier",
+        "event",
+        "transient",
+        "glitch",
+        "bump",
+        "eclipse",
+        "orbital",
+        "solar",
+        "step",
+        "freq_bin",
+    )
+    for col in df.columns:
+        name = str(col).lower()
+        if col in cols or name.startswith(("reviewed_", "manual_", "auto_")):
+            continue
+        if any(keyword in name for keyword in keywords):
+            cols.append(str(col))
+    return cols
+
+
+def _filterable_feature_columns(df: pd.DataFrame) -> list[str]:
+    """Return feature columns that represent active flags or event IDs."""
+
+    value_cols = set(FEATURE_VALUE_COLUMNS)
+    return [col for col in _feature_columns(df) if col not in value_cols]
+
+
+def _boolish_feature_mask(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_bool_dtype(series):
+        return series.fillna(False).astype(bool)
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors="coerce").fillna(0) != 0
+    text = series.fillna("").astype(str).str.strip().str.lower()
+    return text.isin({"1", "true", "t", "yes", "y", "bad", "outlier", "event"})
+
+
+def _id_feature_mask(series: pd.Series) -> pd.Series:
+    numeric = pd.to_numeric(series, errors="coerce")
+    text = series.fillna("").astype(str).str.strip().str.lower()
+    return (numeric.fillna(-1) >= 0) | (
+        numeric.isna() & ~text.isin({"", "nan", "none", "null", "-1"})
+    )
+
+
+def _feature_mask(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(False, index=df.index)
+    if col.endswith("_id"):
+        return _id_feature_mask(df[col])
+    return _boolish_feature_mask(df[col])
+
+
+def _active_feature_labels(row: pd.Series, feature_cols: list[str]) -> str:
+    labels: list[str] = []
+    for col in feature_cols:
+        value = row.get(col)
+        if col.endswith("_id"):
+            text = "" if pd.isna(value) else str(value).strip()
+            if text and text.lower() not in {"nan", "none", "null", "-1"}:
+                labels.append(f"{col}={text}")
+            continue
+        if bool(_boolish_feature_mask(pd.Series([value])).iloc[0]):
+            labels.append(col)
+    return ", ".join(labels)
+
+
 def _filter_view(
     reviewed: pd.DataFrame,
     *,
@@ -475,6 +584,7 @@ def _filter_view(
     selected_variants: list[str],
     selected_decisions: list[str],
     selected_backends: list[str],
+    selected_features: list[str] | None = None,
 ) -> pd.DataFrame:
     view = reviewed
     if selected_pulsars and "pulsar" in view.columns:
@@ -485,6 +595,11 @@ def _filter_view(
         view = view[view["reviewed_decision"].astype(str).isin(selected_decisions)]
     if selected_backends and "backend" in view.columns:
         view = view[view["backend"].astype(str).isin(selected_backends)]
+    if selected_features:
+        mask = pd.Series(False, index=view.index)
+        for feature in selected_features:
+            mask |= _feature_mask(view, feature)
+        view = view[mask]
     return view
 
 
@@ -583,6 +698,7 @@ def _add_trace(
         "freq",
         "auto_decision",
         "reviewed_decision",
+        "_active_features",
     ):
         if optional in frame.columns:
             custom_cols.append(optional)
@@ -931,6 +1047,7 @@ def main() -> None:
         return
 
     reviewed = apply_overrides(qc_df, overrides_df)
+    filterable_feature_cols = _filterable_feature_columns(reviewed)
     residual_options = _residual_column_options(reviewed)
     if not residual_options:
         st.error(
@@ -1026,6 +1143,28 @@ def main() -> None:
             else []
         )
         selected_backends = st.multiselect("Backend", backend_values, default=[])
+        selected_features = st.multiselect(
+            "Require feature flag",
+            filterable_feature_cols,
+            default=[],
+            help=(
+                "Filter to rows where at least one selected PQC feature/event flag "
+                "is active. ID columns such as `step_id` and `dm_step_id` count as "
+                "active when they are non-negative/non-empty."
+            ),
+        )
+        if filterable_feature_cols:
+            with st.expander("Feature counts", expanded=False):
+                counts = pd.DataFrame(
+                    [
+                        {
+                            "feature": col,
+                            "active_rows": int(_feature_mask(reviewed, col).sum()),
+                        }
+                        for col in filterable_feature_cols
+                    ]
+                )
+                st.dataframe(counts, use_container_width=True, hide_index=True)
 
         st.header("Performance")
         plot_all_keep = st.checkbox("Plot all KEEP rows", value=False)
@@ -1057,7 +1196,15 @@ def main() -> None:
         selected_variants=[],
         selected_decisions=selected_decisions,
         selected_backends=selected_backends,
+        selected_features=selected_features,
     )
+    active_feature_cols = _filterable_feature_columns(view)
+    if active_feature_cols:
+        view = view.copy()
+        view["_active_features"] = [
+            _active_feature_labels(row, active_feature_cols)
+            for _, row in view.iterrows()
+        ]
     view = _attach_plot_columns(view, residual_col, x_axis_col)
 
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -1130,6 +1277,14 @@ def main() -> None:
     )
     selected_ids = [x.strip() for x in manual_ids.splitlines() if x.strip()]
     selected = selection_frame(reviewed, selected_ids)
+    if not selected.empty:
+        selected_feature_cols = _filterable_feature_columns(selected)
+        if selected_feature_cols:
+            selected = selected.copy()
+            selected["_active_features"] = [
+                _active_feature_labels(row, selected_feature_cols)
+                for _, row in selected.iterrows()
+            ]
     if not selected.empty and residual_col in selected.columns:
         selected = _attach_plot_columns(selected, residual_col, x_axis_col)
 
