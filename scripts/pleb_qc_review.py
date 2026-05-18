@@ -55,7 +55,9 @@ DEFAULT_MAX_KEEP_POINTS = 3000
 DEFAULT_TABLE_PREVIEW_ROWS = 500
 IMPORTANT_DECISIONS = {"BAD_TOA", "REVIEW_EVENT", "EVENT"}
 PLOT_KEY = "qc_review_residual_plot_fast"
-PLOT_SELECTION_MODES = ("points", "box", "lasso")
+PLOT_SELECTION_MODES = ("box", "lasso")
+PLOT_DEFAULT_DRAGMODE = "select"
+PLOT_MODEBAR_BUTTONS_TO_ADD = ("select2d", "lasso2d")
 X_AXIS_PREFERENCE = (
     "mjd",
     "uncertainty",
@@ -786,8 +788,7 @@ def _make_fast_scatter(
 
     fig.update_layout(
         title=title,
-        clickmode="event+select",
-        dragmode="lasso",
+        dragmode=PLOT_DEFAULT_DRAGMODE,
         height=540,
         hovermode="closest",
         uirevision="pleb-qc-review-fast-session-state",
@@ -1256,12 +1257,13 @@ def main() -> None:
             config={
                 "displayModeBar": True,
                 "doubleClick": "reset+autosize",
+                "modeBarButtonsToAdd": list(PLOT_MODEBAR_BUTTONS_TO_ADD),
             },
             use_container_width=True,
         )
         st.caption(
-            "Selection stays enabled. Use click for single points, or the always-visible "
-            "mode bar to switch between box, lasso, and zoom."
+            "Box selection is the default. Use the always-visible mode bar to switch "
+            "between box, lasso, pan, and zoom."
         )
 
     clear_sel_col, _spacer = st.columns([1, 5])

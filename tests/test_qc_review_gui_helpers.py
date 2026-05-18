@@ -53,6 +53,15 @@ def test_sync_plot_selection_copies_plot_widget_state(monkeypatch) -> None:
     assert fake_streamlit.session_state["selected_review_ids"] == ["rid-42"]
 
 
+def test_plot_selection_defaults_to_box_and_keeps_lasso_available(monkeypatch) -> None:
+    module, _ = _load_qc_review_script(monkeypatch)
+
+    assert module.PLOT_SELECTION_MODES == ("box", "lasso")
+    assert module.PLOT_DEFAULT_DRAGMODE == "select"
+    assert "select2d" in module.PLOT_MODEBAR_BUTTONS_TO_ADD
+    assert "lasso2d" in module.PLOT_MODEBAR_BUTTONS_TO_ADD
+
+
 def test_numeric_axis_options_prioritises_mjd_uncertainty_and_phase(
     monkeypatch,
 ) -> None:
