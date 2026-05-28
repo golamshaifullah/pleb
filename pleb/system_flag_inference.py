@@ -504,9 +504,7 @@ def load_flag_sys_freq_rules(path: Path) -> Dict[str, object]:
     return out
 
 
-def _labels_from_pulsar_map(
-    pmap: object, pulsar: Optional[str] = None
-) -> List[str]:
+def _labels_from_pulsar_map(pmap: object, pulsar: Optional[str] = None) -> List[str]:
     """Return labels from a default/pulsar mapping."""
     labels: List[str] = []
     if isinstance(pmap, dict):
@@ -960,7 +958,9 @@ def infer_sys_group_pta(
             labels = _labels_from_pulsar_map(pmap, pulsar)
             mode_maps = rule.get("channel_modes", {}) or {}
 
-            def _apply_labels_to_rows(row_index: pd.Index, row_labels: List[str]) -> None:
+            def _apply_labels_to_rows(
+                row_index: pd.Index, row_labels: List[str]
+            ) -> None:
                 nonlocal centre, sys_val, group_val
                 if not row_labels or len(row_index) == 0:
                     return
@@ -972,9 +972,7 @@ def infer_sys_group_pta(
                     if c is not None:
                         centre_series.loc[row_index] = int(c)
                 else:
-                    parsed = [
-                        (lab, _parse_system_centre(lab)) for lab in row_labels
-                    ]
+                    parsed = [(lab, _parse_system_centre(lab)) for lab in row_labels]
                     parsed = [(lab, c) for lab, c in parsed if c is not None]
                     if parsed:
                         lab_arr = np.array([lab for lab, _ in parsed], dtype=object)

@@ -3731,9 +3731,7 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
     )
     summary_path.write_text(
         header
-        + "\n".join(
-            [f"{a}\t{b}\t{c}\t{d}\t{e}\t{f}" for a, b, c, d, e, f in rows]
-        )
+        + "\n".join([f"{a}\t{b}\t{c}\t{d}\t{e}\t{f}" for a, b, c, d, e, f in rows])
         + "\n",
         encoding="utf-8",
     )
@@ -4454,9 +4452,7 @@ def infer_and_apply_system_flags(
     try:
         channel_file_mode = str(inferred["channel_file_mode"].dropna().iloc[0])
         channel_max_nchan = int(
-            pd.to_numeric(inferred["channel_nchan"], errors="coerce")
-            .fillna(1)
-            .max()
+            pd.to_numeric(inferred["channel_nchan"], errors="coerce").fillna(1).max()
         )
         channel_modes = sorted(
             {

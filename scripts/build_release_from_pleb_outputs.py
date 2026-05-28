@@ -25,12 +25,10 @@ import hashlib
 import os
 import re
 import shutil
-import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
-
 
 DEFAULT_EXCLUDE_RUN_REGEX = r"(debug|retry|test|trial)"
 DEFAULT_DROP_GLOBS = ("**/*.png", "**/*.general2", "**/*.covmat", "**/*.log")
@@ -281,7 +279,9 @@ def prune_files(root: Path, drop_globs: Sequence[str]) -> tuple[int, int]:
     return removed_files, removed_bytes
 
 
-def write_tsv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict[str, object]]) -> None:
+def write_tsv(
+    path: Path, fieldnames: Sequence[str], rows: Iterable[dict[str, object]]
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
@@ -335,7 +335,9 @@ def harvest_pdfs(results_root: Path) -> tuple[list[dict[str, object]], dict[str,
                 "sha256": digest,
                 "size_bytes": int(size),
                 "duplicate_of": duplicate_of,
-                "canonical_report_rel": hashes[digest].relative_to(results_root).as_posix(),
+                "canonical_report_rel": hashes[digest]
+                .relative_to(results_root)
+                .as_posix(),
             }
         )
     return rows, hashes
@@ -379,7 +381,12 @@ def write_size_report(
     sections: Sequence[tuple[str, FileStat]],
 ) -> None:
     rows = [
-        {"section": name, "files": stat.files, "bytes": stat.bytes, "human_bytes": human_bytes(stat.bytes)}
+        {
+            "section": name,
+            "files": stat.files,
+            "bytes": stat.bytes,
+            "human_bytes": human_bytes(stat.bytes),
+        }
         for name, stat in sections
     ]
     write_tsv(out_path, ("section", "files", "bytes", "human_bytes"), rows)
@@ -427,9 +434,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Planning stats from source tree.
     data_stat = compute_tree_stats(data_source_src)
     epta_stat = compute_tree_stats(epta_src, exclude_dirs={"results"})
-    selected_run_stats = {
-        run: compute_tree_stats(run) for run in selection.selected
-    }
+    selected_run_stats = {run: compute_tree_stats(run) for run in selection.selected}
     selected_total = FileStat(
         files=sum(s.files for s in selected_run_stats.values()),
         bytes=sum(s.bytes for s in selected_run_stats.values()),
@@ -457,24 +462,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"drop_globs:      {', '.join(drop_globs)}")
     print()
     print("Source footprint to stage:")
-    print(f"- raw_data_source (from data_source): files={data_stat.files} size={human_bytes(data_stat.bytes)}")
-    print(f"- EPTA-DR3 (excluding nested results): files={epta_stat.files} size={human_bytes(epta_stat.bytes)}")
-    print(f"- selected results runs: files={selected_total.files} size={human_bytes(selected_total.bytes)}")
-    print(f"- planned prune inside copied runs: files={drop_files} size={human_bytes(drop_bytes)}")
+    print(
+        f"- raw_data_source (from data_source): files={data_stat.files} size={human_bytes(data_stat.bytes)}"
+    )
+    print(
+        f"- EPTA-DR3 (excluding nested results): files={epta_stat.files} size={human_bytes(epta_stat.bytes)}"
+    )
+    print(
+        f"- selected results runs: files={selected_total.files} size={human_bytes(selected_total.bytes)}"
+    )
+    print(
+        f"- planned prune inside copied runs: files={drop_files} size={human_bytes(drop_bytes)}"
+    )
 
     if selection.selected:
         print("\nSelected run directories:")
         for run in selection.selected:
             print(f"- {run.name}")
     else:
-        print("\nNo run directories selected; adjust --include-run-glob / --exclude-run-regex.")
+        print(
+            "\nNo run directories selected; adjust --include-run-glob / --exclude-run-regex."
+        )
 
     if not args.apply:
         print("\nDry-run complete. Re-run with --apply to build the release.")
         return 0
 
     if release_root.exists():
-        raise SystemExit(f"Release root already exists, refusing to overwrite: {release_root}")
+        raise SystemExit(
+            f"Release root already exists, refusing to overwrite: {release_root}"
+        )
 
     # Stage copy.
     (release_root / "results").mkdir(parents=True, exist_ok=False)
