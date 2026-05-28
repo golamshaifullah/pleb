@@ -195,6 +195,26 @@ WSRT.P2.1380:
   central_frequency: 1380
   pulsars:
     default: WSRT.P2.1380
+  channel_modes:
+    single:
+      default: WSRT.P2.1380
+    dual:
+      default: WSRT.P2.1346 WSRT.P2.1410
+    multi:
+      default: WSRT.P2.1346 WSRT.P2.1410
+
+WSRT.P2.1380.dual:
+  file: WSRT.P2.1380_2.tim
+  central_frequency: 1380
+  pulsars:
+    default: WSRT.P2.1380
+  channel_modes:
+    single:
+      default: WSRT.P2.1380
+    dual:
+      default: WSRT.P2.1346 WSRT.P2.1410
+    multi:
+      default: WSRT.P2.1346 WSRT.P2.1410
 
 WSRT.P1.1380.1:
   file: WSRT.P1.1380.1.tim
@@ -220,26 +240,54 @@ WSRT.P1.840:
   pulsars:
     default: WSRT.P1.840
 
-WSRT.P2.1346:
-  file: WSRT.P2.1380.tim
-  central_frequency: 1346
-  pulsars:
-    default: WSRT.P2.1346
-
-WSRT.P2.2178:
-  file: WSRT.P2.2273.tim
-  central_frequency: 2178
-  pulsars:
-    default: WSRT.P2.2178
-
 WSRT.P2.2273:
   file: WSRT.P2.2273.tim
   central_frequency: 2273
   pulsars:
     default: WSRT.P2.2273
+  channel_modes:
+    single:
+      default: WSRT.P2.2273
+    dual:
+      default: WSRT.P2.2032 WSRT.P2.2178
+    multi:
+      default: WSRT.P2.2032 WSRT.P2.2178
+
+WSRT.P2.2273.dual:
+  file: WSRT.P2.2273_2.tim
+  central_frequency: 2273
+  pulsars:
+    default: WSRT.P2.2273
+  channel_modes:
+    single:
+      default: WSRT.P2.2273
+    dual:
+      default: WSRT.P2.2032 WSRT.P2.2178
+    multi:
+      default: WSRT.P2.2032 WSRT.P2.2178
 
 WSRT.P2.350:
   file: WSRT.P2.350.tim
   central_frequency: 350
   pulsars:
     default: WSRT.P2.350
+  channel_modes:
+    single:
+      default: WSRT.P2.350
+    dual:
+      default: WSRT.P2.334 WSRT.P2.366
+    multi:
+      default: WSRT.P2.334 WSRT.P2.366
+
+WSRT.P2.350.dual:
+  file: WSRT.P2.350_2.tim
+  central_frequency: 350
+  pulsars:
+    default: WSRT.P2.350
+  channel_modes:
+    single:
+      default: WSRT.P2.350
+    dual:
+      default: WSRT.P2.334 WSRT.P2.366
+    multi:
+      default: WSRT.P2.334 WSRT.P2.366

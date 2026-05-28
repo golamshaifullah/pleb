@@ -120,20 +120,33 @@
     "WSRT.P1.840"
   ],
   "WSRT.P2.1380.tim": [
-    "WSRT.P2.1380"
+    "WSRT.P2.1380",
+    "WSRT.P2.1346",
+    "WSRT.P2.1410"
   ],
   "WSRT.P2.2273.tim": [
-    "WSRT.P2.2273"
+    "WSRT.P2.2273",
+    "WSRT.P2.2032",
+    "WSRT.P2.2178"
   ],
   "WSRT.P2.350.tim": [
-    "WSRT.P2.350"
+    "WSRT.P2.350",
+    "WSRT.P2.334",
+    "WSRT.P2.366"
   ],
   "WSRT.P2.1380_2.tim": [
-    "WSRT.P2.1380"
+    "WSRT.P2.1380",
+    "WSRT.P2.1346",
+    "WSRT.P2.1410"
   ],
   "WSRT.P2.2273_2.tim": [
-    "WSRT.P2.2273"
+    "WSRT.P2.2273",
+    "WSRT.P2.2032",
+    "WSRT.P2.2178"
   ],
   "WSRT.P2.350_2.tim": [
-    "WSRT.P2.350"
+    "WSRT.P2.350",
+    "WSRT.P2.334",
+    "WSRT.P2.366"
+  ]
 }

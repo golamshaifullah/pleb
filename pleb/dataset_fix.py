@@ -3683,6 +3683,8 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
         added_includes = 0
         missing_jumps = 0
         removed = 0
+        channel_modes_seen: set[str] = set()
+        system_flag_notes: List[str] = []
         for s in steps:
             if "update_alltim_includes" in s:
                 rep = s["update_alltim_includes"]
@@ -3699,12 +3701,40 @@ def write_fix_report(reports: List[Dict[str, object]], out_dir: Path) -> Path:
                 removed += int(rep.get("par_removed", 0) or 0) + int(
                     rep.get("tim_removed", 0) or 0
                 )
-        rows.append((psr, added_includes, missing_jumps, removed))
+            if "infer_system_flags" in s and isinstance(
+                s.get("infer_system_flags"), list
+            ):
+                for rep in s.get("infer_system_flags") or []:
+                    if not isinstance(rep, dict):
+                        continue
+                    mode = rep.get("channel_file_mode")
+                    if mode:
+                        channel_modes_seen.add(str(mode))
+                    note = rep.get("system_flag_note")
+                    if note:
+                        system_flag_notes.append(str(note))
+        rows.append(
+            (
+                psr,
+                added_includes,
+                missing_jumps,
+                removed,
+                ",".join(sorted(channel_modes_seen)),
+                " | ".join(system_flag_notes[:12]),
+            )
+        )
 
     summary_path = out_dir / "fix_dataset_summary.tsv"
-    header = "pulsar\tadded_includes\tmissing_jumps\tremoved_lines\n"
+    header = (
+        "pulsar\tadded_includes\tmissing_jumps\tremoved_lines"
+        "\tchannel_modes\tsystem_flag_notes\n"
+    )
     summary_path.write_text(
-        header + "\n".join([f"{a}\t{b}\t{c}\t{d}" for a, b, c, d in rows]) + "\n",
+        header
+        + "\n".join(
+            [f"{a}\t{b}\t{c}\t{d}\t{e}\t{f}" for a, b, c, d, e, f in rows]
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -3799,6 +3829,18 @@ def _write_fix_report_pdf(
     )
     if dry_run_values:
         stage_lines.append("Observed dry_run values: " + ", ".join(dry_run_values))
+    channel_notes = [
+        str(rep.get("system_flag_note"))
+        for r in reports
+        for step in r.get("steps", []) or []
+        for payload in (step.values() if isinstance(step, dict) else [])
+        for rep in (payload if isinstance(payload, list) else [])
+        if isinstance(rep, dict) and rep.get("system_flag_note")
+    ]
+    if channel_notes:
+        stage_lines.append(
+            f"System flag channel notes recorded: {len(channel_notes)} timfiles"
+        )
 
     with PdfPages(pdf_path) as pdf:
         _draw_fix_text_page(
@@ -3843,6 +3885,14 @@ def _write_fix_report_pdf(
                                 )
                     elif isinstance(payload, list):
                         step_lines.append(f"{step_name}: {len(payload)} item(s)")
+                        if step_name == "infer_system_flags":
+                            for item in payload[:16]:
+                                if isinstance(item, dict) and item.get(
+                                    "system_flag_note"
+                                ):
+                                    step_lines.append(
+                                        f"{step_name}.note = {item.get('system_flag_note')}"
+                                    )
                     else:
                         step_lines.append(f"{step_name}: {payload}")
 
@@ -4401,6 +4451,32 @@ def infer_and_apply_system_flags(
         dry_run=cfg.dry_run,
         overwrite_existing=allow_overwrite,
     )
+    try:
+        channel_file_mode = str(inferred["channel_file_mode"].dropna().iloc[0])
+        channel_max_nchan = int(
+            pd.to_numeric(inferred["channel_nchan"], errors="coerce")
+            .fillna(1)
+            .max()
+        )
+        channel_modes = sorted(
+            {
+                str(x)
+                for x in inferred["channel_mode"].dropna().astype(str).unique().tolist()
+            }
+        )
+        sys_values = sorted(
+            str(x) for x in inferred["sys"].dropna().astype(str).unique().tolist()
+        )
+        stats["channel_file_mode"] = channel_file_mode
+        stats["channel_max_nchan"] = channel_max_nchan
+        stats["channel_modes"] = channel_modes
+        stats["system_flag_values"] = sys_values
+        stats["system_flag_note"] = (
+            f"{timfile.name}: channel_mode={channel_file_mode}, "
+            f"max_channels={channel_max_nchan}, sys={','.join(sys_values)}"
+        )
+    except Exception:
+        pass
     if wsrt_p2_mismatches is not None:
         stats["wsrt_p2_sys_mismatches"] = int(wsrt_p2_mismatches)
 

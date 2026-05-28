@@ -27,6 +27,8 @@ fix_commit_message = "FixDataset: harmonize flags+jumps and generate variants"
 
 fix_infer_system_flags = true
 fix_system_flag_overwrite_existing = true
+fix_flag_sys_freq_rules_enabled = true
+fix_flag_sys_freq_rules_path = "configs/catalogs/system_flags/flag_sys_freq_rules.yaml"
 fix_insert_missing_jumps = true
 fix_prune_stale_jumps = true
 fix_jump_flag = "-sys"

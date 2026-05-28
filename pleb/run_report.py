@@ -151,6 +151,8 @@ def _summarize_fix_reports(run_dir: Path) -> pd.DataFrame:
         added_includes = ""
         missing_jumps = ""
         removed_lines = ""
+        channel_modes = ""
+        system_flag_notes = ""
         if tsv_path.exists():
             try:
                 df = pd.read_csv(tsv_path, sep="\t")
@@ -178,6 +180,23 @@ def _summarize_fix_reports(run_dir: Path) -> pd.DataFrame:
                             .sum()
                         )
                     )
+                if "channel_modes" in df.columns:
+                    modes = sorted(
+                        {
+                            part.strip()
+                            for value in df["channel_modes"].dropna().astype(str)
+                            for part in value.split(",")
+                            if part.strip()
+                        }
+                    )
+                    channel_modes = ",".join(modes)
+                if "system_flag_notes" in df.columns:
+                    notes = [
+                        str(v)
+                        for v in df["system_flag_notes"].dropna().astype(str)
+                        if str(v).strip()
+                    ]
+                    system_flag_notes = " | ".join(notes[:8])
             except Exception:
                 pass
         rows.append(
@@ -188,6 +207,8 @@ def _summarize_fix_reports(run_dir: Path) -> pd.DataFrame:
                 "added_includes": added_includes,
                 "missing_jumps": missing_jumps,
                 "removed_lines": removed_lines,
+                "channel_modes": channel_modes,
+                "system_flag_notes": system_flag_notes,
                 "steps_seen": ", ".join(
                     f"{k}={v}" for k, v in sorted(step_counts.items())
                 ),
@@ -415,6 +436,16 @@ def _build_compact_summary_sections(
                     f"FixDataset branch {row['branch']}: errors={row['errors']}"
                     for _, row in problem.head(8).iterrows()
                 ]
+            )
+    if not fix_df.empty and "system_flag_notes" in fix_df.columns:
+        notes = [
+            str(v)
+            for v in fix_df["system_flag_notes"].dropna().astype(str)
+            if str(v).strip()
+        ]
+        if notes:
+            attention_lines.extend(
+                [f"System flag channel note: {note}" for note in notes[:4]]
             )
     if not qc_df.empty and {"qc_status", "count"}.issubset(qc_df.columns):
         bad = qc_df.loc[qc_df["qc_status"].astype(str) == "pqc_failed", :]

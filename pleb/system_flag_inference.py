@@ -265,7 +265,9 @@ def parse_tim_toa_table(
     Returns columns:
       - line_idx: original line index in file (0-based)
       - line: raw line (stripped)
+      - file_token: first TOA token
       - freq_mhz: float (TOA frequency)
+      - mjd: TOA MJD
       - flags: dict of parsed flags for that TOA line
       - be: backend if present on that TOA line via cfg.backend_flag
       - bw_mhz: bandwidth value if present
@@ -301,6 +303,7 @@ def parse_tim_toa_table(
         # FORMAT 1: second column is frequency
         try:
             freq = float(parts[1])
+            mjd = float(parts[2])
         except Exception:
             continue
 
@@ -325,10 +328,21 @@ def parse_tim_toa_table(
                     nb = None
                 break
 
-        rows.append((i, line, freq, flags, be, bw, nb))
+        rows.append((i, line, parts[0], freq, mjd, flags, be, bw, nb))
 
     return pd.DataFrame(
-        rows, columns=["line_idx", "line", "freq_mhz", "flags", "be", "bw_mhz", "nband"]
+        rows,
+        columns=[
+            "line_idx",
+            "line",
+            "file_token",
+            "freq_mhz",
+            "mjd",
+            "flags",
+            "be",
+            "bw_mhz",
+            "nband",
+        ],
     )
 
 
@@ -411,6 +425,9 @@ def load_flag_sys_freq_rules(path: Path) -> Dict[str, object]:
     - ``file``: tim filename this rule applies to
     - ``central_frequency``: optional band-center for ``-group`` synthesis
     - ``pulsars``: map of ``default`` and optional pulsar-specific mappings
+    - ``channel_modes``: optional map of ``single``/``dual``/``multi`` to
+      labels or default/pulsar mappings. These override ``pulsars`` per TOA
+      based on the number of channels at the same archive/MJD epoch.
     """
     if yaml is None:
         raise RuntimeError(
@@ -460,11 +477,123 @@ def load_flag_sys_freq_rules(path: Path) -> Dict[str, object]:
                     pulsars_map[str(pkey)] = labs
         if "default" not in pulsars_map:
             continue
+        channel_modes: Dict[str, Dict[str, List[str]]] = {}
+        modes_raw = spec.get("channel_modes", {}) or {}
+        if isinstance(modes_raw, dict):
+            for mode_key, mode_val in modes_raw.items():
+                mode_name = str(mode_key).strip().lower()
+                if mode_name not in {"single", "dual", "multi"}:
+                    continue
+                mode_map: Dict[str, List[str]] = {}
+                if isinstance(mode_val, dict):
+                    for pkey, pval in mode_val.items():
+                        labs = _to_labels(pval)
+                        if labs:
+                            mode_map[str(pkey)] = labs
+                else:
+                    labs = _to_labels(mode_val)
+                    if labs:
+                        mode_map["default"] = labs
+                if "default" in mode_map:
+                    channel_modes[mode_name] = mode_map
         out[timname] = {
             "central_frequency": centre_val,
             "pulsars": pulsars_map,
+            "channel_modes": channel_modes,
         }
     return out
+
+
+def _labels_from_pulsar_map(
+    pmap: object, pulsar: Optional[str] = None
+) -> List[str]:
+    """Return labels from a default/pulsar mapping."""
+    labels: List[str] = []
+    if isinstance(pmap, dict):
+        if pulsar and str(pulsar) in pmap:
+            labels = list(pmap.get(str(pulsar)) or [])
+        if not labels:
+            labels = list(pmap.get("default") or [])
+    return [str(x).strip() for x in labels if str(x).strip()]
+
+
+def _mode_for_channel_count(nchan: int) -> str:
+    if int(nchan) <= 1:
+        return "single"
+    if int(nchan) == 2:
+        return "dual"
+    return "multi"
+
+
+def _classify_toa_channels(
+    df: pd.DataFrame, *, mjd_tol_sec: float = 1.0e-6
+) -> Tuple[pd.Series, Dict[str, object]]:
+    """Classify each TOA as single/dual/multi channel by archive and epoch."""
+    if df.empty:
+        return pd.Series([], dtype="int64"), {
+            "mode": "empty",
+            "max_nchan": 0,
+            "single_rows": 0,
+            "dual_rows": 0,
+            "multi_rows": 0,
+        }
+    counts = pd.Series(1, index=df.index, dtype="int64")
+    if "mjd" not in df.columns or "file_token" not in df.columns:
+        return counts, {
+            "mode": "single",
+            "max_nchan": 1,
+            "single_rows": int(len(df)),
+            "dual_rows": 0,
+            "multi_rows": 0,
+        }
+
+    tol_days = float(mjd_tol_sec) / 86400.0
+    for _, grp in df.sort_values(["file_token", "mjd"]).groupby(
+        "file_token", sort=False
+    ):
+        cluster: List[int] = []
+        cluster_last_mjd: Optional[float] = None
+        for idx, row in grp.iterrows():
+            try:
+                mjd = float(row["mjd"])
+            except Exception:
+                continue
+            if not cluster:
+                cluster = [idx]
+                cluster_last_mjd = mjd
+                continue
+            if cluster_last_mjd is not None and abs(mjd - cluster_last_mjd) <= tol_days:
+                cluster.append(idx)
+                cluster_last_mjd = mjd
+                continue
+            nchan = len({round(float(df.loc[i, "freq_mhz"]), 6) for i in cluster})
+            counts.loc[cluster] = max(1, nchan)
+            cluster = [idx]
+            cluster_last_mjd = mjd
+        if cluster:
+            nchan = len({round(float(df.loc[i, "freq_mhz"]), 6) for i in cluster})
+            counts.loc[cluster] = max(1, nchan)
+
+    single_rows = int((counts <= 1).sum())
+    dual_rows = int((counts == 2).sum())
+    multi_rows = int((counts > 2).sum())
+    if multi_rows and (single_rows or dual_rows):
+        mode = "mixed"
+    elif multi_rows:
+        mode = "multi"
+    elif dual_rows and single_rows:
+        mode = "mixed"
+    elif dual_rows:
+        mode = "dual"
+    else:
+        mode = "single"
+    return counts, {
+        "mode": mode,
+        "max_nchan": int(counts.max()) if len(counts) else 0,
+        "single_rows": single_rows,
+        "dual_rows": dual_rows,
+        "multi_rows": multi_rows,
+    }
 
 
 def _parse_system_centre(system_label: str) -> Optional[int]:
@@ -722,7 +851,8 @@ def infer_sys_group_pta(
     -------
     pandas.DataFrame
         Assignment table with columns ``line_idx``, ``sys``, ``group``, ``pta``,
-        ``backend``, ``tel``, ``centre_mhz``, ``bw_mhz``, ``nband``.
+        ``backend``, ``tel``, ``centre_mhz``, ``bw_mhz``, ``nband``, and
+        channel-mode diagnostics.
 
     Examples
     --------
@@ -743,8 +873,14 @@ def infer_sys_group_pta(
                 "centre_mhz",
                 "bw_mhz",
                 "nband",
+                "channel_mode",
+                "channel_file_mode",
+                "channel_nchan",
             ]
         )
+
+    channel_counts, channel_summary = _classify_toa_channels(df)
+    channel_modes = channel_counts.map(_mode_for_channel_count)
 
     tel = infer_telescope(timfile, cfg=cfg, override_telescope=override_telescope)
     backend = infer_backend(timfile, df, cfg=cfg, override_backend=override_backend)
@@ -821,22 +957,24 @@ def infer_sys_group_pta(
             rule = flag_sys_freq_rules.get(str(timfile))
         if isinstance(rule, dict):
             pmap = rule.get("pulsars", {})
-            labels = []
-            if isinstance(pmap, dict):
-                if pulsar and str(pulsar) in pmap:
-                    labels = list(pmap.get(str(pulsar)) or [])
-                if not labels:
-                    labels = list(pmap.get("default") or [])
-            labels = [str(x).strip() for x in labels if str(x).strip()]
-            if labels:
-                freqs = df["freq_mhz"].to_numpy()
-                if len(labels) == 1:
-                    sys_val = pd.Series([labels[0]] * len(df), index=df.index)
-                    c = _parse_system_centre(labels[0])
+            labels = _labels_from_pulsar_map(pmap, pulsar)
+            mode_maps = rule.get("channel_modes", {}) or {}
+
+            def _apply_labels_to_rows(row_index: pd.Index, row_labels: List[str]) -> None:
+                nonlocal centre, sys_val, group_val
+                if not row_labels or len(row_index) == 0:
+                    return
+                freqs = df.loc[row_index, "freq_mhz"].to_numpy()
+                centre_series = pd.Series(centre, index=df.index)
+                if len(row_labels) == 1:
+                    sys_val.loc[row_index] = row_labels[0]
+                    c = _parse_system_centre(row_labels[0])
                     if c is not None:
-                        centre = np.array([c] * len(df), dtype=int)
+                        centre_series.loc[row_index] = int(c)
                 else:
-                    parsed = [(lab, _parse_system_centre(lab)) for lab in labels]
+                    parsed = [
+                        (lab, _parse_system_centre(lab)) for lab in row_labels
+                    ]
                     parsed = [(lab, c) for lab, c in parsed if c is not None]
                     if parsed:
                         lab_arr = np.array([lab for lab, _ in parsed], dtype=object)
@@ -845,9 +983,9 @@ def infer_sys_group_pta(
                             np.abs(freqs.reshape(-1, 1) - cen_arr.reshape(1, -1)),
                             axis=1,
                         )
-                        sys_val = pd.Series(lab_arr[idx], index=df.index)
-                        centre = cen_arr[idx].astype(int)
-                centre_s = pd.Series(centre, index=df.index, dtype="int64").astype(str)
+                        sys_val.loc[row_index] = lab_arr[idx]
+                        centre_series.loc[row_index] = cen_arr[idx].astype(int)
+                centre = centre_series.astype(int).to_numpy()
                 centre_rule = rule.get("central_frequency")
                 try:
                     centre_rule_int = (
@@ -855,9 +993,28 @@ def infer_sys_group_pta(
                     )
                 except Exception:
                     centre_rule_int = None
-                group_base = str(labels[0])
+                group_base = str(row_labels[0])
                 group_label = _group_label_from_system(group_base, centre_rule_int)
-                group_val = pd.Series([group_label] * len(df), index=df.index)
+                group_val.loc[row_index] = group_label
+
+            if labels:
+                sys_val = pd.Series(sys_val, index=df.index, dtype=object)
+                group_val = pd.Series(group_val, index=df.index, dtype=object)
+                if isinstance(mode_maps, dict) and mode_maps:
+                    for mode_name in ("single", "dual", "multi"):
+                        row_index = df.index[channel_modes == mode_name]
+                        row_labels = _labels_from_pulsar_map(
+                            mode_maps.get(mode_name), pulsar
+                        )
+                        if not row_labels and mode_name == "multi":
+                            row_labels = _labels_from_pulsar_map(
+                                mode_maps.get("dual"), pulsar
+                            )
+                        if not row_labels:
+                            row_labels = labels
+                        _apply_labels_to_rows(row_index, row_labels)
+                else:
+                    _apply_labels_to_rows(df.index, labels)
     pta_val = pd.Series([pta] * len(df), index=df.index)
 
     out = pd.DataFrame(
@@ -871,6 +1028,9 @@ def infer_sys_group_pta(
             "centre_mhz": centre,
             "bw_mhz": bw,
             "nband": nb,
+            "channel_mode": channel_modes.to_numpy(),
+            "channel_file_mode": str(channel_summary.get("mode", "single")),
+            "channel_nchan": channel_counts.to_numpy(),
         }
     )
     return out
