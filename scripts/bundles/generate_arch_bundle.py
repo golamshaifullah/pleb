@@ -324,9 +324,7 @@ def shared_stage_script() -> str:
     status_write STAGING
     cp -a "$C/scaffold/scripts/run_campaign_stage.sh" "$job_dir/run_campaign_stage.sh"
     ln -s "$SIF" "$job_dir/$(basename "$SIF")"
-    if ! cp -al "$C/$state_in_rel" "$job_dir/$state_name" 2>/dev/null; then
-      cp -a "$C/$state_in_rel" "$job_dir/$state_name"
-    fi
+    cp -a "$C/$state_in_rel" "$job_dir/$state_name"
 
     if [[ -n "$merge_inputs" && "$merge_inputs" != "$EMPTY" ]]; then
       IFS=',' read -r -a inputs <<< "$merge_inputs"
