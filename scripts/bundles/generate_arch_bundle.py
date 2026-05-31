@@ -24,7 +24,6 @@ from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
 
-
 ARCHES = ("htcondor", "pbs", "slurm", "workstation")
 EMPTY = "__PLEB_EMPTY__"
 
@@ -33,7 +32,9 @@ def repo_root_from_script() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
+def run(
+    cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None
+) -> None:
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
 
 
@@ -76,13 +77,13 @@ def patch_stage_wrapper(path: Path) -> None:
         '[optimize.fixed_overrides]\nhome_dir = "."',
         '[optimize.fixed_overrides]\nhome_dir = ".."',
     )
-    old = "if command -v apptainer >/dev/null 2>&1; then\n    OUTER_RUNTIME=\"apptainer\""
+    old = 'if command -v apptainer >/dev/null 2>&1; then\n    OUTER_RUNTIME="apptainer"'
     new = (
-        "if [[ \"${PLEB_FORCE_SINGULARITY:-0}\" == \"1\" ]] "
+        'if [[ "${PLEB_FORCE_SINGULARITY:-0}" == "1" ]] '
         "&& command -v singularity >/dev/null 2>&1; then\n"
-        "    OUTER_RUNTIME=\"singularity\"\n"
+        '    OUTER_RUNTIME="singularity"\n'
         "elif command -v apptainer >/dev/null 2>&1; then\n"
-        "    OUTER_RUNTIME=\"apptainer\""
+        '    OUTER_RUNTIME="apptainer"'
     )
     if old in text and "PLEB_FORCE_SINGULARITY" not in text:
         text = text.replace(old, new)
@@ -91,7 +92,9 @@ def patch_stage_wrapper(path: Path) -> None:
 
 def commit_seed_if_dirty(seed: Path, message: str) -> None:
     run(["git", "-C", str(seed), "config", "gc.auto", "0"])
-    status = subprocess.check_output(["git", "-C", str(seed), "status", "--short"], text=True)
+    status = subprocess.check_output(
+        ["git", "-C", str(seed), "status", "--short"], text=True
+    )
     if status.strip():
         run(["git", "-C", str(seed), "add", "-A"])
         run(["git", "-C", str(seed), "commit", "-m", message])
@@ -109,10 +112,14 @@ def wait_for_git_pack_quiescence(seed: Path) -> None:
     raise RuntimeError(f"Git pack maintenance did not quiesce under {pack_dir}")
 
 
-def prepare_campaign(repo: Path, bundle: Path, n_trials: int, sif_path: str | None) -> None:
+def prepare_campaign(
+    repo: Path, bundle: Path, n_trials: int, sif_path: str | None
+) -> None:
     campaign = bundle / "campaign"
     campaign.mkdir()
-    shutil.copytree(repo / "condor_full_epta_dr_optimize" / "scaffold", campaign / "scaffold")
+    shutil.copytree(
+        repo / "condor_full_epta_dr_optimize" / "scaffold", campaign / "scaffold"
+    )
     env = os.environ.copy()
     env.update(
         {
@@ -126,7 +133,14 @@ def prepare_campaign(repo: Path, bundle: Path, n_trials: int, sif_path: str | No
     )
     if sif_path:
         env["PLEB_OUTER_SIF"] = sif_path
-    run([str(repo / "condor_full_epta_dr_optimize" / "prepare_full_bundle.sh"), str(campaign)], cwd=repo, env=env)
+    run(
+        [
+            str(repo / "condor_full_epta_dr_optimize" / "prepare_full_bundle.sh"),
+            str(campaign),
+        ],
+        cwd=repo,
+        env=env,
+    )
 
     # Keep the runtime script payload minimal.  The release builder is the only
     # top-level script needed inside campaign states.
@@ -139,7 +153,10 @@ def prepare_campaign(repo: Path, bundle: Path, n_trials: int, sif_path: str | No
     ):
         patch_stage_wrapper(wrapper)
 
-    commit_seed_if_dirty(campaign / "repo_state_seed", "Minimize bundle scripts and enable Singularity override")
+    commit_seed_if_dirty(
+        campaign / "repo_state_seed",
+        "Minimize bundle scripts and enable Singularity override",
+    )
 
 
 def common_readme(arch: str, name: str, n_trials: int) -> str:
@@ -625,7 +642,17 @@ def tar_bundle(bundle: Path, out_dir: Path) -> Path:
     tar_path = out_dir / f"{bundle.name}.tar.gz"
     if tar_path.exists():
         tar_path.unlink()
-    run(["tar", "--exclude=*/.git/objects/pack/tmp_pack_*", "-czf", str(tar_path), "-C", str(out_dir), bundle.name])
+    run(
+        [
+            "tar",
+            "--exclude=*/.git/objects/pack/tmp_pack_*",
+            "-czf",
+            str(tar_path),
+            "-C",
+            str(out_dir),
+            bundle.name,
+        ]
+    )
     run(["gzip", "-t", str(tar_path)])
     return tar_path
 
@@ -650,10 +677,22 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--arch", choices=(*ARCHES, "all"), required=True)
     p.add_argument("--repo", type=Path, default=repo_root_from_script())
     p.add_argument("--out-dir", type=Path, default=repo_root_from_script() / "bundles")
-    p.add_argument("--name", default=None, help="Bundle directory name; with --arch all, used as a prefix.")
+    p.add_argument(
+        "--name",
+        default=None,
+        help="Bundle directory name; with --arch all, used as a prefix.",
+    )
     p.add_argument("--n-trials", type=int, default=6)
-    p.add_argument("--sif-path", default=None, help="Optional default SIF path written into generated config.")
-    p.add_argument("--force", action="store_true", help="Overwrite an existing generated bundle directory.")
+    p.add_argument(
+        "--sif-path",
+        default=None,
+        help="Optional default SIF path written into generated config.",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing generated bundle directory.",
+    )
     return p.parse_args()
 
 
