@@ -250,6 +250,11 @@ def htcondor_scripts(bundle: Path) -> None:
         Run:
           PLEB_OUTER_SIF=/path/to/pleb_tempo2.sif ./launch_htcondor.sh
 
+        Fill all available slots:
+          Leave PLEB_DAG_MAXJOBS unset, or set it to the number of slots before
+          rendering/submitting:
+            PLEB_DAG_MAXJOBS=$(condor_status -af Name | wc -l) PLEB_OUTER_SIF=/path/to/pleb_tempo2.sif ./launch_htcondor.sh
+
         Monitor:
           ./monitor_htcondor.sh
 

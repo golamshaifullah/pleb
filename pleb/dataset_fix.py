@@ -1242,11 +1242,27 @@ def generate_alltim_variants(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, 
         if cfg.backup and target.exists():
             _backup_file(target)
         target.write_text("\n".join(content) + "\n", encoding="utf-8")
+
+        par_src = psr_dir / f"{psr}.par"
+        par_target = psr_dir / f"{psr}_{vname}.par"
+        par_written = False
+        if par_src.exists():
+            if cfg.backup and par_target.exists():
+                try:
+                    if par_target.read_bytes() != par_src.read_bytes():
+                        _backup_file(par_target)
+                except Exception:
+                    _backup_file(par_target)
+            shutil.copy2(par_src, par_target)
+            par_written = True
+
         out_variants[vname] = {
             "path": str(target),
+            "par_path": str(par_target),
             "selected_includes": sorted(selected),
             "skipped_mixed": skipped_mixed,
             "written": True,
+            "par_written": par_written,
         }
 
     return {
@@ -2212,11 +2228,31 @@ def _filter_qc_rows_for_cfg(
 def _collect_qc_mjds(
     df: pd.DataFrame, cfg: FixDatasetConfig
 ) -> Dict[str, Dict[Optional[str], list[float]]]:
+    reviewed_keep = (
+        df["reviewed_keep"].fillna(False).astype(bool).to_numpy()
+        if "reviewed_keep" in df.columns
+        else np.zeros(len(df), dtype=bool)
+    )
+    reviewed_event = (
+        df["reviewed_event_member"].fillna(False).astype(bool).to_numpy()
+        if "reviewed_event_member" in df.columns
+        else None
+    )
+    has_reviewed = (
+        "reviewed_bad_point" in df.columns
+        or "reviewed_event_member" in df.columns
+        or "reviewed_keep" in df.columns
+    )
+
     standard = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_bad:
-        for col in ("bad", "bad_day"):
-            if col in df.columns:
-                standard |= df[col].fillna(False).astype(bool).to_numpy()
+        if has_reviewed and "reviewed_bad_point" in df.columns:
+            standard |= df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+        elif not has_reviewed:
+            for col in ("bad", "bad_day"):
+                if col in df.columns:
+                    standard |= df[col].fillna(False).astype(bool).to_numpy()
+
     if cfg.qc_remove_outliers:
         outlier_cols = (
             list(cfg.qc_outlier_cols)
@@ -2231,19 +2267,42 @@ def _collect_qc_mjds(
                 "bad_ou",
             ]
         )
-        for col in outlier_cols:
-            if col in df.columns:
-                standard |= df[col].fillna(False).astype(bool).to_numpy()
+        if has_reviewed and "reviewed_bad_point" in df.columns:
+            standard |= df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+        else:
+            for col in outlier_cols:
+                if col in df.columns:
+                    standard |= df[col].fillna(False).astype(bool).to_numpy()
+
     if cfg.qc_remove_transients and "transient_id" in df.columns:
-        standard |= df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
+        transient_mask = df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
+        if has_reviewed and reviewed_event is not None:
+            standard |= reviewed_event & transient_mask
+        elif not has_reviewed:
+            standard |= transient_mask
 
     solar = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_solar and "solar_event_member" in df.columns:
-        solar |= df["solar_event_member"].fillna(False).astype(bool).to_numpy()
+        solar |= (
+            reviewed_event
+            if has_reviewed and reviewed_event is not None
+            else df["solar_event_member"].fillna(False).astype(bool).to_numpy()
+        )
+        solar &= df["solar_event_member"].fillna(False).astype(bool).to_numpy()
 
     orbital = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_orbital_phase and "orbital_phase_bad" in df.columns:
-        orbital |= df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+        orbital |= (
+            reviewed_event
+            if has_reviewed and reviewed_event is not None
+            else df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+        )
+        orbital &= df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+
+    if has_reviewed:
+        standard &= ~reviewed_keep
+        solar &= ~reviewed_keep
+        orbital &= ~reviewed_keep
 
     out: Dict[str, Dict[Optional[str], list[float]]] = {
         "standard": {},
@@ -2274,6 +2333,23 @@ def _collect_qc_mjds(
 
 def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
     """Return a stable event type label for a QC row, if any."""
+    reviewed_event_member: Optional[bool] = None
+    if "reviewed_keep" in df.columns:
+        try:
+            keep_val = df.iloc[row_idx]["reviewed_keep"]
+            if not pd.isna(keep_val) and bool(keep_val):
+                return None
+        except Exception:
+            pass
+    if "reviewed_event_member" in df.columns:
+        try:
+            event_val = df.iloc[row_idx]["reviewed_event_member"]
+            reviewed_event_member = False if pd.isna(event_val) else bool(event_val)
+            if not reviewed_event_member:
+                return None
+        except Exception:
+            reviewed_event_member = None
+
     event_checks: list[tuple[str, str]] = [
         ("step_member", "step"),
         ("dm_step_member", "dm_step"),
@@ -2314,6 +2390,8 @@ def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
         except Exception:
             pass
 
+    if reviewed_event_member:
+        return "reviewed_event"
     return None
 
 
@@ -2382,6 +2460,10 @@ def _collect_qc_tim_classifications(
     for col in outlier_cols:
         if col in df.columns:
             outlier_mask |= df[col].fillna(False).astype(bool).to_numpy()
+    if "reviewed_bad_point" in df.columns:
+        outlier_mask = df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+    if "reviewed_keep" in df.columns:
+        outlier_mask &= ~df["reviewed_keep"].fillna(False).astype(bool).to_numpy()
 
     good_val = str(cfg.qc_pqc_good_value or "good")
     bad_val = str(cfg.qc_pqc_bad_value or "bad")
