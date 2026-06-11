@@ -710,8 +710,10 @@ def test_apply_pqc_outliers_orbital_phase_legacy_without_catalog(
 
     assert rep["matched"] == 1
     assert rep["orbital_phase_gate"]["reason"] == "no_catalog_configured"
-    assert tim.read_text(encoding="utf-8").splitlines()[1].startswith(
-        "C QC_BINARY_ECLIPSE "
+    assert (
+        tim.read_text(encoding="utf-8")
+        .splitlines()[1]
+        .startswith("C QC_BINARY_ECLIPSE ")
     )
 
 
@@ -755,8 +757,10 @@ entries = [
 
     assert matched_rep["matched"] == 1
     assert matched_rep["orbital_phase_gate"]["reason"] == "catalog_match"
-    assert matched_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
-        "C QC_BINARY_ECLIPSE "
+    assert (
+        matched_tim.read_text(encoding="utf-8")
+        .splitlines()[1]
+        .startswith("C QC_BINARY_ECLIPSE ")
     )
 
     assert skipped_rep["matched"] == 0

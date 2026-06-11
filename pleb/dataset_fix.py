@@ -2364,9 +2364,7 @@ def _load_orbital_phase_catalog(path: Path) -> Dict[str, Dict[str, object]]:
     return out
 
 
-def _orbital_phase_gate_for_psr(
-    psr: str, cfg: FixDatasetConfig
-) -> Dict[str, object]:
+def _orbital_phase_gate_for_psr(psr: str, cfg: FixDatasetConfig) -> Dict[str, object]:
     path_text = str(cfg.qc_orbital_phase_catalog_path or "").strip()
     if not path_text:
         return {
@@ -2850,8 +2848,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             "qc_filter": qc_filter,
             "orbital_phase_gate": orbital_phase_gate,
             "error": (
-                "Unsupported qc_orbital_phase_action: "
-                f"{cfg.qc_orbital_phase_action}"
+                "Unsupported qc_orbital_phase_action: " f"{cfg.qc_orbital_phase_action}"
             ),
         }
 
