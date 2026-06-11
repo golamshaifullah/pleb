@@ -70,12 +70,6 @@ EFF.S110.2487:
   pulsars:
     default: EFF.S110.2487
 
-EFF.PS110.2487:
-  file: EFF.S110.2487.tim
-  central_frequency: 2487
-  pulsars:
-    default: EFF.S110.2487
-
 EFF.S60.4857:
   file: EFF.S60.4857.tim
   central_frequency: 4857
@@ -124,23 +118,11 @@ LEAP.1396:
   pulsars:
     default: LEAP.1396
 
-LOFAR.150:
+LOFAR.LuMP.150:
   file: LOFAR.LuMP.150.tim
   central_frequency: 150
   pulsars:
-    default: LOFAR.150
-
-DE602.150:
-  file: LOFAR.LuMP.150.tim
-  central_frequency: 150
-  pulsars:
-    default: DE602.150
-
-DE609.150:
-  file: LOFAR.LuMP.150.tim
-  central_frequency: 150
-  pulsars:
-    default: DE609.150
+    default: LOFAR.150 DE601.150 DE602.150 DE603.150 DE604.150 DE605.150 DE609.150
 
 NRT.BON.1400:
   file: NRT.BON.1400.tim
@@ -227,6 +209,12 @@ WSRT.P1.1380.2:
   central_frequency: 1380
   pulsars:
     default: WSRT.P1.1380.2
+
+WSRT.P1.1380:
+  file: WSRT.P1.1380.tim
+  central_frequency: 1380
+  pulsars:
+    default: WSRT.P1.1380
 
 WSRT.P1.2273.C:
   file: WSRT.P1.2273.tim

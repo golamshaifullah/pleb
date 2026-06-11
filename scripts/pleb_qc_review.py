@@ -784,9 +784,7 @@ def _apply_display_median_centering(
         reference &= _normalised_text(out["manual_reason"]) == ""
 
     medians = (
-        out.loc[reference]
-        .groupby(group_col, dropna=False)["_plot_residual"]
-        .median()
+        out.loc[reference].groupby(group_col, dropna=False)["_plot_residual"].median()
     )
     if medians.empty:
         return out, meta
@@ -794,10 +792,9 @@ def _apply_display_median_centering(
     offsets = out[group_col].map(medians)
     valid_offsets = pd.to_numeric(offsets, errors="coerce").notna()
     out["_plot_residual_raw"] = out["_plot_residual"]
-    out.loc[valid_offsets, "_plot_residual"] = (
-        pd.to_numeric(out.loc[valid_offsets, "_plot_residual"], errors="coerce")
-        - pd.to_numeric(offsets.loc[valid_offsets], errors="coerce")
-    )
+    out.loc[valid_offsets, "_plot_residual"] = pd.to_numeric(
+        out.loc[valid_offsets, "_plot_residual"], errors="coerce"
+    ) - pd.to_numeric(offsets.loc[valid_offsets], errors="coerce")
     out["_plot_center_offset"] = pd.to_numeric(offsets, errors="coerce")
     meta.update(
         {
@@ -892,7 +889,9 @@ def _decision_symbol_array(frame: pd.DataFrame) -> np.ndarray:
         .astype(str)
         .str.upper()
     )
-    return decision.map(DECISION_MARKER_SYMBOLS).fillna(DEFAULT_MARKER_SYMBOL).to_numpy()
+    return (
+        decision.map(DECISION_MARKER_SYMBOLS).fillna(DEFAULT_MARKER_SYMBOL).to_numpy()
+    )
 
 
 def _color_map(values: list[str]) -> dict[str, str]:
@@ -954,8 +953,9 @@ def _add_trace(
     ):
         error_y = {
             "type": "data",
-            "array": pd.to_numeric(frame["_plot_error"] * 1e-6, errors="coerce")
-            .to_numpy(dtype=np.float32, copy=False),
+            "array": pd.to_numeric(
+                frame["_plot_error"] * 1e-6, errors="coerce"
+            ).to_numpy(dtype=np.float32, copy=False),
             "visible": True,
             "width": 0,
             "thickness": 0.5,
@@ -1004,11 +1004,15 @@ def _make_fast_scatter(
         .fillna("KEEP")
         .astype(str)
     )
-    plot_df = plot_df.assign(_decision=decision, _color_value=_color_series(plot_df, color_col))
+    plot_df = plot_df.assign(
+        _decision=decision, _color_value=_color_series(plot_df, color_col)
+    )
 
     selected_mask = _bool_col(plot_df, "_selected")
 
-    color_values = sorted(plot_df["_color_value"].unique(), key=lambda x: (x != "KEEP", x))
+    color_values = sorted(
+        plot_df["_color_value"].unique(), key=lambda x: (x != "KEEP", x)
+    )
     colors = _color_map([str(value) for value in color_values])
     for value in color_values:
         group = plot_df[(plot_df["_color_value"] == value) & (~selected_mask)]
@@ -1420,9 +1424,11 @@ def main() -> None:
             index=(
                 color_options.index("backend")
                 if "backend" in color_options
-                else color_options.index("reviewed_decision")
-                if "reviewed_decision" in color_options
-                else 0
+                else (
+                    color_options.index("reviewed_decision")
+                    if "reviewed_decision" in color_options
+                    else 0
+                )
             ),
             help=(
                 "Choose a low-cardinality TOA column such as backend/system/telescope "
@@ -1649,8 +1655,12 @@ def main() -> None:
             color_col=color_col,
             show_error_bars=show_error_bars,
         )
-        st.session_state["_plot_review_id_lookup"] = plot_df["review_id"].astype(str).tolist()
-        plot_event_key = f"{PLOT_KEY}_{int(st.session_state.get('_plot_reset_token', 0))}"
+        st.session_state["_plot_review_id_lookup"] = (
+            plot_df["review_id"].astype(str).tolist()
+        )
+        plot_event_key = (
+            f"{PLOT_KEY}_{int(st.session_state.get('_plot_reset_token', 0))}"
+        )
         st.session_state["_plot_event_key"] = plot_event_key
         st.plotly_chart(
             fig,

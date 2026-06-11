@@ -532,9 +532,11 @@ def run_qc_report(argv: list[str] | None) -> int:
     if bool(args.cross_pulsar):
         cross_dir = generate_cross_pulsar_coincidence_report(
             run_dir=run_dir,
-            report_dir=Path(args.cross_pulsar_report_dir)
-            if args.cross_pulsar_report_dir
-            else None,
+            report_dir=(
+                Path(args.cross_pulsar_report_dir)
+                if args.cross_pulsar_report_dir
+                else None
+            ),
             window_days=float(args.cross_pulsar_window_days),
             min_pulsars=int(args.cross_pulsar_min_pulsars),
             include_outliers=True,

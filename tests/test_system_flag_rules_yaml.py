@@ -116,3 +116,118 @@ WSRT.P2.1380:
         "WSRT.P2.1410",
     ]
     assert set(mixed["group"].astype(str)) == {"WSRT.P2.1380"}
+
+
+def test_yaml_rules_cover_plain_wsrt_p1_1380_without_duplicate_centre() -> None:
+    if sfi.yaml is None:
+        pytest.skip("PyYAML unavailable in this test environment.")
+
+    rules = sfi.load_flag_sys_freq_rules(
+        Path("configs/catalogs/system_flags/flag_sys_freq_rules.yaml")
+    )
+    rule = rules["WSRT.P1.1380.tim"]
+
+    assert rule["central_frequency"] == 1380
+    assert rule["pulsars"]["default"] == ["WSRT.P1.1380"]
+
+
+def test_yaml_nuppi_rules_use_four_subband_system_labels() -> None:
+    if sfi.yaml is None:
+        pytest.skip("PyYAML unavailable in this test environment.")
+
+    rules = sfi.load_flag_sys_freq_rules(
+        Path("configs/catalogs/system_flags/flag_sys_freq_rules.yaml")
+    )
+    expected = {
+        "NRT.NUPPI.1484.tim": [
+            "NRT.NUPPI.1292",
+            "NRT.NUPPI.1420",
+            "NRT.NUPPI.1548",
+            "NRT.NUPPI.1676",
+        ],
+        "NRT.NUPPI.1854.tim": [
+            "NRT.NUPPI.1662",
+            "NRT.NUPPI.1790",
+            "NRT.NUPPI.1918",
+            "NRT.NUPPI.2046",
+        ],
+        "NRT.NUPPI.2154.tim": [
+            "NRT.NUPPI.1962",
+            "NRT.NUPPI.2090",
+            "NRT.NUPPI.2218",
+            "NRT.NUPPI.2346",
+        ],
+        "NRT.NUPPI.2354.tim": [
+            "NRT.NUPPI.2162",
+            "NRT.NUPPI.2290",
+            "NRT.NUPPI.2418",
+            "NRT.NUPPI.2546",
+        ],
+        "NRT.NUPPI.2539.tim": [
+            "NRT.NUPPI.2347",
+            "NRT.NUPPI.2475",
+            "NRT.NUPPI.2603",
+            "NRT.NUPPI.2731",
+        ],
+    }
+
+    for timfile, labels in expected.items():
+        assert rules[timfile]["pulsars"]["default"] == labels
+        assert len(rules[timfile]["pulsars"]["default"]) == 4
+
+
+def test_yaml_lofar_lump_150_has_single_merged_entry() -> None:
+    if sfi.yaml is None:
+        pytest.skip("PyYAML unavailable in this test environment.")
+
+    rules = sfi.load_flag_sys_freq_rules(
+        Path("configs/catalogs/system_flags/flag_sys_freq_rules.yaml")
+    )
+
+    assert "LOFAR.LuMP.150.tim" in rules
+    assert rules["LOFAR.LuMP.150.tim"]["pulsars"]["default"] == [
+        "LOFAR.150",
+        "DE601.150",
+        "DE602.150",
+        "DE603.150",
+        "DE604.150",
+        "DE605.150",
+        "DE609.150",
+    ]
+
+
+def test_yaml_has_no_duplicate_file_targets() -> None:
+    if sfi.yaml is None:
+        pytest.skip("PyYAML unavailable in this test environment.")
+
+    text = Path("configs/catalogs/system_flags/flag_sys_freq_rules.yaml").read_text(
+        encoding="utf-8"
+    )
+    files = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("file:"):
+            files.append(stripped.split(":", 1)[1].strip())
+
+    duplicates = sorted({name for name in files if files.count(name) > 1})
+    assert duplicates == []
+
+
+def test_yaml_eff_s110_does_not_accept_ps110_alias() -> None:
+    if sfi.yaml is None:
+        pytest.skip("PyYAML unavailable in this test environment.")
+
+    rules = sfi.load_flag_sys_freq_rules(
+        Path("configs/catalogs/system_flags/flag_sys_freq_rules.yaml")
+    )
+
+    assert rules["EFF.S110.2487.tim"]["pulsars"]["default"] == [
+        "EFF.S110.2487",
+    ]
+    all_labels = [
+        label
+        for spec in rules.values()
+        for labels in (spec.get("pulsars", {}) or {}).values()
+        for label in labels
+    ]
+    assert "EFF.PS110.2487" not in all_labels

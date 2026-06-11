@@ -677,6 +677,8 @@ class PipelineConfig:
         fix_qc_remove_orbital_phase: Act on orbital-phase flags.
         fix_qc_orbital_phase_action: Action for orbital-phase flagged TOAs (comment/delete).
         fix_qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
+        fix_qc_orbital_phase_catalog_path: Optional compact-binary catalog path.
+        fix_qc_orbital_phase_max_pb_hours: Maximum binary period for orbital gating.
         fix_qc_write_pqc_flag: Add ``-pqc`` classification flag to TOA rows.
         fix_qc_write_explicit_flags: Add explicit QC flags to TOA rows.
         fix_qc_pqc_flag_name: TOA flag token used for QC class (default ``-pqc``).
@@ -1027,6 +1029,8 @@ class PipelineConfig:
     fix_qc_remove_orbital_phase: bool = False
     fix_qc_orbital_phase_action: str = "comment"
     fix_qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
+    fix_qc_orbital_phase_catalog_path: Optional[str] = None
+    fix_qc_orbital_phase_max_pb_hours: Optional[float] = 24.0
     fix_qc_write_pqc_flag: bool = False
     fix_qc_write_explicit_flags: bool = False
     fix_qc_pqc_flag_name: str = "-pqc"
@@ -1156,6 +1160,13 @@ class PipelineConfig:
             c.fix_overlap_exact_catalog_path = _resolve_declared_path(
                 c.fix_overlap_exact_catalog_path, repo_root=c.home_dir
             ) or Path(c.fix_overlap_exact_catalog_path)
+        if c.fix_qc_orbital_phase_catalog_path is not None:
+            c.fix_qc_orbital_phase_catalog_path = str(
+                _resolve_declared_path(
+                    c.fix_qc_orbital_phase_catalog_path, repo_root=c.home_dir
+                )
+                or Path(c.fix_qc_orbital_phase_catalog_path)
+            )
         if c.ingest_mapping_file is not None:
             c.ingest_mapping_file = _resolve_declared_path(
                 c.ingest_mapping_file, repo_root=c.home_dir
@@ -1224,6 +1235,10 @@ class PipelineConfig:
         if d.get("fix_overlap_exact_catalog_path") is not None:
             d["fix_overlap_exact_catalog_path"] = str(
                 d["fix_overlap_exact_catalog_path"]
+            )
+        if d.get("fix_qc_orbital_phase_catalog_path") is not None:
+            d["fix_qc_orbital_phase_catalog_path"] = str(
+                d["fix_qc_orbital_phase_catalog_path"]
             )
         if d.get("pqc_backend_profiles_path") is not None:
             d["pqc_backend_profiles_path"] = str(d["pqc_backend_profiles_path"])
@@ -1621,6 +1636,9 @@ class PipelineConfig:
             fix_overlap_exact_catalog_path=opt_repo_resource_str(
                 "fix_overlap_exact_catalog_path"
             ),
+            fix_qc_orbital_phase_catalog_path=opt_repo_resource_str(
+                "fix_qc_orbital_phase_catalog_path"
+            ),
             fix_jump_reference_variants=bool(
                 d.get("fix_jump_reference_variants", False)
             ),
@@ -1720,6 +1738,11 @@ class PipelineConfig:
             ),
             fix_qc_orbital_phase_comment_prefix=str(
                 d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE")
+            ),
+            fix_qc_orbital_phase_max_pb_hours=(
+                None
+                if d.get("fix_qc_orbital_phase_max_pb_hours") in (None, "")
+                else float(d.get("fix_qc_orbital_phase_max_pb_hours", 24.0))
             ),
             fix_qc_write_pqc_flag=bool(d.get("fix_qc_write_pqc_flag", False)),
             fix_qc_write_explicit_flags=bool(

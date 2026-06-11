@@ -161,6 +161,30 @@ fix_qc_pqc_event_prefix = "evt_"
     assert cfg.fix_qc_pqc_event_prefix == "evt_"
 
 
+def test_config_parses_orbital_phase_catalog_gate_keys(tmp_path: Path) -> None:
+    repo = _make_git_root(tmp_path / "repo")
+    catalog = repo / "configs" / "catalogs" / "binaries" / "compact.toml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("entries = []\n", encoding="utf-8")
+    cfg_path = repo / "cfg_orbital_gate.toml"
+    cfg_path.write_text(
+        """
+home_dir = "."
+singularity_image = "/tmp/tempo2.sif"
+dataset_name = "."
+results_dir = "results"
+fix_qc_orbital_phase_catalog_path = "configs/catalogs/binaries/compact.toml"
+fix_qc_orbital_phase_max_pb_hours = 12.5
+""",
+        encoding="utf-8",
+    )
+
+    cfg = PipelineConfig.load(cfg_path)
+
+    assert cfg.fix_qc_orbital_phase_catalog_path == str(catalog.resolve())
+    assert cfg.fix_qc_orbital_phase_max_pb_hours == 12.5
+
+
 def test_config_parses_fix_dedupe_same_obs_same_bw_globs(tmp_path: Path) -> None:
     toml_text = """
 home_dir = "/tmp/repo"

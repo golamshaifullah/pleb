@@ -769,6 +769,12 @@ def _build_fixdataset_config(
                 )
                 or "C QC_BIANRY_ECLIPSE"
             ),
+            qc_orbital_phase_catalog_path=_cfg_get(
+                cfg, "fix_qc_orbital_phase_catalog_path", None
+            ),
+            qc_orbital_phase_max_pb_hours=_cfg_get(
+                cfg, "fix_qc_orbital_phase_max_pb_hours", 24.0
+            ),
             qc_write_pqc_flag=bool(_cfg_get(cfg, "fix_qc_write_pqc_flag", False)),
             qc_write_explicit_flags=bool(
                 _cfg_get(cfg, "fix_qc_write_explicit_flags", False)

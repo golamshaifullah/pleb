@@ -683,6 +683,125 @@ def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     assert "\tf 1400" not in toa_comments[0]
 
 
+def test_apply_pqc_outliers_orbital_phase_legacy_without_catalog(
+    tmp_path: Path,
+) -> None:
+    psr = "J1909-3744"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "main" / f"{psr}.combined_qc.csv",
+        "_timfile,mjd,orbital_phase_bad\nBACKEND.tim,56000,True\n",
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_orbital_phase=True,
+        qc_orbital_phase_action="comment",
+        qc_orbital_phase_comment_prefix="C QC_BINARY_ECLIPSE",
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["matched"] == 1
+    assert rep["orbital_phase_gate"]["reason"] == "no_catalog_configured"
+    assert tim.read_text(encoding="utf-8").splitlines()[1].startswith(
+        "C QC_BINARY_ECLIPSE "
+    )
+
+
+def test_apply_pqc_outliers_orbital_phase_catalog_match_only(
+    tmp_path: Path,
+) -> None:
+    catalog = tmp_path / "compact.toml"
+    _write(
+        catalog,
+        """
+entries = [
+  { name = "PSR_J2055+3829", type = "BW", pb_hours = 3.11016895056 },
+]
+""",
+    )
+
+    def run_case(psr: str) -> tuple[dict[str, object], Path]:
+        psr_dir = tmp_path / psr
+        tim = psr_dir / "tims" / "BACKEND.tim"
+        _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+        qc_root = tmp_path / f"qc_{psr.replace('+', 'p').replace('-', 'm')}"
+        _write(
+            qc_root / "main" / f"{psr}.combined_qc.csv",
+            "_timfile,mjd,orbital_phase_bad\nBACKEND.tim,56000,True\n",
+        )
+        cfg = FixDatasetConfig(
+            apply=True,
+            backup=False,
+            qc_results_dir=qc_root,
+            qc_branch="main",
+            qc_remove_orbital_phase=True,
+            qc_orbital_phase_action="comment",
+            qc_orbital_phase_comment_prefix="C QC_BINARY_ECLIPSE",
+            qc_orbital_phase_catalog_path=str(catalog),
+            qc_orbital_phase_max_pb_hours=24.0,
+        )
+        return apply_pqc_outliers(psr_dir, cfg), tim
+
+    matched_rep, matched_tim = run_case("J2055+3829")
+    skipped_rep, skipped_tim = run_case("J1909-3744")
+
+    assert matched_rep["matched"] == 1
+    assert matched_rep["orbital_phase_gate"]["reason"] == "catalog_match"
+    assert matched_tim.read_text(encoding="utf-8").splitlines()[1].startswith(
+        "C QC_BINARY_ECLIPSE "
+    )
+
+    assert skipped_rep["matched"] == 0
+    assert skipped_rep["orbital_phase_gate"]["reason"] == "not_in_catalog"
+    assert skipped_tim.read_text(encoding="utf-8").splitlines()[1] == "f 1400 56000 1 1"
+
+
+def test_apply_pqc_outliers_orbital_phase_catalog_rejects_long_pb(
+    tmp_path: Path,
+) -> None:
+    psr = "J1306-4035"
+    catalog = tmp_path / "compact.toml"
+    _write(
+        catalog,
+        """
+entries = [
+  { name = "PSR_J1306-4035", type = "RB", pb_hours = 26.3328 },
+]
+""",
+    )
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "main" / f"{psr}.combined_qc.csv",
+        "_timfile,mjd,orbital_phase_bad\nBACKEND.tim,56000,True\n",
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_orbital_phase=True,
+        qc_orbital_phase_catalog_path=str(catalog),
+        qc_orbital_phase_max_pb_hours=24.0,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["matched"] == 0
+    assert rep["orbital_phase_gate"]["reason"] == "pb_hours_above_limit"
+    assert tim.read_text(encoding="utf-8").splitlines()[1] == "f 1400 56000 1 1"
+
+
 def test_apply_pqc_outliers_raises_when_qc_csv_missing_by_default(
     tmp_path: Path,
 ) -> None:

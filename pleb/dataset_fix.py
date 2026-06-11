@@ -297,6 +297,8 @@ class FixDatasetConfig:
     qc_remove_orbital_phase: bool = False
     qc_orbital_phase_action: str = "comment"
     qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
+    qc_orbital_phase_catalog_path: Optional[str] = None
+    qc_orbital_phase_max_pb_hours: Optional[float] = 24.0
     qc_write_pqc_flag: bool = False
     qc_write_explicit_flags: bool = False
     qc_pqc_flag_name: str = "-pqc"
@@ -2226,7 +2228,7 @@ def _filter_qc_rows_for_cfg(
 
 
 def _collect_qc_mjds(
-    df: pd.DataFrame, cfg: FixDatasetConfig
+    df: pd.DataFrame, cfg: FixDatasetConfig, *, orbital_phase_allowed: bool = True
 ) -> Dict[str, Dict[Optional[str], list[float]]]:
     reviewed_keep = (
         df["reviewed_keep"].fillna(False).astype(bool).to_numpy()
@@ -2291,7 +2293,11 @@ def _collect_qc_mjds(
         solar &= df["solar_event_member"].fillna(False).astype(bool).to_numpy()
 
     orbital = np.zeros(len(df), dtype=bool)
-    if cfg.qc_remove_orbital_phase and "orbital_phase_bad" in df.columns:
+    if (
+        orbital_phase_allowed
+        and cfg.qc_remove_orbital_phase
+        and "orbital_phase_bad" in df.columns
+    ):
         orbital |= (
             reviewed_event
             if has_reviewed and reviewed_event is not None
@@ -2329,6 +2335,100 @@ def _collect_qc_mjds(
     out["solar"] = _build(solar)
     out["orbital"] = _build(orbital)
     return out
+
+
+def _normalise_pulsar_catalog_name(value: object) -> str:
+    text = str(value or "").strip().upper()
+    for prefix in ("PSR_", "PSR ", "PSR-"):
+        if text.startswith(prefix):
+            text = text[len(prefix) :]
+    return text
+
+
+def _load_orbital_phase_catalog(path: Path) -> Dict[str, Dict[str, object]]:
+    if tomllib is None:
+        raise RuntimeError("TOML support is required to load orbital-phase catalogs.")
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    entries = data.get("entries", [])
+    if not isinstance(entries, list):
+        raise ValueError(f"Catalog entries must be a list: {path}")
+
+    out: Dict[str, Dict[str, object]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "")).strip()
+        if not name:
+            continue
+        out[_normalise_pulsar_catalog_name(name)] = dict(entry)
+    return out
+
+
+def _orbital_phase_gate_for_psr(
+    psr: str, cfg: FixDatasetConfig
+) -> Dict[str, object]:
+    path_text = str(cfg.qc_orbital_phase_catalog_path or "").strip()
+    if not path_text:
+        return {
+            "configured": False,
+            "allowed": True,
+            "reason": "no_catalog_configured",
+        }
+
+    path = Path(path_text).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    catalog = _load_orbital_phase_catalog(path)
+    key = _normalise_pulsar_catalog_name(psr)
+    entry = catalog.get(key)
+    if entry is None:
+        return {
+            "configured": True,
+            "allowed": False,
+            "reason": "not_in_catalog",
+            "catalog_path": str(path),
+            "pulsar": psr,
+        }
+
+    pb = entry.get("pb_hours")
+    try:
+        pb_hours = float(pb)
+    except Exception:
+        pb_hours = None
+
+    max_pb = cfg.qc_orbital_phase_max_pb_hours
+    if pb_hours is None:
+        return {
+            "configured": True,
+            "allowed": False,
+            "reason": "missing_pb_hours",
+            "catalog_path": str(path),
+            "pulsar": psr,
+            "catalog_name": entry.get("name"),
+        }
+    if max_pb is not None and pb_hours > float(max_pb):
+        return {
+            "configured": True,
+            "allowed": False,
+            "reason": "pb_hours_above_limit",
+            "catalog_path": str(path),
+            "pulsar": psr,
+            "catalog_name": entry.get("name"),
+            "pb_hours": pb_hours,
+            "max_pb_hours": float(max_pb),
+        }
+
+    return {
+        "configured": True,
+        "allowed": True,
+        "reason": "catalog_match",
+        "catalog_path": str(path),
+        "pulsar": psr,
+        "catalog_name": entry.get("name"),
+        "binary_type": entry.get("type"),
+        "pb_hours": pb_hours,
+        "max_pb_hours": None if max_pb is None else float(max_pb),
+    }
 
 
 def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
@@ -2415,7 +2515,9 @@ def _manual_review_reason_token(reason: object) -> Optional[str]:
     return token[:160] or None
 
 
-def _manual_review_for_row(df: pd.DataFrame, row_idx: int) -> tuple[bool, Optional[str]]:
+def _manual_review_for_row(
+    df: pd.DataFrame, row_idx: int
+) -> tuple[bool, Optional[str]]:
     action = ""
     if "manual_action" in df.columns:
         try:
@@ -2474,9 +2576,7 @@ def _apply_explicit_qc_tim_flags(
         or changed
     )
     if classification.manual_review:
-        changed = (
-            _token_upsert_unique_flag(parts, "-manual_review", "true") or changed
-        )
+        changed = _token_upsert_unique_flag(parts, "-manual_review", "true") or changed
     else:
         changed = _token_remove_flag(parts, "-manual_review") or changed
     if classification.manual_reason:
@@ -2666,7 +2766,12 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             "error": str(e),
         }
 
-    mjd_maps = _collect_qc_mjds(filtered_df, cfg)
+    orbital_phase_gate = _orbital_phase_gate_for_psr(psr, cfg)
+    mjd_maps = _collect_qc_mjds(
+        filtered_df,
+        cfg,
+        orbital_phase_allowed=bool(orbital_phase_gate.get("allowed", True)),
+    )
     qc_classification_map = (
         _collect_qc_tim_classifications(filtered_df, cfg)
         if _write_any_qc_tim_flags(cfg)
@@ -2690,6 +2795,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 }
             ),
             "qc_filter": qc_filter,
+            "orbital_phase_gate": orbital_phase_gate,
             "matched": 0,
             "changed": False,
         }
@@ -2708,6 +2814,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 }
             ),
             "qc_filter": qc_filter,
+            "orbital_phase_gate": orbital_phase_gate,
             "error": f"Unsupported qc_action: {cfg.qc_action}",
         }
     solar_action = str(cfg.qc_solar_action or "comment").strip().lower()
@@ -2724,6 +2831,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 }
             ),
             "qc_filter": qc_filter,
+            "orbital_phase_gate": orbital_phase_gate,
             "error": f"Unsupported qc_solar_action: {cfg.qc_solar_action}",
         }
     orbital_action = str(cfg.qc_orbital_phase_action or "comment").strip().lower()
@@ -2740,7 +2848,11 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 }
             ),
             "qc_filter": qc_filter,
-            "error": f"Unsupported qc_orbital_phase_action: {cfg.qc_orbital_phase_action}",
+            "orbital_phase_gate": orbital_phase_gate,
+            "error": (
+                "Unsupported qc_orbital_phase_action: "
+                f"{cfg.qc_orbital_phase_action}"
+            ),
         }
 
     tol = float(cfg.qc_merge_tol_days or (2.0 / 86400.0))
@@ -2947,6 +3059,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
             }
         ),
         "qc_filter": qc_filter,
+        "orbital_phase_gate": orbital_phase_gate,
         "matched": int(total_matched),
         "pqc_flagged": int(total_pqc_flagged),
         "explicit_flagged": int(total_explicit_flagged),

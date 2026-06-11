@@ -68,7 +68,9 @@ def test_cross_pulsar_coincidence_report_generation(tmp_path: Path) -> None:
     assert "event_type" in common_points.columns
 
 
-def test_cross_pulsar_common_events_empty_files_when_no_selection(tmp_path: Path) -> None:
+def test_cross_pulsar_common_events_empty_files_when_no_selection(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "run"
     qc_dir = run_dir / "qc" / "main"
     qc_dir.mkdir(parents=True, exist_ok=True)

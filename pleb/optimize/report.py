@@ -299,7 +299,9 @@ def _plot_clean_residuals_mjd(ax, df: pd.DataFrame, label: str) -> None:
         ax.set_title(f"{label}: no clean residuals")
         return
     ax.scatter(clean["x"], clean["resid"], s=8, alpha=0.75)
-    ax.set_title(f"{label}: clean residual vs MJD ({clean.attrs.get('residual_column', 'residual')})")
+    ax.set_title(
+        f"{label}: clean residual vs MJD ({clean.attrs.get('residual_column', 'residual')})"
+    )
     ax.set_xlabel("MJD")
     ax.set_ylabel("residual [us]")
 
@@ -311,7 +313,9 @@ def _plot_clean_residuals_sigma(ax, df: pd.DataFrame, label: str) -> None:
         ax.set_title(f"{label}: no clean residuals")
         return
     ax.scatter(clean["x"], clean["resid"], s=8, alpha=0.75)
-    ax.set_title(f"{label}: clean residual vs uncertainty ({clean.attrs.get('residual_column', 'residual')})")
+    ax.set_title(
+        f"{label}: clean residual vs uncertainty ({clean.attrs.get('residual_column', 'residual')})"
+    )
     ax.set_xlabel(sigma_col)
     ax.set_ylabel("residual [us]")
 
