@@ -173,6 +173,11 @@
       "default": 20
     },
     {
+      "name": "pqc_step_min_span_days",
+      "type": "float",
+      "default": 30.0
+    },
+    {
       "name": "pqc_step_delta_chi2_thresh",
       "type": "float",
       "default": 25.0
@@ -196,6 +201,11 @@
       "name": "pqc_dm_step_min_points",
       "type": "int",
       "default": 20
+    },
+    {
+      "name": "pqc_dm_step_min_span_days",
+      "type": "float",
+      "default": 30.0
     },
     {
       "name": "pqc_dm_step_delta_chi2_thresh",
@@ -645,6 +655,51 @@
       "name": "qc_report_no_feature_plots",
       "type": "bool",
       "default": false
+    },
+    {
+      "name": "qc_cross_pulsar_enabled",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "qc_cross_pulsar_time_col",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_cross_pulsar_window_days",
+      "type": "float",
+      "default": 1.0
+    },
+    {
+      "name": "qc_cross_pulsar_min_pulsars",
+      "type": "int",
+      "default": 2
+    },
+    {
+      "name": "qc_cross_pulsar_include_outliers",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "qc_cross_pulsar_include_events",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "qc_cross_pulsar_outlier_cols",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_cross_pulsar_event_cols",
+      "type": "NoneType",
+      "default": null
+    },
+    {
+      "name": "qc_cross_pulsar_dir",
+      "type": "NoneType",
+      "default": null
     },
     {
       "name": "run_fix_dataset",

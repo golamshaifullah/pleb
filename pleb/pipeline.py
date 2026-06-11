@@ -1784,12 +1784,22 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     ),
                     step_enabled=bool(getattr(cfg, "pqc_step_enabled", True)),
                     step_min_points=int(getattr(cfg, "pqc_step_min_points", 20)),
+                    step_min_span_days=(
+                        None
+                        if getattr(cfg, "pqc_step_min_span_days", 30.0) in (None, "")
+                        else float(getattr(cfg, "pqc_step_min_span_days", 30.0))
+                    ),
                     step_delta_chi2_thresh=float(
                         getattr(cfg, "pqc_step_delta_chi2_thresh", 25.0)
                     ),
                     step_scope=str(getattr(cfg, "pqc_step_scope", "both")),
                     dm_step_enabled=bool(getattr(cfg, "pqc_dm_step_enabled", True)),
                     dm_step_min_points=int(getattr(cfg, "pqc_dm_step_min_points", 20)),
+                    dm_step_min_span_days=(
+                        None
+                        if getattr(cfg, "pqc_dm_step_min_span_days", 30.0) in (None, "")
+                        else float(getattr(cfg, "pqc_dm_step_min_span_days", 30.0))
+                    ),
                     dm_step_delta_chi2_thresh=float(
                         getattr(cfg, "pqc_dm_step_delta_chi2_thresh", 25.0)
                     ),

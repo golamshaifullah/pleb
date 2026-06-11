@@ -2370,6 +2370,28 @@ def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
             except Exception:
                 continue
 
+    event_id_checks: list[tuple[str, str]] = [
+        ("step_id", "step"),
+        ("dm_step_id", "dm_step"),
+        ("eclipse_id", "eclipse"),
+        ("gaussian_bump_id", "gaussian_bump"),
+        ("glitch_id", "glitch"),
+    ]
+    for col, label in event_id_checks:
+        if col in df.columns:
+            try:
+                val = df.iloc[row_idx][col]
+                if pd.isna(val):
+                    continue
+                if isinstance(val, str):
+                    raw = val.strip().lower()
+                    if raw and raw not in {"-1", "none", "nan", "false", ""}:
+                        return label
+                elif int(val) >= 0:
+                    return label
+            except Exception:
+                continue
+
     if "transient_id" in df.columns:
         try:
             tval = df.iloc[row_idx]["transient_id"]
@@ -2380,19 +2402,35 @@ def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
         except Exception:
             pass
 
-    if "event_member" in df.columns:
-        try:
-            eval_ = df.iloc[row_idx]["event_member"]
-            if pd.isna(eval_):
-                return None
-            if bool(eval_):
-                return "event"
-        except Exception:
-            pass
-
-    if reviewed_event_member:
-        return "reviewed_event"
     return None
+
+
+def _manual_review_reason_token(reason: object) -> Optional[str]:
+    if reason is None or pd.isna(reason):
+        return None
+    text = str(reason).strip()
+    if not text:
+        return None
+    token = re.sub(r"[^A-Za-z0-9_.:+-]+", "_", text).strip("_")
+    return token[:160] or None
+
+
+def _manual_review_for_row(df: pd.DataFrame, row_idx: int) -> tuple[bool, Optional[str]]:
+    action = ""
+    if "manual_action" in df.columns:
+        try:
+            val = df.iloc[row_idx]["manual_action"]
+            if not pd.isna(val):
+                action = str(val).strip()
+        except Exception:
+            action = ""
+    reason: Optional[str] = None
+    if "manual_reason" in df.columns:
+        try:
+            reason = _manual_review_reason_token(df.iloc[row_idx]["manual_reason"])
+        except Exception:
+            reason = None
+    return bool(action), reason
 
 
 class _QCTimClassification(NamedTuple):
@@ -2400,6 +2438,8 @@ class _QCTimClassification(NamedTuple):
     bad_toa: bool
     event: bool
     event_type: str
+    manual_review: bool = False
+    manual_reason: Optional[str] = None
 
 
 def _write_any_qc_tim_flags(cfg: FixDatasetConfig) -> bool:
@@ -2433,6 +2473,21 @@ def _apply_explicit_qc_tim_flags(
         _token_upsert_unique_flag(parts, "-event_type", classification.event_type)
         or changed
     )
+    if classification.manual_review:
+        changed = (
+            _token_upsert_unique_flag(parts, "-manual_review", "true") or changed
+        )
+    else:
+        changed = _token_remove_flag(parts, "-manual_review") or changed
+    if classification.manual_reason:
+        changed = (
+            _token_upsert_unique_flag(
+                parts, "-manual_reason", classification.manual_reason
+            )
+            or changed
+        )
+    else:
+        changed = _token_remove_flag(parts, "-manual_reason") or changed
     return changed
 
 
@@ -2461,7 +2516,9 @@ def _collect_qc_tim_classifications(
         if col in df.columns:
             outlier_mask |= df[col].fillna(False).astype(bool).to_numpy()
     if "reviewed_bad_point" in df.columns:
-        outlier_mask = df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+        outlier_mask = (
+            df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy(copy=True)
+        )
     if "reviewed_keep" in df.columns:
         outlier_mask &= ~df["reviewed_keep"].fillna(False).astype(bool).to_numpy()
 
@@ -2474,12 +2531,15 @@ def _collect_qc_tim_classifications(
     ]
     for i in range(len(df)):
         event_type = _first_event_type_for_row(df, i)
+        manual_review, manual_reason = _manual_review_for_row(df, i)
         if event_type:
             labels[i] = _QCTimClassification(
                 pqc_label=f"{event_prefix}{event_type}",
                 bad_toa=False,
                 event=True,
                 event_type=event_type,
+                manual_review=manual_review,
+                manual_reason=manual_reason,
             )
         elif bool(outlier_mask[i]):
             labels[i] = _QCTimClassification(
@@ -2487,6 +2547,8 @@ def _collect_qc_tim_classifications(
                 bad_toa=True,
                 event=False,
                 event_type="none",
+                manual_review=manual_review,
+                manual_reason=manual_reason,
             )
         else:
             labels[i] = _QCTimClassification(
@@ -2494,6 +2556,8 @@ def _collect_qc_tim_classifications(
                 bad_toa=False,
                 event=False,
                 event_type="none",
+                manual_review=manual_review,
+                manual_reason=manual_reason,
             )
 
     mapping: Dict[Optional[str], list[tuple[float, _QCTimClassification]]] = {}

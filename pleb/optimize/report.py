@@ -8,6 +8,7 @@ from typing import Optional
 import pandas as pd
 
 from .models import OptimizationResult
+from .residuals import choose_residual_us
 
 
 def write_markdown_report(result: OptimizationResult) -> Path:
@@ -87,6 +88,8 @@ def write_pdf_report(result: OptimizationResult) -> Optional[Path]:
                 "n_clean",
                 "clean_rms",
                 "n_events",
+                "residual_column",
+                "jump_corrected",
             ]
             show = sdf[cols].copy()
             table = ax.table(
@@ -144,6 +147,8 @@ def write_pdf_report(result: OptimizationResult) -> Optional[Path]:
                 "n_clean",
                 "clean_rms",
                 "n_events",
+                "residual_column",
+                "jump_corrected",
             ]
             table = ax.table(
                 cellText=tdf[cols].values.tolist(),
@@ -271,9 +276,8 @@ def _summary_row(
     label: str, df: pd.DataFrame, score: Optional[float]
 ) -> dict[str, object]:
     bad = _bad_mask(df)
-    resid = pd.to_numeric(
-        df.get("resid_us", df.get("resid", pd.Series(dtype=float))), errors="coerce"
-    )
+    choice = choose_residual_us(df)
+    resid = choice.values
     clean = resid.loc[~bad & resid.notna()].astype(float)
     clean_rms = float((clean.pow(2).mean()) ** 0.5) if not clean.empty else float("nan")
     return {
@@ -284,6 +288,8 @@ def _summary_row(
         "n_clean": int((~bad).sum()),
         "clean_rms": round(clean_rms, 6) if clean.notna().any() else None,
         "n_events": _event_count(df),
+        "residual_column": choice.column or "none",
+        "jump_corrected": bool(choice.jump_corrected),
     }
 
 
@@ -293,9 +299,9 @@ def _plot_clean_residuals_mjd(ax, df: pd.DataFrame, label: str) -> None:
         ax.set_title(f"{label}: no clean residuals")
         return
     ax.scatter(clean["x"], clean["resid"], s=8, alpha=0.75)
-    ax.set_title(f"{label}: clean residual vs MJD")
+    ax.set_title(f"{label}: clean residual vs MJD ({clean.attrs.get('residual_column', 'residual')})")
     ax.set_xlabel("MJD")
-    ax.set_ylabel("residual")
+    ax.set_ylabel("residual [us]")
 
 
 def _plot_clean_residuals_sigma(ax, df: pd.DataFrame, label: str) -> None:
@@ -305,18 +311,19 @@ def _plot_clean_residuals_sigma(ax, df: pd.DataFrame, label: str) -> None:
         ax.set_title(f"{label}: no clean residuals")
         return
     ax.scatter(clean["x"], clean["resid"], s=8, alpha=0.75)
-    ax.set_title(f"{label}: clean residual vs uncertainty")
+    ax.set_title(f"{label}: clean residual vs uncertainty ({clean.attrs.get('residual_column', 'residual')})")
     ax.set_xlabel(sigma_col)
-    ax.set_ylabel("residual")
+    ax.set_ylabel("residual [us]")
 
 
 def _clean_xy(df: pd.DataFrame, *, x_col: str) -> pd.DataFrame:
     x = pd.to_numeric(df.get(x_col, pd.Series(dtype=float)), errors="coerce")
-    resid = pd.to_numeric(
-        df.get("resid_us", df.get("resid", pd.Series(dtype=float))), errors="coerce"
-    )
+    choice = choose_residual_us(df)
+    resid = choice.values
     bad = _bad_mask(df)
     valid = x.notna() & resid.notna() & (~bad)
-    return pd.DataFrame(
+    out = pd.DataFrame(
         {"x": x.loc[valid].astype(float), "resid": resid.loc[valid].astype(float)}
     )
+    out.attrs["residual_column"] = choice.column or "none"
+    return out

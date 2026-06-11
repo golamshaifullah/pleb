@@ -161,12 +161,14 @@ class PTAQCConfig:
     # Step-change detection (global + per-backend)
     step_enabled: bool = True
     step_min_points: int = 20
+    step_min_span_days: Optional[float] = 30.0
     step_delta_chi2_thresh: float = 25.0
     step_scope: str = "both"
 
     # DM-like step detection (freq-scaled)
     dm_step_enabled: bool = True
     dm_step_min_points: int = 20
+    dm_step_min_span_days: Optional[float] = 30.0
     dm_step_delta_chi2_thresh: float = 25.0
     dm_step_scope: str = "both"
 
@@ -739,6 +741,7 @@ def run_pqc_for_parfile(
         step_cfg = StepConfig(
             enabled=bool(cfg_in.step_enabled),
             min_points=int(cfg_in.step_min_points),
+            min_span_days=_opt_float_or_none(cfg_in.step_min_span_days),
             delta_chi2_thresh=float(cfg_in.step_delta_chi2_thresh),
             scope=str(cfg_in.step_scope),
             instrument=bool(cfg_in.event_instrument),
@@ -746,6 +749,7 @@ def run_pqc_for_parfile(
         dm_cfg = StepConfig(
             enabled=bool(cfg_in.dm_step_enabled),
             min_points=int(cfg_in.dm_step_min_points),
+            min_span_days=_opt_float_or_none(cfg_in.dm_step_min_span_days),
             delta_chi2_thresh=float(cfg_in.dm_step_delta_chi2_thresh),
             scope=str(cfg_in.dm_step_scope),
             instrument=bool(cfg_in.event_instrument),

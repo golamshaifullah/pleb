@@ -44,7 +44,7 @@ from .ingest import ingest_dataset, IngestError
 from .logging_utils import set_log_dir
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
-from .qc_report import generate_qc_report
+from .qc_report import generate_cross_pulsar_coincidence_report, generate_qc_report
 from .run_report import generate_run_report
 from .public_release_compare import compare_public_releases
 from .optimize.cli import load_optimization_config
@@ -243,6 +243,29 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Output directory for report artifacts (default: <run-dir>/qc_report).",
+    )
+    p.add_argument(
+        "--cross-pulsar",
+        action="store_true",
+        help="Also generate cross-pulsar common-event/coincidence tables.",
+    )
+    p.add_argument(
+        "--cross-pulsar-window-days",
+        type=float,
+        default=1.0,
+        help="MJD gap/window in days for cross-pulsar common-event grouping.",
+    )
+    p.add_argument(
+        "--cross-pulsar-min-pulsars",
+        type=int,
+        default=2,
+        help="Minimum distinct pulsars required for a common event.",
+    )
+    p.add_argument(
+        "--cross-pulsar-report-dir",
+        type=Path,
+        default=None,
+        help="Output directory for cross-pulsar tables (default: <run-dir>/qc_cross_pulsar).",
     )
     p.add_argument(
         "--no-plots", action="store_true", help="Skip transient plot generation."
@@ -506,6 +529,20 @@ def run_qc_report(argv: list[str] | None) -> int:
     )
     _write_run_settings(Path(report_dir), argv, None)
     print(str(report_dir))
+    if bool(args.cross_pulsar):
+        cross_dir = generate_cross_pulsar_coincidence_report(
+            run_dir=run_dir,
+            report_dir=Path(args.cross_pulsar_report_dir)
+            if args.cross_pulsar_report_dir
+            else None,
+            window_days=float(args.cross_pulsar_window_days),
+            min_pulsars=int(args.cross_pulsar_min_pulsars),
+            include_outliers=True,
+            include_events=True,
+        )
+        if cross_dir is None:
+            raise SystemExit("cross-pulsar report found no QC CSV files.")
+        print(str(cross_dir))
     return 0
 
 

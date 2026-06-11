@@ -789,11 +789,13 @@ class PipelineConfig:
 
     pqc_step_enabled: bool = True
     pqc_step_min_points: int = 20
+    pqc_step_min_span_days: Optional[float] = 30.0
     pqc_step_delta_chi2_thresh: float = 25.0
     pqc_step_scope: str = "both"
 
     pqc_dm_step_enabled: bool = True
     pqc_dm_step_min_points: int = 20
+    pqc_dm_step_min_span_days: Optional[float] = 30.0
     pqc_dm_step_delta_chi2_thresh: float = 25.0
     pqc_dm_step_scope: str = "both"
 
@@ -1360,10 +1362,22 @@ class PipelineConfig:
             ),
             pqc_step_enabled=bool(d.get("pqc_step_enabled", True)),
             pqc_step_min_points=int(d.get("pqc_step_min_points", 20)),
+            pqc_step_min_span_days=(
+                None
+                if "pqc_step_min_span_days" in d
+                and d.get("pqc_step_min_span_days") in (None, "")
+                else float(d.get("pqc_step_min_span_days", 30.0))
+            ),
             pqc_step_delta_chi2_thresh=float(d.get("pqc_step_delta_chi2_thresh", 25.0)),
             pqc_step_scope=str(d.get("pqc_step_scope", "both")),
             pqc_dm_step_enabled=bool(d.get("pqc_dm_step_enabled", True)),
             pqc_dm_step_min_points=int(d.get("pqc_dm_step_min_points", 20)),
+            pqc_dm_step_min_span_days=(
+                None
+                if "pqc_dm_step_min_span_days" in d
+                and d.get("pqc_dm_step_min_span_days") in (None, "")
+                else float(d.get("pqc_dm_step_min_span_days", 30.0))
+            ),
             pqc_dm_step_delta_chi2_thresh=float(
                 d.get("pqc_dm_step_delta_chi2_thresh", 25.0)
             ),

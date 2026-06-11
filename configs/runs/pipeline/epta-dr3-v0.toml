@@ -257,10 +257,10 @@ pqc_structure_group_cols = ""
 pqc_outlier_gate_enabled = true
 # pqc_outlier_gate_sigma: sigma threshold. allowed: float. default: 3.0
 #   Threshold for sigma gating.
-pqc_outlier_gate_sigma = 3.0
+pqc_outlier_gate_sigma = 6.0
 # pqc_outlier_gate_resid_col: residual column. allowed: string or empty. default: "" -> None
 #   Name of residual column to use (defaults to pqc internal).
-pqc_outlier_gate_resid_col = "resid"
+pqc_outlier_gate_resid_col = "resid_detrended"
 # pqc_outlier_gate_sigma_col: sigma column. allowed: string or empty. default: "" -> None
 #   Name of sigma column to use (defaults to pqc internal).
 pqc_outlier_gate_sigma_col = "sigma"
@@ -422,6 +422,25 @@ qc_report_structure_group_cols = "group;sys;freq_bin"
 # qc_report_no_feature_plots: skip feature plots. allowed: true/false. default: false
 #   Skips feature plots (solar/phase/freq_bin, etc).
 qc_report_no_feature_plots = false
+# qc_cross_pulsar_enabled: generate cross-pulsar common-event/coincidence tables. allowed: true/false. default: false
+#   Writes qc_cross_pulsar/common_events.tsv, common_event_points.tsv, and COMMON_EVENTS.md.
+qc_cross_pulsar_enabled = true
+# qc_cross_pulsar_time_col: time column for common-event matching. allowed: string or empty. default: "" -> auto
+qc_cross_pulsar_time_col = ""
+# qc_cross_pulsar_window_days: contiguous MJD gap/window for common-event grouping. allowed: float. default: 1.0
+qc_cross_pulsar_window_days = 1.0
+# qc_cross_pulsar_min_pulsars: minimum distinct pulsars for a common event. allowed: int. default: 2
+qc_cross_pulsar_min_pulsars = 2
+# qc_cross_pulsar_include_outliers: include outlier-like rows in common-event search. allowed: true/false. default: true
+qc_cross_pulsar_include_outliers = true
+# qc_cross_pulsar_include_events: include event-like rows in common-event search. allowed: true/false. default: true
+qc_cross_pulsar_include_events = true
+# qc_cross_pulsar_outlier_cols: optional explicit outlier columns. allowed: list of strings or empty. default: [] -> auto
+qc_cross_pulsar_outlier_cols = []
+# qc_cross_pulsar_event_cols: optional explicit event columns. allowed: list of strings or empty. default: [] -> auto
+qc_cross_pulsar_event_cols = []
+# qc_cross_pulsar_dir: output directory override. allowed: string or empty. default: "" -> <run>/qc_cross_pulsar
+qc_cross_pulsar_dir = ""
 
 # ==== Stage 1/4 toggles ====
 # ---- Add-on toggles ----

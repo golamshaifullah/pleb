@@ -30,6 +30,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -166,6 +167,49 @@ FEATURE_VALUE_COLUMNS = (
     "freq_bin",
 )
 
+COLOR_COLUMN_PREFERENCE = (
+    "reviewed_decision",
+    "backend",
+    "sys",
+    "-sys",
+    "system",
+    "tel",
+    "telescope",
+    "observatory",
+    "pta",
+    "group",
+    "-group",
+    "fe",
+    "be",
+    "freq",
+    "frequency",
+    "freq_mhz",
+    "frequency_mhz",
+    "freq_meta",
+    "cenfreq",
+    "freq_bin",
+)
+MAX_COLOR_CATEGORIES = 40
+DECISION_MARKER_SYMBOLS = {
+    "KEEP": "circle",
+    "BAD_TOA": "x",
+    "EVENT": "diamond",
+    "REVIEW_EVENT": "square",
+}
+DEFAULT_MARKER_SYMBOL = "circle-open"
+PLOTLY_CATEGORY_COLORS = (
+    "#636EFA",
+    "#EF553B",
+    "#00CC96",
+    "#AB63FA",
+    "#FFA15A",
+    "#19D3F3",
+    "#FF6692",
+    "#B6E880",
+    "#FF97FF",
+    "#FECB52",
+)
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(add_help=False)
@@ -299,7 +343,7 @@ def _load_manifest_once(
                 ).reset_index(drop=True)
             st.session_state["qc_manifest_df"] = manifest
             st.session_state["_loaded_manifest_key"] = key
-            st.session_state["selected_review_ids"] = []
+            _reset_plot_selection()
             st.session_state.pop("_loaded_qc_key", None)
 
     manifest = st.session_state["qc_manifest_df"]
@@ -356,7 +400,7 @@ def _load_qc_once(
         with st.spinner(f"Loading QC CSV: {csv_path.name}"):
             st.session_state["qc_df"] = load_qc_csv(csv_path, root=root_dir)
             st.session_state["_loaded_qc_key"] = key
-            st.session_state["selected_review_ids"] = []
+            _reset_plot_selection()
     return st.session_state["qc_df"]
 
 
@@ -375,16 +419,25 @@ def _extract_selected_review_ids(event: Any) -> list[str]:
         points = getattr(selection, "points", []) or []
 
     ids: list[str] = []
+    lookup = st.session_state.get("_plot_review_id_lookup", [])
     for point in points or []:
         custom = None
         if isinstance(point, dict):
             custom = point.get("customdata")
         else:
             custom = getattr(point, "customdata", None)
-        if isinstance(custom, (list, tuple)) and custom:
+        if isinstance(custom, (list, tuple, np.ndarray)) and len(custom):
             ids.append(str(custom[0]))
-        elif custom:
+            continue
+        if custom is None:
+            continue
+        try:
+            rid_i = int(custom)
+        except (TypeError, ValueError):
             ids.append(str(custom))
+            continue
+        if 0 <= rid_i < len(lookup):
+            ids.append(str(lookup[rid_i]))
 
     # Keep order, drop duplicates.
     return list(dict.fromkeys(ids))
@@ -393,9 +446,18 @@ def _extract_selected_review_ids(event: Any) -> list[str]:
 def _sync_plot_selection() -> None:
     """Copy the chart selection into session state on selection callbacks."""
 
+    event_key = st.session_state.get("_plot_event_key", PLOT_KEY)
     st.session_state["selected_review_ids"] = _extract_selected_review_ids(
-        st.session_state.get(PLOT_KEY)
+        st.session_state.get(event_key)
     )
+
+
+def _reset_plot_selection() -> None:
+    st.session_state["selected_review_ids"] = []
+    st.session_state["_plot_reset_token"] = (
+        int(st.session_state.get("_plot_reset_token", 0)) + 1
+    )
+    st.session_state.pop("_plot_review_id_lookup", None)
 
 
 def _compact_columns(df: pd.DataFrame) -> list[str]:
@@ -533,6 +595,64 @@ def _feature_columns(df: pd.DataFrame) -> list[str]:
     return cols
 
 
+def _color_column_options(df: pd.DataFrame) -> list[str]:
+    """Return low-cardinality columns useful for trace coloring."""
+
+    options: list[str] = []
+    skip_names = {
+        "review_id",
+        "qc_csv",
+        "timfile",
+        "filename",
+        "file",
+        "_timfile",
+        "_timfile_base",
+    }
+
+    def add(col: str, *, force: bool = False) -> None:
+        if col in options or col not in df.columns:
+            return
+        lower = str(col).lower()
+        if lower in skip_names or lower.startswith("_plot_"):
+            return
+        values = df[col].dropna()
+        if values.empty:
+            return
+        n_unique = int(values.astype(str).nunique(dropna=True))
+        if force or 1 <= n_unique <= MAX_COLOR_CATEGORIES:
+            options.append(str(col))
+
+    for col in COLOR_COLUMN_PREFERENCE:
+        add(col, force=True)
+    for col in _feature_columns(df):
+        add(col)
+
+    keywords = (
+        "sys",
+        "backend",
+        "tel",
+        "telescope",
+        "observatory",
+        "group",
+        "flag",
+        "event",
+        "bad",
+        "outlier",
+        "step",
+        "glitch",
+        "bump",
+        "freq",
+        "frequency",
+        "cenfreq",
+        "freq_bin",
+    )
+    for col in df.columns:
+        lower = str(col).lower()
+        if any(keyword in lower for keyword in keywords):
+            add(str(col))
+    return options
+
+
 def _filterable_feature_columns(df: pd.DataFrame) -> list[str]:
     """Return feature columns that represent active flags or event IDs."""
 
@@ -630,6 +750,65 @@ def _attach_plot_columns(
     return out
 
 
+def _apply_display_median_centering(
+    view: pd.DataFrame,
+    *,
+    group_col: str,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Subtract KEEP-row group medians from plot residuals only."""
+
+    meta = {
+        "enabled": False,
+        "group_col": group_col,
+        "n_groups": 0,
+        "n_reference_rows": 0,
+    }
+    if group_col not in view.columns or "_plot_residual" not in view.columns:
+        return view, meta
+
+    out = view.copy()
+    decisions = (
+        out.get("reviewed_decision", pd.Series("KEEP", index=out.index))
+        .fillna("KEEP")
+        .astype(str)
+        .str.upper()
+    )
+    reference = (
+        decisions.eq("KEEP")
+        & pd.to_numeric(out["_plot_residual"], errors="coerce").notna()
+        & out[group_col].notna()
+    )
+    if "manual_action" in out.columns:
+        reference &= _normalised_text(out["manual_action"]) == ""
+    if "manual_reason" in out.columns:
+        reference &= _normalised_text(out["manual_reason"]) == ""
+
+    medians = (
+        out.loc[reference]
+        .groupby(group_col, dropna=False)["_plot_residual"]
+        .median()
+    )
+    if medians.empty:
+        return out, meta
+
+    offsets = out[group_col].map(medians)
+    valid_offsets = pd.to_numeric(offsets, errors="coerce").notna()
+    out["_plot_residual_raw"] = out["_plot_residual"]
+    out.loc[valid_offsets, "_plot_residual"] = (
+        pd.to_numeric(out.loc[valid_offsets, "_plot_residual"], errors="coerce")
+        - pd.to_numeric(offsets.loc[valid_offsets], errors="coerce")
+    )
+    out["_plot_center_offset"] = pd.to_numeric(offsets, errors="coerce")
+    meta.update(
+        {
+            "enabled": True,
+            "n_groups": int(len(medians)),
+            "n_reference_rows": int(reference.sum()),
+        }
+    )
+    return out, meta
+
+
 def _plot_subset(
     view: pd.DataFrame,
     *,
@@ -661,7 +840,10 @@ def _plot_subset(
     keep_df = plot_df.loc[~important].copy()
 
     if not plot_all_keep and len(keep_df) > max_keep_points:
-        keep_df = keep_df.sample(int(max_keep_points), random_state=260408373)
+        sample_idx = np.linspace(
+            0, len(keep_df) - 1, int(max_keep_points), dtype=np.int64
+        )
+        keep_df = keep_df.iloc[sample_idx].copy()
         keep_df["_plot_sampled"] = True
     else:
         keep_df["_plot_sampled"] = False
@@ -669,6 +851,7 @@ def _plot_subset(
 
     out = pd.concat([important_df, keep_df], ignore_index=True, sort=False)
     out["_selected"] = out["review_id"].astype(str).isin(selected_ids)
+    out["_plot_rid_i"] = np.arange(len(out), dtype=np.int32)
     return out
 
 
@@ -678,6 +861,47 @@ def _bool_col(frame: pd.DataFrame, col: str) -> pd.Series:
     return frame[col].fillna(False).astype(bool)
 
 
+def _color_series(frame: pd.DataFrame, color_col: str) -> pd.Series:
+    if color_col not in frame.columns:
+        color_col = "reviewed_decision"
+    raw = frame[color_col]
+    numeric = pd.to_numeric(raw, errors="coerce")
+    if numeric.notna().any() and numeric.nunique(dropna=True) > MAX_COLOR_CATEGORIES:
+        try:
+            binned = pd.qcut(
+                numeric,
+                q=min(12, int(numeric.nunique(dropna=True))),
+                duplicates="drop",
+            )
+            series = binned.astype(str).replace({"nan": "(missing)"})
+        except Exception:
+            series = raw.fillna("(missing)").astype(str).replace({"": "(missing)"})
+    else:
+        series = raw.fillna("(missing)").astype(str).replace({"": "(missing)"})
+    counts = series.value_counts(dropna=False)
+    if len(counts) > MAX_COLOR_CATEGORIES:
+        keep = set(counts.head(MAX_COLOR_CATEGORIES - 1).index.astype(str))
+        series = series.where(series.isin(keep), other="(other)")
+    return series
+
+
+def _decision_symbol_array(frame: pd.DataFrame) -> np.ndarray:
+    decision = (
+        frame.get("reviewed_decision", pd.Series("KEEP", index=frame.index))
+        .fillna("KEEP")
+        .astype(str)
+        .str.upper()
+    )
+    return decision.map(DECISION_MARKER_SYMBOLS).fillna(DEFAULT_MARKER_SYMBOL).to_numpy()
+
+
+def _color_map(values: list[str]) -> dict[str, str]:
+    return {
+        str(value): PLOTLY_CATEGORY_COLORS[idx % len(PLOTLY_CATEGORY_COLORS)]
+        for idx, value in enumerate(values)
+    }
+
+
 def _add_trace(
     fig: Any,
     frame: pd.DataFrame,
@@ -685,42 +909,53 @@ def _add_trace(
     name: str,
     size: int,
     opacity: float,
+    symbol: str | np.ndarray,
+    color: str | None,
+    showlegend: bool,
     x_axis_col: str,
     residual_col: str,
+    rich_hover: bool,
+    color_col: str,
+    show_error_bars: bool,
 ) -> None:
     """Add one WebGL scatter trace with a deliberately small payload."""
 
     if frame.empty:
         return
 
-    custom_cols = ["review_id"]
-    for optional in (
-        "backend",
-        "timfile",
-        "freq",
-        "auto_decision",
-        "reviewed_decision",
-        "_active_features",
-    ):
-        if optional in frame.columns:
-            custom_cols.append(optional)
+    custom = frame["_plot_rid_i"].to_numpy(dtype=np.int32, copy=False)
+    hovertemplate = f"{x_axis_col}=%{{x:.6g}}<br>{residual_col}=%{{y:.4g}}"
 
-    custom = frame[custom_cols].astype(str).to_numpy()
+    if rich_hover:
+        custom_cols = ["review_id"]
+        for optional in (
+            "backend",
+            "timfile",
+            "freq",
+            "auto_decision",
+            "reviewed_decision",
+            "_active_features",
+            color_col,
+        ):
+            if optional in frame.columns and optional not in custom_cols:
+                custom_cols.append(optional)
 
-    hovertemplate = (
-        f"{x_axis_col}=%{{x:.6g}}<br>"
-        f"{residual_col}=%{{y:.4g}}<br>"
-        "review_id=%{customdata[0]}"
-    )
-    for idx, col in enumerate(custom_cols[1:], start=1):
-        hovertemplate += f"<br>{col}=%{{customdata[{idx}]}}"
+        custom = frame[custom_cols].astype(str).to_numpy()
+        hovertemplate += "<br>review_id=%{customdata[0]}"
+        for idx, col in enumerate(custom_cols[1:], start=1):
+            hovertemplate += f"<br>{col}=%{{customdata[{idx}]}}"
     hovertemplate += "<extra></extra>"
 
     error_y = None
-    if "_plot_error" in frame.columns and frame["_plot_error"].notna().any():
+    if (
+        show_error_bars
+        and "_plot_error" in frame.columns
+        and frame["_plot_error"].notna().any()
+    ):
         error_y = {
             "type": "data",
-            "array": pd.to_numeric(frame["_plot_error"] * 1e-6, errors="coerce"),
+            "array": pd.to_numeric(frame["_plot_error"] * 1e-6, errors="coerce")
+            .to_numpy(dtype=np.float32, copy=False),
             "visible": True,
             "width": 0,
             "thickness": 0.5,
@@ -728,14 +963,24 @@ def _add_trace(
 
     fig.add_trace(
         go.Scattergl(
-            x=pd.to_numeric(frame["_plot_x"], errors="coerce"),
-            y=pd.to_numeric(frame["_plot_residual"], errors="coerce"),
+            x=pd.to_numeric(frame["_plot_x"], errors="coerce").to_numpy(
+                dtype=np.float32, copy=False
+            ),
+            y=pd.to_numeric(frame["_plot_residual"], errors="coerce").to_numpy(
+                dtype=np.float32, copy=False
+            ),
             error_y=error_y,
             mode="markers",
             name=name,
             customdata=custom,
-            marker={"size": size, "opacity": opacity},
+            marker={
+                "size": size,
+                "opacity": opacity,
+                "symbol": symbol,
+                **({"color": color} if color is not None else {}),
+            },
             hovertemplate=hovertemplate,
+            showlegend=showlegend,
         )
     )
 
@@ -746,6 +991,9 @@ def _make_fast_scatter(
     title: str,
     x_axis_col: str,
     residual_col: str,
+    rich_hover: bool,
+    color_col: str,
+    show_error_bars: bool,
 ) -> Any:
     fig = go.Figure()
     if plot_df.empty:
@@ -756,23 +1004,48 @@ def _make_fast_scatter(
         .fillna("KEEP")
         .astype(str)
     )
-    plot_df = plot_df.assign(_decision=decision)
+    plot_df = plot_df.assign(_decision=decision, _color_value=_color_series(plot_df, color_col))
 
     selected_mask = _bool_col(plot_df, "_selected")
 
-    # Put KEEP first so flagged/selected points remain visible on top.
-    for dec in sorted(plot_df["_decision"].unique(), key=lambda x: (x != "KEEP", x)):
-        group = plot_df[(plot_df["_decision"] == dec) & (~selected_mask)]
-        size = 4 if str(dec).upper() == "KEEP" else 7
-        opacity = 0.42 if str(dec).upper() == "KEEP" else 0.82
+    color_values = sorted(plot_df["_color_value"].unique(), key=lambda x: (x != "KEEP", x))
+    colors = _color_map([str(value) for value in color_values])
+    for value in color_values:
+        group = plot_df[(plot_df["_color_value"] == value) & (~selected_mask)]
+        if group.empty:
+            continue
+        value_text = str(value)
+        fig.add_trace(
+            go.Scattergl(
+                x=[None],
+                y=[None],
+                mode="markers",
+                name=value_text,
+                marker={
+                    "size": 8,
+                    "symbol": "circle",
+                    "color": colors[value_text],
+                },
+                hoverinfo="skip",
+                showlegend=True,
+            )
+        )
+        decisions = group["_decision"].astype(str).str.upper()
+        has_important = decisions.isin(IMPORTANT_DECISIONS).any()
         _add_trace(
             fig,
             group,
-            name=str(dec),
-            size=size,
-            opacity=opacity,
+            name=value_text,
+            size=7 if has_important else 4,
+            opacity=0.82 if has_important else 0.42,
+            symbol=_decision_symbol_array(group),
+            color=colors[value_text],
+            showlegend=False,
             x_axis_col=x_axis_col,
             residual_col=residual_col,
+            rich_hover=rich_hover,
+            color_col=color_col,
+            show_error_bars=show_error_bars,
         )
 
     selected = plot_df[selected_mask]
@@ -782,27 +1055,70 @@ def _make_fast_scatter(
         name="selected",
         size=11,
         opacity=0.96,
+        symbol=_decision_symbol_array(selected),
+        color="rgba(30, 30, 30, 0.95)",
+        showlegend=False,
         x_axis_col=x_axis_col,
         residual_col=residual_col,
+        rich_hover=rich_hover,
+        color_col=color_col,
+        show_error_bars=show_error_bars,
     )
 
+    for decision_value, symbol in DECISION_MARKER_SYMBOLS.items():
+        fig.add_trace(
+            go.Scattergl(
+                x=[None],
+                y=[None],
+                mode="markers",
+                name=decision_value,
+                marker={
+                    "size": 8,
+                    "symbol": symbol,
+                    "color": "rgba(70, 70, 70, 0.85)",
+                },
+                hoverinfo="skip",
+                showlegend=True,
+                legend="legend2",
+            )
+        )
+
+    fig.add_annotation(
+        text=title,
+        x=0,
+        y=1.28,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        xanchor="left",
+        yanchor="bottom",
+        font={"size": 16},
+    )
     fig.update_layout(
-        title=title,
         dragmode=PLOT_DEFAULT_DRAGMODE,
-        height=540,
+        height=570,
         hovermode="closest",
         uirevision="pleb-qc-review-fast-session-state",
         selectionrevision="pleb-qc-review-selection-state",
         newselection={"line": {"color": "#d62728", "width": 1.5}},
         activeselection={"fillcolor": "rgba(214, 39, 40, 0.12)"},
         legend={
+            "title": {"text": color_col},
             "orientation": "h",
             "yanchor": "bottom",
-            "y": 1.02,
+            "y": 1.08,
             "xanchor": "left",
             "x": 0,
         },
-        margin={"l": 45, "r": 20, "t": 75, "b": 40},
+        legend2={
+            "title": {"text": "review decision"},
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.08,
+            "xanchor": "right",
+            "x": 1,
+        },
+        margin={"l": 45, "r": 20, "t": 135, "b": 40},
         xaxis_title=x_axis_col,
         yaxis_title=residual_col,
     )
@@ -832,7 +1148,7 @@ def _select_current_pulsar(manifest: pd.DataFrame) -> str:
         st.session_state["current_qc_csv"] = str(
             manifest.loc[manifest["pulsar"].astype(str) == current, "path"].iloc[0]
         )
-        st.session_state["selected_review_ids"] = []
+        _reset_plot_selection()
         st.rerun()
     if next_col.button("Next →", disabled=idx >= len(pulsars) - 1):
         current = pulsars[idx + 1]
@@ -840,7 +1156,7 @@ def _select_current_pulsar(manifest: pd.DataFrame) -> str:
         st.session_state["current_qc_csv"] = str(
             manifest.loc[manifest["pulsar"].astype(str) == current, "path"].iloc[0]
         )
-        st.session_state["selected_review_ids"] = []
+        _reset_plot_selection()
         st.rerun()
 
     chosen_pulsar = st.selectbox("Pulsar", pulsars, index=pulsars.index(current))
@@ -851,7 +1167,7 @@ def _select_current_pulsar(manifest: pd.DataFrame) -> str:
                 0
             ]
         )
-        st.session_state["selected_review_ids"] = []
+        _reset_plot_selection()
     return str(st.session_state["current_pulsar"])
 
 
@@ -1020,7 +1336,7 @@ def main() -> None:
     selected_csv = str(path_by_variant_label[selected_variant_label])
     if selected_csv != current_csv:
         st.session_state["current_qc_csv"] = selected_csv
-        st.session_state["selected_review_ids"] = []
+        _reset_plot_selection()
     csv_path = Path(str(st.session_state["current_qc_csv"])).expanduser()
 
     _sync_reviewed_output_default(
@@ -1049,6 +1365,9 @@ def main() -> None:
 
     reviewed = apply_overrides(qc_df, overrides_df)
     filterable_feature_cols = _filterable_feature_columns(reviewed)
+    color_options = _color_column_options(reviewed)
+    if not color_options:
+        color_options = ["reviewed_decision"]
     residual_options = _residual_column_options(reviewed)
     if not residual_options:
         st.error(
@@ -1093,6 +1412,21 @@ def main() -> None:
                 "Choose any numeric QC column for the horizontal axis, for example "
                 "`mjd`, uncertainty/error, `orbital_phase`, frequency, or other "
                 "structure features present in the table."
+            ),
+        )
+        color_col = st.selectbox(
+            "Color by",
+            color_options,
+            index=(
+                color_options.index("backend")
+                if "backend" in color_options
+                else color_options.index("reviewed_decision")
+                if "reviewed_decision" in color_options
+                else 0
+            ),
+            help=(
+                "Choose a low-cardinality TOA column such as backend/system/telescope "
+                "or a PQC feature flag/id column. Very high-cardinality columns are hidden."
             ),
         )
 
@@ -1165,10 +1499,45 @@ def main() -> None:
                         for col in filterable_feature_cols
                     ]
                 )
-                st.dataframe(counts, use_container_width=True, hide_index=True)
+                st.dataframe(counts, width="stretch", hide_index=True)
 
         st.header("Performance")
         plot_all_keep = st.checkbox("Plot all KEEP rows", value=False)
+        center_plot = st.checkbox(
+            "Center plot by KEEP median",
+            value=False,
+            help=(
+                "Display-only: subtract each group's median residual computed from "
+                "KEEP rows after filters. Raw QC values and outputs are unchanged."
+            ),
+        )
+        center_options = [col for col in color_options if col in reviewed.columns]
+        if "backend" in reviewed.columns and "backend" not in center_options:
+            center_options.insert(0, "backend")
+        center_group_col = st.selectbox(
+            "Center group",
+            center_options or ["reviewed_decision"],
+            index=(
+                (center_options or ["reviewed_decision"]).index("backend")
+                if "backend" in (center_options or ["reviewed_decision"])
+                else 0
+            ),
+            disabled=not center_plot,
+            help="Column whose KEEP-row medians define the display-only offsets.",
+        )
+        show_error_bars = st.checkbox(
+            "Show error bars",
+            value=True,
+            help="Use the same uncertainty scaling as the older Plotly review path.",
+        )
+        rich_hover = st.checkbox(
+            "Rich hover metadata",
+            value=False,
+            help=(
+                "Show per-row backend/timfile/frequency/feature hover details. "
+                "Off keeps the Plotly payload small for large QC files."
+            ),
+        )
         max_keep_points = int(
             st.number_input(
                 "Max sampled KEEP rows",
@@ -1200,13 +1569,24 @@ def main() -> None:
         selected_features=selected_features,
     )
     active_feature_cols = _filterable_feature_columns(view)
-    if active_feature_cols:
+    if rich_hover and active_feature_cols:
         view = view.copy()
         view["_active_features"] = [
             _active_feature_labels(row, active_feature_cols)
             for _, row in view.iterrows()
         ]
     view = _attach_plot_columns(view, residual_col, x_axis_col)
+    center_meta = {
+        "enabled": False,
+        "group_col": center_group_col,
+        "n_groups": 0,
+        "n_reference_rows": 0,
+    }
+    if center_plot:
+        view, center_meta = _apply_display_median_centering(
+            view,
+            group_col=center_group_col,
+        )
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Visible TOAs", len(view))
@@ -1228,8 +1608,25 @@ def main() -> None:
         f"QC CSV: `{csv_path.name}`. "
         f"X-axis column: `{x_axis_col}`. "
         f"Plotting residual column: `{residual_col}`. "
-        "No display-time backend/JUMP centering is applied."
+        f"Coloring by: `{color_col}`. "
+        + (
+            "Display-only median centering is applied."
+            if center_meta["enabled"]
+            else "No display-time backend/JUMP centering is applied."
+        )
     )
+    if center_meta["enabled"]:
+        st.caption(
+            "Display-only median centering is enabled: "
+            f"`{center_meta['group_col']}` medians from "
+            f"{center_meta['n_reference_rows']:,} KEEP rows across "
+            f"{center_meta['n_groups']:,} group(s) were subtracted from the plot. "
+            "Raw QC values, selected-row table, overrides, and exports are unchanged."
+        )
+    elif center_plot:
+        st.warning(
+            f"Display centering requested, but no KEEP-row medians were available for `{center_group_col}`."
+        )
 
     if plottable.empty:
         st.warning(
@@ -1248,10 +1645,16 @@ def main() -> None:
             title=f"Residual vs {x_axis_col} — click, box-select, or lasso points",
             x_axis_col=x_axis_col,
             residual_col=residual_col,
+            rich_hover=rich_hover,
+            color_col=color_col,
+            show_error_bars=show_error_bars,
         )
+        st.session_state["_plot_review_id_lookup"] = plot_df["review_id"].astype(str).tolist()
+        plot_event_key = f"{PLOT_KEY}_{int(st.session_state.get('_plot_reset_token', 0))}"
+        st.session_state["_plot_event_key"] = plot_event_key
         st.plotly_chart(
             fig,
-            key=PLOT_KEY,
+            key=plot_event_key,
             on_select=_sync_plot_selection,
             selection_mode=PLOT_SELECTION_MODES,
             config={
@@ -1259,7 +1662,7 @@ def main() -> None:
                 "doubleClick": "reset+autosize",
                 "modeBarButtonsToAdd": list(PLOT_MODEBAR_BUTTONS_TO_ADD),
             },
-            use_container_width=True,
+            width="stretch",
         )
         st.caption(
             "Box selection is the default. Use the always-visible mode bar to switch "
@@ -1268,7 +1671,7 @@ def main() -> None:
 
     clear_sel_col, _spacer = st.columns([1, 5])
     if clear_sel_col.button("Clear selection"):
-        st.session_state["selected_review_ids"] = []
+        _reset_plot_selection()
         st.rerun()
 
     manual_ids = st.text_area(
@@ -1295,7 +1698,7 @@ def main() -> None:
         st.subheader("Selected TOAs")
         st.dataframe(
             selected[_compact_columns(selected)] if not selected.empty else selected,
-            use_container_width=True,
+            width="stretch",
             height=220,
         )
 
@@ -1310,8 +1713,8 @@ def main() -> None:
                 source="streamlit_qc_review",
             )
             st.session_state["overrides_df"] = append_overrides(overrides_df, new_rows)
-            st.session_state["selected_review_ids"] = []
             write_overrides(st.session_state["overrides_df"], overrides_path)
+            _reset_plot_selection()
             st.success(f"Saved {len(new_rows)} override row(s) to {overrides_path}")
             st.rerun()
 
@@ -1322,7 +1725,7 @@ def main() -> None:
     if show_visible_table:
         with st.expander("Visible rows preview", expanded=True):
             shown = view[_compact_columns(view)].head(table_preview_rows)
-            st.dataframe(shown, use_container_width=True, height=360)
+            st.dataframe(shown, width="stretch", height=360)
             if len(view) > len(shown):
                 st.caption(
                     f"Showing first {len(shown):,} of {len(view):,} visible rows."
@@ -1333,7 +1736,7 @@ def main() -> None:
         )
 
     with st.expander("Manual override audit table", expanded=False):
-        st.dataframe(overrides_df, use_container_width=True, height=280)
+        st.dataframe(overrides_df, width="stretch", height=280)
 
 
 if __name__ == "__main__":

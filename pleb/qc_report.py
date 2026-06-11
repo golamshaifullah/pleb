@@ -32,6 +32,7 @@ from typing import Optional
 import subprocess
 import sys
 import re
+from datetime import datetime, timedelta, timezone
 
 from .logging_utils import get_logger
 
@@ -156,11 +157,14 @@ def _build_compact_decisions(
             lambda s: f"{s},transient_id" if s else "transient_id"
         )
     reason[decision == "BAD_TOA"] = reason_out[decision == "BAD_TOA"]
-    reason[decision == "REVIEW_EVENT"] = (
-        reason_out[decision == "REVIEW_EVENT"]
-        + " |event| "
-        + reason_evt[decision == "REVIEW_EVENT"]
-    )
+    review_mask = decision == "REVIEW_EVENT"
+    if bool(review_mask.any()):
+        review_reason_out = reason_out.loc[review_mask].fillna("").astype(object)
+        review_reason_evt = reason_evt.loc[review_mask].fillna("").astype(object)
+        reason.loc[review_mask] = [
+            f"{out_part} |event| {evt_part}".strip()
+            for out_part, evt_part in zip(review_reason_out, review_reason_evt)
+        ]
     reason[decision == "EVENT"] = reason_evt[decision == "EVENT"]
     reason = reason.str.strip().str.strip("|").replace("", "n/a")
 
@@ -944,6 +948,181 @@ def _choose_time_col(
     return None
 
 
+def _mjd_to_iso_date(mjd: float) -> str:
+    """Convert MJD to an ISO calendar date string without extra dependencies."""
+    try:
+        dt = datetime(1858, 11, 17, tzinfo=timezone.utc) + timedelta(days=float(mjd))
+    except Exception:
+        return ""
+    return dt.date().isoformat()
+
+
+def _truthy_column_names(
+    df: pd.DataFrame, idx: object, cols: list[str] | tuple[str, ...]
+) -> list[str]:
+    names: list[str] = []
+    for col in cols:
+        if col in df.columns and bool(_bool_series(df, col).loc[idx]):
+            names.append(col)
+    return names
+
+
+def _write_common_event_tables(
+    points: pd.DataFrame,
+    report_dir: Path,
+    *,
+    min_pulsars: int,
+    window_days: float,
+) -> None:
+    """Write event-centric cross-pulsar date/range coincidence tables."""
+    header = (
+        "common_event_id\tcluster_id\tmjd_start\tmjd_end\tmjd_center\t"
+        "date_start\tdate_end\tspan_days\tn_points\tn_pulsars\tpulsars\t"
+        "kind_summary\tevent_type_summary\toutlier_points\tevent_points\t"
+        "outlier_event_points\treview_hint\n"
+    )
+    if "cluster_id" not in points.columns or points.empty:
+        (report_dir / "common_events.tsv").write_text(header, encoding="utf-8")
+        (report_dir / "common_event_points.tsv").write_text(
+            "common_event_id\tcluster_id\tpulsar\tmjd\tdate\tkind\tevent_type\tdecision\tdecision_reason\tqc_csv\trow_index\n",
+            encoding="utf-8",
+        )
+        (report_dir / "COMMON_EVENTS.md").write_text(
+            "# Common Events\n\nNo common cross-pulsar events were found.\n",
+            encoding="utf-8",
+        )
+        return
+
+    rows: list[dict[str, object]] = []
+    point_frames: list[pd.DataFrame] = []
+    min_support = int(min_pulsars)
+    for cid, sub in points.groupby("cluster_id", sort=True):
+        pulsar_set = sorted(set(sub["pulsar"].astype(str)))
+        n_pulsars = len(pulsar_set)
+        if n_pulsars < min_support:
+            continue
+        kind_counts = sub["kind"].astype(str).value_counts().to_dict()
+        if "event_type" in sub.columns:
+            event_type_counts = (
+                sub["event_type"]
+                .fillna("")
+                .astype(str)
+                .replace("", "n/a")
+                .value_counts()
+                .to_dict()
+            )
+        else:
+            event_type_counts = {}
+        mjd_start = float(sub["mjd"].min())
+        mjd_end = float(sub["mjd"].max())
+        mjd_center = 0.5 * (mjd_start + mjd_end)
+        event_id = f"CE{len(rows) + 1:04d}"
+        kind_summary = ",".join(
+            f"{key}:{int(value)}" for key, value in sorted(kind_counts.items())
+        )
+        event_type_summary = ",".join(
+            f"{key}:{int(value)}" for key, value in sorted(event_type_counts.items())
+        )
+        review_hint = (
+            f"review {n_pulsars} pulsars from {_mjd_to_iso_date(mjd_start)} "
+            f"to {_mjd_to_iso_date(mjd_end)}"
+        )
+        rows.append(
+            {
+                "common_event_id": event_id,
+                "cluster_id": int(cid),
+                "mjd_start": mjd_start,
+                "mjd_end": mjd_end,
+                "mjd_center": mjd_center,
+                "date_start": _mjd_to_iso_date(mjd_start),
+                "date_end": _mjd_to_iso_date(mjd_end),
+                "span_days": float(mjd_end - mjd_start),
+                "n_points": int(len(sub)),
+                "n_pulsars": int(n_pulsars),
+                "pulsars": ",".join(pulsar_set),
+                "kind_summary": kind_summary,
+                "event_type_summary": event_type_summary,
+                "outlier_points": int(kind_counts.get("outlier", 0)),
+                "event_points": int(kind_counts.get("event", 0)),
+                "outlier_event_points": int(kind_counts.get("outlier+event", 0)),
+                "review_hint": review_hint,
+            }
+        )
+        pp = sub.copy()
+        pp.insert(0, "common_event_id", event_id)
+        pp["date"] = pp["mjd"].map(_mjd_to_iso_date)
+        point_frames.append(pp)
+
+    event_df = pd.DataFrame(rows)
+    if event_df.empty:
+        (report_dir / "common_events.tsv").write_text(header, encoding="utf-8")
+        (report_dir / "common_event_points.tsv").write_text(
+            "common_event_id\tcluster_id\tpulsar\tmjd\tdate\tkind\tevent_type\tdecision\tdecision_reason\tqc_csv\trow_index\n",
+            encoding="utf-8",
+        )
+        md = (
+            "# Common Events\n\n"
+            f"No common cross-pulsar events met min_pulsars={min_support} "
+            f"within window_days={float(window_days):g}.\n"
+        )
+        (report_dir / "COMMON_EVENTS.md").write_text(md, encoding="utf-8")
+        return
+
+    event_df = event_df.sort_values(
+        ["n_pulsars", "n_points", "mjd_start"], ascending=[False, False, True]
+    ).reset_index(drop=True)
+    # Reassign IDs after sorting so CE0001 is the highest-priority event.
+    remap = {
+        str(old): f"CE{i + 1:04d}"
+        for i, old in enumerate(event_df["common_event_id"].astype(str).tolist())
+    }
+    event_df["common_event_id"] = [
+        remap[str(old)] for old in event_df["common_event_id"].astype(str)
+    ]
+    common_points = pd.concat(point_frames, ignore_index=True)
+    common_points["common_event_id"] = common_points["common_event_id"].map(remap)
+    common_points = common_points.sort_values(
+        ["common_event_id", "mjd", "pulsar"]
+    ).reset_index(drop=True)
+
+    event_df.to_csv(report_dir / "common_events.tsv", sep="\t", index=False)
+    common_points.to_csv(report_dir / "common_event_points.tsv", sep="\t", index=False)
+
+    lines = [
+        "# Common Events",
+        "",
+        "Generated from selected PQC outlier/event rows across pulsars.",
+        f"Common means at least {min_support} pulsars in a contiguous MJD window "
+        f"with consecutive selected points separated by <= {float(window_days):g} days.",
+        "",
+        "| event | date range | MJD range | pulsars | points | kinds |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for _, row in event_df.head(50).iterrows():
+        lines.append(
+            "| {event} | {date_start} to {date_end} | {mjd_start:.6f} to "
+            "{mjd_end:.6f} | {n_pulsars} | {n_points} | {kinds} |".format(
+                event=row["common_event_id"],
+                date_start=row["date_start"],
+                date_end=row["date_end"],
+                mjd_start=float(row["mjd_start"]),
+                mjd_end=float(row["mjd_end"]),
+                n_pulsars=int(row["n_pulsars"]),
+                n_points=int(row["n_points"]),
+                kinds=str(row["kind_summary"]),
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "Detailed member rows are in `common_event_points.tsv`.",
+            "Machine-readable event windows are in `common_events.tsv`.",
+            "",
+        ]
+    )
+    (report_dir / "COMMON_EVENTS.md").write_text("\n".join(lines), encoding="utf-8")
+
+
 def generate_cross_pulsar_coincidence_report(
     run_dir: Path,
     report_dir: Optional[Path] = None,
@@ -1028,6 +1207,19 @@ def generate_cross_pulsar_coincidence_report(
         if n_keep == 0:
             continue
 
+        event_labels = []
+        for i in out.index[keep]:
+            labels = _truthy_column_names(out, i, fallback_event_cols)
+            if "transient_id" in out.columns:
+                tid_value = pd.to_numeric(
+                    pd.Series([out.loc[i, "transient_id"]]), errors="coerce"
+                ).fillna(-1)
+                if int(tid_value.iloc[0]) >= 0:
+                    labels.append("transient_id")
+            if bool(is_out.loc[i]) and not labels:
+                labels.append("outlier")
+            event_labels.append(",".join(sorted(set(labels))) if labels else "n/a")
+
         part = pd.DataFrame(
             {
                 "pulsar": pulsar,
@@ -1040,6 +1232,7 @@ def generate_cross_pulsar_coincidence_report(
                     )
                     for i in out.index[keep]
                 ],
+                "event_type": event_labels,
                 "qc_csv": str(csv),
                 "row_index": out.index[keep].astype(int),
                 "decision": out.loc[keep, "decision"].astype(str),
@@ -1052,6 +1245,12 @@ def generate_cross_pulsar_coincidence_report(
         report_dir / "selected_row_counts.tsv", sep="\t", index=False
     )
     if not rows:
+        _write_common_event_tables(
+            pd.DataFrame(),
+            report_dir,
+            min_pulsars=int(min_pulsars),
+            window_days=max(0.0, float(window_days)),
+        )
         return report_dir
 
     points = (
@@ -1111,5 +1310,12 @@ def generate_cross_pulsar_coincidence_report(
             "cluster_id\tmjd_start\tmjd_end\tspan_days\tn_points\tn_pulsars\tpulsars\toutlier_points\tevent_points\toutlier_event_points\n",
             encoding="utf-8",
         )
+
+    _write_common_event_tables(
+        points,
+        report_dir,
+        min_pulsars=int(min_pulsars),
+        window_days=window,
+    )
 
     return report_dir

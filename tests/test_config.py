@@ -303,6 +303,23 @@ def test_pipeline_config_repo_resources_resolve_from_declared_config_repo(
     assert Path(str(resolved.pqc_backend_profiles_path)) == resource.resolve()
 
 
+def test_pipeline_config_step_min_span_defaults_and_can_disable() -> None:
+    base = {"home_dir": ".", "singularity_image": "tempo2.sif"}
+    default_cfg = PipelineConfig.from_dict(base)
+    disabled_cfg = PipelineConfig.from_dict(
+        {
+            **base,
+            "pqc_step_min_span_days": None,
+            "pqc_dm_step_min_span_days": "",
+        }
+    )
+
+    assert default_cfg.pqc_step_min_span_days == 30.0
+    assert default_cfg.pqc_dm_step_min_span_days == 30.0
+    assert disabled_cfg.pqc_step_min_span_days is None
+    assert disabled_cfg.pqc_dm_step_min_span_days is None
+
+
 def test_ingest_resolved_output_root_uses_repo_relative_dataset_path(
     tmp_path: Path,
 ) -> None:

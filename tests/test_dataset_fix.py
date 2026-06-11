@@ -507,6 +507,145 @@ def test_apply_pqc_outliers_can_write_pqc_and_explicit_flags_together(
     assert "-bad_toa" not in flags_by_mjd["56002"]
 
 
+def test_reviewed_event_without_detector_class_does_not_create_event_type(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0003"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        ("FORMAT 1\n" "f 1400 57000 1 1\n" "f 1400 57001 1 1\n"),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,reviewed_event_member,event_member\n"
+            "BACKEND.tim,57000,True,False\n"
+            "BACKEND.tim,57001,False,True\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    flags_by_mjd = {
+        mjd: parse_tim_flags_from_line(raw)
+        for mjd, raw in _toa_lines_by_mjd(tim).items()
+    }
+
+    assert flags_by_mjd["57000"]["-pqc"] == "good"
+    assert flags_by_mjd["57000"]["-event"] == "false"
+    assert flags_by_mjd["57000"]["-event_type"] == "none"
+    assert flags_by_mjd["57001"]["-pqc"] == "good"
+    assert flags_by_mjd["57001"]["-event"] == "false"
+    assert flags_by_mjd["57001"]["-event_type"] == "none"
+
+
+def test_event_id_columns_map_to_specific_event_types(tmp_path: Path) -> None:
+    psr = "J0000+0004"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        ("FORMAT 1\n" "f 1400 58000 1 1\n" "f 1400 58001 1 1\n"),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,reviewed_event_member,step_id,dm_step_id\n"
+            "BACKEND.tim,58000,True,0,-1\n"
+            "BACKEND.tim,58001,True,-1,dm-step\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    flags_by_mjd = {
+        mjd: parse_tim_flags_from_line(raw)
+        for mjd, raw in _toa_lines_by_mjd(tim).items()
+    }
+
+    assert flags_by_mjd["58000"]["-pqc"] == "event_step"
+    assert flags_by_mjd["58000"]["-event_type"] == "step"
+    assert flags_by_mjd["58001"]["-pqc"] == "event_dm_step"
+    assert flags_by_mjd["58001"]["-event_type"] == "dm_step"
+
+
+def test_manual_review_reason_is_written_as_explicit_flag(tmp_path: Path) -> None:
+    psr = "J0000+0005"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "f 1400 59000 1 1 -manual_review true -manual_reason stale\n"
+            "f 1400 59001 1 1 -manual_review true -manual_reason stale\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,bad_point,solar_event_member,manual_action,manual_reason\n"
+            "BACKEND.tim,59000,False,True,mark_event,Reviewed as solar event near conjunction\n"
+            "BACKEND.tim,59001,False,False,,\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    flags_by_mjd = {
+        mjd: parse_tim_flags_from_line(raw)
+        for mjd, raw in _toa_lines_by_mjd(tim).items()
+    }
+
+    assert flags_by_mjd["59000"]["-pqc"] == "event_solar"
+    assert flags_by_mjd["59000"]["-event_type"] == "solar"
+    assert flags_by_mjd["59000"]["-manual_review"] == "true"
+    assert (
+        flags_by_mjd["59000"]["-manual_reason"]
+        == "Reviewed_as_solar_event_near_conjunction"
+    )
+    assert "-manual_review" not in flags_by_mjd["59001"]
+    assert "-manual_reason" not in flags_by_mjd["59001"]
+
+
 def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     tmp_path: Path,
 ) -> None:

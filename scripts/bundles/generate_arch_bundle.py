@@ -217,6 +217,153 @@ def htcondor_scripts(bundle: Path) -> None:
         """,
     )
     write_executable(
+        bundle / "preflight_bundle.sh",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        B="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        C="$B/campaign"
+        DATASET="$C/EPTA-DR3/epta-dr3-data"
+        CONTROL="$DATASET/_campaign"
+        CFG="$CONTROL/config"
+        DAGDIR="$CONTROL/dag"
+        RUNNER="$C/scaffold/scripts/run_campaign_stage.sh"
+        SUBMIT="$C/scaffold/launchers/pleb_campaign.htcondor.submit"
+
+        fail() { echo "FAIL: $*" >&2; exit 1; }
+        warn() { echo "WARN: $*" >&2; }
+        ok() { echo "OK: $*"; }
+        read_cfg() {
+          local name="$1"
+          [[ -f "$CFG/$name" ]] || fail "missing campaign config: $CFG/$name"
+          tr -d '\\r\\n' < "$CFG/$name"
+        }
+
+        [[ -d "$C" ]] || fail "missing campaign directory: $C"
+        [[ -d "$DATASET" ]] || fail "missing dataset directory: $DATASET"
+        [[ -f "$RUNNER" ]] || fail "missing stage runner: $RUNNER"
+        [[ -f "$SUBMIT" ]] || fail "missing HTCondor submit file: $SUBMIT"
+
+        final_stage="$(read_cfg final_stage.txt)"
+        step2_jobs="$(read_cfg step2_jobs.txt)"
+        step2_chunks="$(read_cfg step2_chunks.txt)"
+        [[ "$final_stage" == "step5_apply_comments" ]] || fail "final_stage=$final_stage, expected step5_apply_comments"
+        [[ "$step2_chunks" =~ ^[0-9]+$ ]] || fail "step2_chunks is not numeric: $step2_chunks"
+        [[ "$step2_jobs" =~ ^[0-9]+$ ]] || fail "step2_jobs is not numeric: $step2_jobs"
+        (( step2_chunks >= 1 )) || fail "step2_chunks must be >= 1"
+        (( step2_jobs >= 1 )) || fail "step2_jobs must be >= 1"
+        ok "final stage is comment-only: $final_stage"
+        ok "Step2 split: chunks=$step2_chunks request_cpus=$step2_jobs"
+
+        if grep -R -E 'fix_qc_action = "delete"|step6_apply_delete' \
+          "$C/scaffold" "$C/configs/htcondor_campaign" "$CFG" >/tmp/pleb_preflight_delete_refs.$$ 2>/dev/null; then
+          cat /tmp/pleb_preflight_delete_refs.$$
+          rm -f /tmp/pleb_preflight_delete_refs.$$
+          fail "delete-stage reference found in scaffold/config"
+        fi
+        rm -f /tmp/pleb_preflight_delete_refs.$$
+        ok "no delete-stage references in scaffold/config"
+
+        grep -q 'RESULTS_STASH' "$RUNNER" || fail "merge-step2 result-stash fix missing"
+        grep -q 'git -C "$WORKTREE_DIR" clean -fdx' "$RUNNER" || fail "merge-step2 dirty-worktree clean missing"
+        ok "merge-step2 dirty-worktree protection is present"
+
+        grep -q 'request_cpus = $(request_cpus:1)' "$SUBMIT" || fail "submit file does not use DAG request_cpus macro"
+        ok "HTCondor submit file uses per-node request_cpus"
+
+        if (( step2_chunks > 1 )); then
+          for idx in $(seq 1 "$step2_chunks"); do
+            n="$(printf '%02d' "$idx")"
+            cfg="$C/configs/htcondor_campaign/epta_dr_optimize/step2_detect_variants_chunk${n}.toml"
+            seed_cfg="$C/repo_state_seed/configs/htcondor_campaign/epta_dr_optimize/step2_detect_variants_chunk${n}.toml"
+            [[ -f "$cfg" ]] || fail "missing chunk config: $cfg"
+            [[ -f "$seed_cfg" ]] || fail "missing seed chunk config: $seed_cfg"
+            grep -q "jobs = $step2_jobs" "$cfg" || fail "$cfg does not contain jobs = $step2_jobs"
+            grep -q "step2_detect_variants_all_chunk${n}" "$cfg" || fail "$cfg has wrong chunk branch"
+            grep -q "wf_step2_detect_variants_chunk${n}" "$cfg" || fail "$cfg has wrong chunk outdir"
+          done
+          ok "Step2 chunk configs are distinct"
+        fi
+
+        if [[ -n "${PLEB_OUTER_SIF:-}" ]]; then
+          [[ -f "$PLEB_OUTER_SIF" ]] || fail "PLEB_OUTER_SIF does not exist: $PLEB_OUTER_SIF"
+        elif [[ -s "$CFG/sif_path.txt" ]]; then
+          sif="$(read_cfg sif_path.txt)"
+          [[ -f "$sif" ]] || fail "configured SIF does not exist: $sif"
+        elif [[ -f "$HOME/containers/pleb_tempo2.sif" || -f /work/Containers/pleb_tempo2.sif ]]; then
+          :
+        else
+          fail "no SIF found; set PLEB_OUTER_SIF=/absolute/path/to/pleb_tempo2.sif"
+        fi
+        ok "container path is available"
+
+        "$B/fix_paths_and_render.sh" >/tmp/pleb_preflight_render.$$.log
+        DAG="$DAGDIR/pleb_campaign.dag"
+        [[ -f "$DAG" ]] || fail "DAG was not rendered: $DAG"
+
+        python3 - "$DAG" "$step2_jobs" "$step2_chunks" <<'PY'
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+
+dag = Path(sys.argv[1]).read_text(encoding="utf-8", errors="ignore")
+step2_jobs = sys.argv[2]
+step2_chunks = int(sys.argv[3])
+
+def fail(msg: str) -> None:
+    print(f"FAIL: {msg}", file=sys.stderr)
+    raise SystemExit(1)
+
+nodes = re.findall(r"^JOB\\s+(\\S+)\\s+", dag, re.M)
+vars_ = dict(re.findall(r'^VARS\\s+(\\S+).*?request_cpus="([^"]+)"', dag, re.M))
+full = [node for node in nodes if node.startswith("FULL_")]
+
+if len(full) != 60:
+    fail(f"expected 60 pulsar jobs, found {len(full)}")
+if "MERGE_STEP2" not in nodes:
+    fail("DAG missing MERGE_STEP2")
+if step2_chunks > 1 and "STEP2_ALL" in nodes:
+    fail("DAG still contains STEP2_ALL despite split Step2")
+
+expected_step2 = [f"STEP2_CHUNK{i:02d}" for i in range(1, step2_chunks + 1)]
+if step2_chunks == 1:
+    expected_step2 = ["STEP2_ALL"]
+for node in expected_step2:
+    if node not in nodes:
+        fail(f"DAG missing {node}")
+    if vars_.get(node) != step2_jobs:
+        fail(f"{node} request_cpus={vars_.get(node)}, expected {step2_jobs}")
+if vars_.get("MERGE_STEP2") != "1":
+    fail(f"MERGE_STEP2 request_cpus={vars_.get('MERGE_STEP2')}, expected 1")
+if "step6_apply_delete" in dag or 'fix_qc_action = "delete"' in dag:
+    fail("DAG contains delete-stage text")
+
+print("OK: DAG shape and CPU requests are correct")
+print(f"OK: pulsar jobs: {len(full)}")
+print(f"OK: request_cpus counts: {dict(Counter(vars_.values()))}")
+PY
+
+        if command -v condor_status >/dev/null 2>&1; then
+          slots="$(
+            condor_status -af Name Cpus State Activity 2>/dev/null |
+              awk -v need="$step2_jobs" '$2 >= need { n++ } END { print n+0 }'
+          )"
+          if (( slots < step2_chunks )); then
+            condor_status -af Name Cpus State Activity 2>/dev/null || true
+            fail "only $slots slots have >= $step2_jobs cores; need $step2_chunks"
+          fi
+          ok "HTCondor has $slots slots with >= $step2_jobs cores"
+        else
+          warn "condor_status not found; skipped cluster capacity check"
+        fi
+
+        df -h "$B" "$C" 2>/dev/null || true
+        ok "preflight passed"
+        """,
+    )
+    write_executable(
         bundle / "launch_htcondor.sh",
         """
         #!/usr/bin/env bash
@@ -225,7 +372,11 @@ def htcondor_scripts(bundle: Path) -> None:
         B="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         C="$B/campaign"
         DAG="$C/EPTA-DR3/epta-dr3-data/_campaign/dag/pleb_campaign.dag"
-        "$B/fix_paths_and_render.sh"
+        if [[ "${PLEB_SKIP_PREFLIGHT:-0}" != "1" ]]; then
+          "$B/preflight_bundle.sh"
+        else
+          "$B/fix_paths_and_render.sh"
+        fi
         cd "$C"
         condor_submit_dag "$DAG"
         """,
@@ -249,6 +400,12 @@ def htcondor_scripts(bundle: Path) -> None:
         """
         Run:
           PLEB_OUTER_SIF=/path/to/pleb_tempo2.sif ./launch_htcondor.sh
+
+        Preflight only:
+          PLEB_OUTER_SIF=/path/to/pleb_tempo2.sif ./preflight_bundle.sh
+
+        Skip launch preflight only if you have already run it:
+          PLEB_SKIP_PREFLIGHT=1 PLEB_OUTER_SIF=/path/to/pleb_tempo2.sif ./launch_htcondor.sh
 
         Fill all available slots:
           Leave PLEB_DAG_MAXJOBS unset, or set it to the number of slots before

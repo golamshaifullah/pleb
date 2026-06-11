@@ -20,6 +20,7 @@ import pandas as pd
 from .folds import FoldConfig, make_fold_frames, summarize_fold_stability
 from .models import FoldSummary, ObjectiveConfig
 from .objectives import compute_score, violated_constraints
+from .residuals import choose_residual_us
 
 DEFAULT_OUTLIER_COLS = (
     "bad_point",
@@ -310,9 +311,8 @@ def _compute_metrics(
     n_toas = float(len(df))
     bad_mask = _combined_bad_mask(df)
     event_mask = _combined_event_mask(df)
-    resid = pd.to_numeric(
-        df.get("resid_us", df.get("resid", pd.Series(dtype=float))), errors="coerce"
-    )
+    residual_choice = choose_residual_us(df)
+    resid = residual_choice.values
     sigma = pd.to_numeric(
         df.get("sigma_us", df.get("sigma", pd.Series(dtype=float))), errors="coerce"
     )
@@ -337,7 +337,12 @@ def _compute_metrics(
             df, bad_mask, backend_col=backend_col
         ),
         "parameter_complexity_penalty": float(parameter_complexity_penalty),
+        "residual_column_jump_corrected": (
+            1.0 if residual_choice.jump_corrected else 0.0
+        ),
     }
+    if residual_choice.column:
+        metrics["residual_column_available"] = 1.0
     metrics.update(_backend_bad_fraction_metrics(df, bad_mask, backend_col=backend_col))
     if "variant_support_present" in df.columns:
         support = pd.to_numeric(df["variant_support_present"], errors="coerce")
