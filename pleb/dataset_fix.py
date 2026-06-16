@@ -296,7 +296,7 @@ class FixDatasetConfig:
     qc_solar_comment_prefix: str = "C QC_SOLAR"
     qc_remove_orbital_phase: bool = False
     qc_orbital_phase_action: str = "comment"
-    qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
+    qc_orbital_phase_comment_prefix: str = "C QC_BINARY_ECLIPSE"
     qc_orbital_phase_catalog_path: Optional[str] = None
     qc_orbital_phase_max_pb_hours: Optional[float] = 24.0
     qc_write_pqc_flag: bool = False
@@ -2282,6 +2282,16 @@ def _collect_qc_mjds(
             standard |= reviewed_event & transient_mask
         elif not has_reviewed:
             standard |= transient_mask
+
+    event_protected = np.zeros(len(df), dtype=bool)
+    if "solar_event_member" in df.columns:
+        event_protected |= (
+            df["solar_event_member"].fillna(False).astype(bool).to_numpy()
+        )
+    if "reviewed_bad_point" in df.columns:
+        reviewed_bad = df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+        event_protected &= ~reviewed_bad
+    standard &= ~event_protected
 
     solar = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_solar and "solar_event_member" in df.columns:

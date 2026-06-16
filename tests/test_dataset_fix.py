@@ -646,6 +646,85 @@ def test_manual_review_reason_is_written_as_explicit_flag(tmp_path: Path) -> Non
     assert "-manual_reason" not in flags_by_mjd["59001"]
 
 
+def test_solar_event_is_not_removed_by_generic_outlier_mask(tmp_path: Path) -> None:
+    psr = "J0000+0005"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        "FORMAT 1\nf 1400 59000 1 1\nf 1400 59001 1 1\n",
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,bad_point,outlier_any,solar_event_member\n"
+            "BACKEND.tim,59000,True,True,True\n"
+            "BACKEND.tim,59001,True,True,False\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_remove_solar=False,
+        qc_action="comment",
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    lines = tim.read_text(encoding="utf-8").splitlines()
+    assert any("59000" in ln and not ln.startswith("C ") for ln in lines)
+    assert any("59001" in ln and ln.startswith("C QC_OUTLIER ") for ln in lines)
+
+    flags_by_mjd = {
+        mjd: parse_tim_flags_from_line(raw)
+        for mjd, raw in _toa_lines_by_mjd(tim).items()
+    }
+    assert flags_by_mjd["59000"]["-pqc"] == "event_solar"
+    assert flags_by_mjd["59000"]["-event_type"] == "solar"
+    assert flags_by_mjd["59000"]["-event"] == "true"
+    assert "-bad_toa" not in flags_by_mjd["59000"]
+
+
+def test_reviewed_bad_solar_event_can_still_be_removed(tmp_path: Path) -> None:
+    psr = "J0000+0005"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 59000 1 1\n")
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,reviewed_bad_point,solar_event_member\n"
+            "BACKEND.tim,59000,True,True\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_remove_solar=False,
+        qc_action="comment",
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["matched"] == 1
+    assert tim.read_text(encoding="utf-8").splitlines()[1].startswith("C QC_OUTLIER ")
+
+
 def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     tmp_path: Path,
 ) -> None:

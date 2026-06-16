@@ -180,6 +180,7 @@ class PTAQCConfig:
     # Feature extraction
     add_orbital_phase: bool = True
     add_solar_elongation: bool = True
+    solar_elongation_source: str = "tempo2_general2"
     add_elevation: bool = False
     add_airmass: bool = False
     add_parallactic_angle: bool = False
@@ -699,18 +700,23 @@ def run_pqc_for_parfile(
         dip_cfg = ExpDipConfig(
             min_duration_days=float(cfg_in.exp_dip_min_duration_days)
         )
-        feature_cfg = FeatureConfig(
-            add_orbital_phase=bool(cfg_in.add_orbital_phase),
-            add_solar_elongation=bool(cfg_in.add_solar_elongation),
-            add_elevation=bool(cfg_in.add_elevation),
-            add_airmass=bool(cfg_in.add_airmass),
-            add_parallactic_angle=bool(cfg_in.add_parallactic_angle),
-            add_freq_bin=bool(cfg_in.add_freq_bin),
-            freq_bins=int(cfg_in.freq_bins),
-            observatory_path=(
+        feature_kwargs: Dict[str, Any] = {
+            "add_orbital_phase": bool(cfg_in.add_orbital_phase),
+            "add_solar_elongation": bool(cfg_in.add_solar_elongation),
+            "add_elevation": bool(cfg_in.add_elevation),
+            "add_airmass": bool(cfg_in.add_airmass),
+            "add_parallactic_angle": bool(cfg_in.add_parallactic_angle),
+            "add_freq_bin": bool(cfg_in.add_freq_bin),
+            "freq_bins": int(cfg_in.freq_bins),
+            "observatory_path": (
                 str(cfg_in.observatory_path) if cfg_in.observatory_path else None
             ),
-        )
+        }
+        if hasattr(FeatureConfig(), "solar_elongation_source"):
+            feature_kwargs["solar_elongation_source"] = str(
+                getattr(cfg_in, "solar_elongation_source", "tempo2_general2")
+            )
+        feature_cfg = FeatureConfig(**feature_kwargs)
         struct_cfg = StructureConfig(
             mode=str(cfg_in.structure_mode),
             detrend_features=(

@@ -204,8 +204,6 @@ def htcondor_scripts(bundle: Path) -> None:
           printf '%s\n' "$PLEB_OUTER_SIF" > "$CONTROL/config/sif_path.txt"
         elif [[ -f "$HOME/containers/pleb_tempo2.sif" ]]; then
           printf '%s\n' "$HOME/containers/pleb_tempo2.sif" > "$CONTROL/config/sif_path.txt"
-        elif [[ -f /work/Containers/pleb_tempo2.sif ]]; then
-          printf '%s\n' /work/Containers/pleb_tempo2.sif > "$CONTROL/config/sif_path.txt"
         elif [[ ! -s "$CONTROL/config/sif_path.txt" ]]; then
           echo "No pleb_tempo2.sif found. Set PLEB_OUTER_SIF=/path/to/pleb_tempo2.sif and rerun." >&2
           exit 2
@@ -291,7 +289,7 @@ def htcondor_scripts(bundle: Path) -> None:
         elif [[ -s "$CFG/sif_path.txt" ]]; then
           sif="$(read_cfg sif_path.txt)"
           [[ -f "$sif" ]] || fail "configured SIF does not exist: $sif"
-        elif [[ -f "$HOME/containers/pleb_tempo2.sif" || -f /work/Containers/pleb_tempo2.sif ]]; then
+        elif [[ -f "$HOME/containers/pleb_tempo2.sif" ]]; then
           :
         else
           fail "no SIF found; set PLEB_OUTER_SIF=/absolute/path/to/pleb_tempo2.sif"
@@ -449,7 +447,6 @@ def shared_stage_script() -> str:
     if [[ -z "$SIF" ]]; then
       if [[ -f "$B/pleb_tempo2.sif" ]]; then SIF="$B/pleb_tempo2.sif"
       elif [[ -f "$HOME/containers/pleb_tempo2.sif" ]]; then SIF="$HOME/containers/pleb_tempo2.sif"
-      elif [[ -f /work/Containers/pleb_tempo2.sif ]]; then SIF=/work/Containers/pleb_tempo2.sif
       else echo "Set PLEB_SIF=/path/to/pleb_tempo2.sif" >&2; exit 2
       fi
     fi

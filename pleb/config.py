@@ -806,6 +806,7 @@ class PipelineConfig:
     pqc_robust_scope: str = "both"
     pqc_add_orbital_phase: bool = True
     pqc_add_solar_elongation: bool = True
+    pqc_solar_elongation_source: str = "tempo2_general2"
     pqc_add_elevation: bool = False
     pqc_add_airmass: bool = False
     pqc_add_parallactic_angle: bool = False
@@ -1028,7 +1029,7 @@ class PipelineConfig:
     fix_qc_solar_comment_prefix: str = "C QC_SOLAR"
     fix_qc_remove_orbital_phase: bool = False
     fix_qc_orbital_phase_action: str = "comment"
-    fix_qc_orbital_phase_comment_prefix: str = "C QC_BIANRY_ECLIPSE"
+    fix_qc_orbital_phase_comment_prefix: str = "C QC_BINARY_ECLIPSE"
     fix_qc_orbital_phase_catalog_path: Optional[str] = None
     fix_qc_orbital_phase_max_pb_hours: Optional[float] = 24.0
     fix_qc_write_pqc_flag: bool = False
@@ -1399,6 +1400,9 @@ class PipelineConfig:
             pqc_dm_step_scope=str(d.get("pqc_dm_step_scope", "both")),
             pqc_add_orbital_phase=bool(d.get("pqc_add_orbital_phase", True)),
             pqc_add_solar_elongation=bool(d.get("pqc_add_solar_elongation", True)),
+            pqc_solar_elongation_source=str(
+                d.get("pqc_solar_elongation_source", "tempo2_general2")
+            ),
             pqc_add_elevation=bool(d.get("pqc_add_elevation", False)),
             pqc_add_airmass=bool(d.get("pqc_add_airmass", False)),
             pqc_add_parallactic_angle=bool(d.get("pqc_add_parallactic_angle", False)),
@@ -1737,7 +1741,7 @@ class PipelineConfig:
                 d.get("fix_qc_orbital_phase_action", "comment")
             ),
             fix_qc_orbital_phase_comment_prefix=str(
-                d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BIANRY_ECLIPSE")
+                d.get("fix_qc_orbital_phase_comment_prefix", "# QC_BINARY_ECLIPSE")
             ),
             fix_qc_orbital_phase_max_pb_hours=(
                 None

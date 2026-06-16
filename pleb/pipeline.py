@@ -1817,6 +1817,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                     add_solar_elongation=bool(
                         getattr(cfg, "pqc_add_solar_elongation", True)
                     ),
+                    solar_elongation_source=str(
+                        getattr(cfg, "pqc_solar_elongation_source", "tempo2_general2")
+                    ),
                     add_elevation=bool(getattr(cfg, "pqc_add_elevation", False)),
                     add_airmass=bool(getattr(cfg, "pqc_add_airmass", False)),
                     add_parallactic_angle=bool(
