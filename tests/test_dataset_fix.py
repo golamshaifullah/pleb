@@ -507,6 +507,60 @@ def test_apply_pqc_outliers_can_write_pqc_and_explicit_flags_together(
     assert "-bad_toa" not in flags_by_mjd["56002"]
 
 
+def test_apply_pqc_outliers_can_write_metric_flags(tmp_path: Path) -> None:
+    psr = "J0000+0003"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "f 1400 56500 1 1 -pqc_robust_z stale -pqc_bad_ou true\n"
+            "f 1400 56501 1 1\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    qc_csv = qc_root / "main" / f"{psr}_qc.csv"
+    _write(
+        qc_csv,
+        (
+            "_timfile,mjd,robust_z,ou_score,bad_ou,note\n"
+            "BACKEND.tim,56500,8.125,12.5,True,ignored text\n"
+            "BACKEND.tim,56501,-0.5,,False,ignored text\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_write_metric_flags=True,
+        qc_metric_flag_columns=["robust_z", "ou_score", "bad_ou", "note"],
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["changed_files"] == 1
+    assert rep["metric_flagged"] == 2
+    assert rep["pqc_flagged"] == 0
+    assert rep["explicit_flagged"] == 0
+
+    flags_by_mjd = {
+        mjd: parse_tim_flags_from_line(raw)
+        for mjd, raw in _toa_lines_by_mjd(tim).items()
+    }
+
+    assert flags_by_mjd["56500"]["-pqc_robust_z"] == "8.125"
+    assert flags_by_mjd["56500"]["-pqc_ou_score"] == "12.5"
+    assert flags_by_mjd["56500"]["-pqc_bad_ou"] == "true"
+    assert flags_by_mjd["56500"]["-pqc_note"] == "ignored_text"
+    assert flags_by_mjd["56501"]["-pqc_robust_z"] == "-0.5"
+    assert flags_by_mjd["56501"]["-pqc_bad_ou"] == "false"
+    assert "-pqc_ou_score" not in flags_by_mjd["56501"]
+    assert "-pqc" not in flags_by_mjd["56501"]
+
+
 def test_reviewed_event_without_detector_class_does_not_create_event_type(
     tmp_path: Path,
 ) -> None:
@@ -559,7 +613,13 @@ def test_event_id_columns_map_to_specific_event_types(tmp_path: Path) -> None:
     tim = psr_dir / "tims" / "BACKEND.tim"
     _write(
         tim,
-        ("FORMAT 1\n" "f 1400 58000 1 1\n" "f 1400 58001 1 1\n"),
+        (
+            "FORMAT 1\n"
+            "f 1400 58000 1 1\n"
+            "f 1400 58001 1 1\n"
+            "f 1400 58002 1 1\n"
+            "f 1400 58003 1 1\n"
+        ),
     )
 
     qc_root = tmp_path / "qc"
@@ -567,9 +627,11 @@ def test_event_id_columns_map_to_specific_event_types(tmp_path: Path) -> None:
     _write(
         qc_csv,
         (
-            "_timfile,mjd,reviewed_event_member,step_id,dm_step_id\n"
-            "BACKEND.tim,58000,True,0,-1\n"
-            "BACKEND.tim,58001,True,-1,dm-step\n"
+            "_timfile,mjd,reviewed_event_member,step_id,step_global_id,dm_step_id,dm_step_global_id\n"
+            "BACKEND.tim,58000,True,0,-1,-1,-1\n"
+            "BACKEND.tim,58001,True,-1,-1,dm-step,-1\n"
+            "BACKEND.tim,58002,True,-1,global-step,-1,-1\n"
+            "BACKEND.tim,58003,True,-1,-1,-1,global-dm-step\n"
         ),
     )
 
@@ -593,6 +655,10 @@ def test_event_id_columns_map_to_specific_event_types(tmp_path: Path) -> None:
     assert flags_by_mjd["58000"]["-event_type"] == "step"
     assert flags_by_mjd["58001"]["-pqc"] == "event_dm_step"
     assert flags_by_mjd["58001"]["-event_type"] == "dm_step"
+    assert flags_by_mjd["58002"]["-pqc"] == "event_step"
+    assert flags_by_mjd["58002"]["-event_type"] == "step"
+    assert flags_by_mjd["58003"]["-pqc"] == "event_dm_step"
+    assert flags_by_mjd["58003"]["-event_type"] == "dm_step"
 
 
 def test_manual_review_reason_is_written_as_explicit_flag(tmp_path: Path) -> None:
@@ -845,6 +911,59 @@ entries = [
     assert skipped_rep["matched"] == 0
     assert skipped_rep["orbital_phase_gate"]["reason"] == "not_in_catalog"
     assert skipped_tim.read_text(encoding="utf-8").splitlines()[1] == "f 1400 56000 1 1"
+
+
+def test_orbital_phase_takes_precedence_over_generic_outlier(
+    tmp_path: Path,
+) -> None:
+    psr = "J2055+3829"
+    catalog = tmp_path / "compact.toml"
+    _write(
+        catalog,
+        """
+entries = [
+  { name = "PSR_J2055+3829", type = "BW", pb_hours = 3.11016895056 },
+]
+""",
+    )
+
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(tim, "FORMAT 1\nf 1400 56000 1 1\n")
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "main" / f"{psr}.combined_qc.csv",
+        (
+            "_timfile,mjd,orbital_phase_bad,robust_global_outlier\n"
+            "BACKEND.tim,56000,True,True\n"
+        ),
+    )
+
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_outlier_cols=["robust_global_outlier"],
+        qc_remove_orbital_phase=True,
+        qc_orbital_phase_action="comment",
+        qc_orbital_phase_comment_prefix="C QC_BINARY_ECLIPSE",
+        qc_orbital_phase_catalog_path=str(catalog),
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+    rep = apply_pqc_outliers(psr_dir, cfg)
+
+    assert rep["matched"] == 1
+    line = tim.read_text(encoding="utf-8").splitlines()[1]
+    assert line.startswith("C QC_BINARY_ECLIPSE ")
+    assert not line.startswith("C QC_OUTLIER ")
+    flags = parse_tim_flags_from_line(line)
+    assert flags["-pqc"] == "event_orbital_phase"
+    assert flags["-event"] == "true"
+    assert flags["-event_type"] == "orbital_phase"
+    assert "-bad_toa" not in flags
 
 
 def test_apply_pqc_outliers_orbital_phase_catalog_rejects_long_pb(

@@ -738,9 +738,9 @@ def _attach_plot_columns(
 
     err_col = None
     if residual_col.endswith("_us") and "tempo2_err_us" in out.columns:
-        err_col = "tempo2_err_us"
+        err_col = "tempo2_err_us" * 1e-6
     elif "tempo2_err" in out.columns:
-        err_col = "tempo2_err"
+        err_col = "tempo2_err" * 1e-6
     elif "uncertainty" in out.columns:
         err_col = "uncertainty"
 
@@ -949,12 +949,12 @@ def _add_trace(
     if (
         show_error_bars
         and "_plot_error" in frame.columns
-        and frame["_plot_error"].notna().any()
+        #and frame["_plot_error"].notna().any()
     ):
         error_y = {
             "type": "data",
             "array": pd.to_numeric(
-                frame["_plot_error"] * 1e-6, errors="coerce"
+                frame["_plot_error"], errors="coerce"
             ).to_numpy(dtype=np.float32, copy=False),
             "visible": True,
             "width": 0,

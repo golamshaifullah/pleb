@@ -186,6 +186,10 @@ class FixDatasetConfig:
         qc_orbital_phase_comment_prefix: Prefix for orbital-phase TOA comments.
         qc_write_pqc_flag: Write ``-pqc`` classification on each TOA after QC.
         qc_write_explicit_flags: Write explicit QC flags on each TOA after QC.
+        qc_write_metric_flags: Write selected PQC scalar columns as TOA flags.
+        qc_metric_flag_columns: QC CSV columns to write as flags. If unset, PLEB
+            writes scalar PQC diagnostic columns automatically.
+        qc_metric_flag_prefix: Prefix for generated metric flags.
         qc_pqc_flag_name: Flag token used for QC classification.
         qc_pqc_good_value: Value for TOAs that are neither outliers nor events.
         qc_pqc_bad_value: Value for outliers that are not part of events.
@@ -301,6 +305,9 @@ class FixDatasetConfig:
     qc_orbital_phase_max_pb_hours: Optional[float] = 24.0
     qc_write_pqc_flag: bool = False
     qc_write_explicit_flags: bool = False
+    qc_write_metric_flags: bool = False
+    qc_metric_flag_columns: Optional[List[str]] = None
+    qc_metric_flag_prefix: str = "-pqc_"
     qc_pqc_flag_name: str = "-pqc"
     qc_pqc_good_value: str = "good"
     qc_pqc_bad_value: str = "bad"
@@ -1381,6 +1388,26 @@ def _token_remove_flag(parts: List[str], flag: str) -> bool:
     return changed
 
 
+def _token_remove_flag_prefix(parts: List[str], prefix: str) -> bool:
+    old_parts = list(parts)
+    new_parts: list[str] = []
+    changed = False
+    i = 0
+    while i < len(old_parts):
+        tok = old_parts[i]
+        if not tok.startswith(prefix):
+            new_parts.append(tok)
+            i += 1
+            continue
+        changed = True
+        i += 1
+        if i < len(old_parts) and not old_parts[i].startswith("-"):
+            i += 1
+    if changed:
+        parts[:] = new_parts
+    return changed
+
+
 def _token_upsert_unique_flag(parts: List[str], flag: str, value: str) -> bool:
     old_parts = list(parts)
     new_parts: list[str] = []
@@ -2284,13 +2311,53 @@ def _collect_qc_mjds(
             standard |= transient_mask
 
     event_protected = np.zeros(len(df), dtype=bool)
-    if "solar_event_member" in df.columns:
+    if not cfg.qc_remove_solar and "solar_event_member" in df.columns:
         event_protected |= (
             df["solar_event_member"].fillna(False).astype(bool).to_numpy()
         )
-    if "reviewed_bad_point" in df.columns:
-        reviewed_bad = df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
-        event_protected &= ~reviewed_bad
+    if not cfg.qc_remove_transients and "transient_id" in df.columns:
+        try:
+            event_protected |= (
+                df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
+            )
+        except Exception:
+            pass
+    if (
+        (not orbital_phase_allowed or not cfg.qc_remove_orbital_phase)
+        and "orbital_phase_bad" in df.columns
+    ):
+        event_protected |= (
+            df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
+        )
+    for col in (
+        "step_member",
+        "dm_step_member",
+        "eclipse_member",
+        "gaussian_bump_member",
+        "glitch_member",
+    ):
+        if col in df.columns:
+            event_protected |= df[col].fillna(False).astype(bool).to_numpy()
+    for col in (
+        "step_id",
+        "step_global_id",
+        "dm_step_id",
+        "dm_step_global_id",
+        "eclipse_id",
+        "gaussian_bump_id",
+        "glitch_id",
+    ):
+        if col not in df.columns:
+            continue
+        vals = df[col]
+        if vals.dtype == object:
+            raw = vals.fillna("").astype(str).str.strip().str.lower()
+            event_protected |= ~raw.isin({"", "-1", "none", "nan", "false"}).to_numpy()
+        else:
+            try:
+                event_protected |= vals.fillna(-1).astype(int).to_numpy() >= 0
+            except Exception:
+                pass
     standard &= ~event_protected
 
     solar = np.zeros(len(df), dtype=bool)
@@ -2480,7 +2547,9 @@ def _first_event_type_for_row(df: pd.DataFrame, row_idx: int) -> Optional[str]:
 
     event_id_checks: list[tuple[str, str]] = [
         ("step_id", "step"),
+        ("step_global_id", "step"),
         ("dm_step_id", "dm_step"),
+        ("dm_step_global_id", "dm_step"),
         ("eclipse_id", "eclipse"),
         ("gaussian_bump_id", "gaussian_bump"),
         ("glitch_id", "glitch"),
@@ -2543,6 +2612,143 @@ def _manual_review_for_row(
     return bool(action), reason
 
 
+_QC_METRIC_EXCLUDE_COLUMNS: Set[str] = {
+    "mjd",
+    "sat",
+    "bat",
+    "freq",
+    "frequency",
+    "toa",
+    "toa_index",
+    "line",
+    "raw_line",
+    "tim_line",
+    "_timfile",
+    "timfile",
+    "tim_file",
+    "file",
+    "path",
+    "pulsar",
+    "psr",
+    "backend",
+    "sys",
+    "group",
+    "pta",
+    "manual_reason",
+}
+
+_QC_METRIC_TEXT_COLUMNS: Set[str] = {
+    "manual_action",
+    "review_action",
+    "reviewed_action",
+    "reviewed_reason",
+}
+
+_QC_METRIC_NAME_PATTERNS: tuple[str, ...] = (
+    "z",
+    "score",
+    "ou",
+    "outlier",
+    "bad",
+    "resid",
+    "sigma",
+    "snr",
+    "chi2",
+    "mad",
+    "dm_dvt",
+    "solar",
+    "elong",
+    "orbital",
+    "phase",
+    "step",
+    "eclipse",
+    "glitch",
+    "bump",
+    "transient",
+    "event",
+    "reviewed",
+)
+
+
+def _qc_metric_flag_name(column: str, cfg: FixDatasetConfig) -> Optional[str]:
+    raw_prefix = str(cfg.qc_metric_flag_prefix or "-pqc_").strip() or "-pqc_"
+    prefix = raw_prefix if raw_prefix.startswith("-") else f"-{raw_prefix}"
+    prefix = re.sub(r"[^A-Za-z0-9_.:+-]+", "_", prefix)
+    if not prefix.startswith("-"):
+        prefix = f"-{prefix}"
+    if prefix == "-":
+        prefix = "-pqc_"
+
+    name = re.sub(r"[^A-Za-z0-9_.:+-]+", "_", str(column).strip()).strip("_")
+    if not name:
+        return None
+    if name.startswith("-"):
+        name = name[1:]
+    return f"{prefix}{name}"[:96]
+
+
+def _qc_metric_value_token(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    if isinstance(value, (bool, np.bool_)):
+        return "true" if bool(value) else "false"
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    if isinstance(value, (float, np.floating)):
+        val = float(value)
+        if not np.isfinite(val):
+            return None
+        return f"{val:.8g}"
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null"}:
+        return None
+    return re.sub(r"[^A-Za-z0-9_.:+-]+", "_", text).strip("_")[:160] or None
+
+
+def _qc_metric_columns_for_df(df: pd.DataFrame, cfg: FixDatasetConfig) -> List[str]:
+    if cfg.qc_metric_flag_columns is not None:
+        return [str(c).strip() for c in cfg.qc_metric_flag_columns if str(c).strip()]
+
+    cols: list[str] = []
+    for col in df.columns:
+        name = str(col)
+        lower = name.lower()
+        if lower in _QC_METRIC_EXCLUDE_COLUMNS or lower.startswith("_"):
+            continue
+        if lower in _QC_METRIC_TEXT_COLUMNS:
+            cols.append(name)
+            continue
+        series = df[col]
+        if pd.api.types.is_bool_dtype(series) or pd.api.types.is_numeric_dtype(series):
+            if any(pat in lower for pat in _QC_METRIC_NAME_PATTERNS):
+                cols.append(name)
+    return cols
+
+
+def _qc_metric_flags_for_row(
+    df: pd.DataFrame, row_idx: int, cfg: FixDatasetConfig, metric_columns: Sequence[str]
+) -> Tuple[Tuple[str, str], ...]:
+    flags: list[tuple[str, str]] = []
+    for col in metric_columns:
+        if col not in df.columns:
+            continue
+        flag = _qc_metric_flag_name(col, cfg)
+        if not flag:
+            continue
+        try:
+            value = _qc_metric_value_token(df.iloc[row_idx][col])
+        except Exception:
+            value = None
+        if value is not None:
+            flags.append((flag, value))
+    return tuple(flags)
+
+
 class _QCTimClassification(NamedTuple):
     pqc_label: str
     bad_toa: bool
@@ -2550,10 +2756,15 @@ class _QCTimClassification(NamedTuple):
     event_type: str
     manual_review: bool = False
     manual_reason: Optional[str] = None
+    metric_flags: Tuple[Tuple[str, str], ...] = ()
 
 
 def _write_any_qc_tim_flags(cfg: FixDatasetConfig) -> bool:
-    return bool(cfg.qc_write_pqc_flag or cfg.qc_write_explicit_flags)
+    return bool(
+        cfg.qc_write_pqc_flag
+        or cfg.qc_write_explicit_flags
+        or cfg.qc_write_metric_flags
+    )
 
 
 def _default_qc_tim_classification(cfg: FixDatasetConfig) -> _QCTimClassification:
@@ -2563,6 +2774,18 @@ def _default_qc_tim_classification(cfg: FixDatasetConfig) -> _QCTimClassificatio
         event=False,
         event_type="none",
     )
+
+
+def _apply_metric_qc_tim_flags(
+    parts: List[str], classification: _QCTimClassification, cfg: FixDatasetConfig
+) -> bool:
+    prefix = str(cfg.qc_metric_flag_prefix or "-pqc_").strip() or "-pqc_"
+    if not prefix.startswith("-"):
+        prefix = f"-{prefix}"
+    changed = _token_remove_flag_prefix(parts, prefix)
+    for flag, value in classification.metric_flags:
+        changed = _token_upsert_unique_flag(parts, flag, value) or changed
+    return changed
 
 
 def _apply_explicit_qc_tim_flags(
@@ -2637,9 +2860,11 @@ def _collect_qc_tim_classifications(
     labels: list[_QCTimClassification] = [
         _default_qc_tim_classification(cfg) for _ in range(len(df))
     ]
+    metric_columns = _qc_metric_columns_for_df(df, cfg)
     for i in range(len(df)):
         event_type = _first_event_type_for_row(df, i)
         manual_review, manual_reason = _manual_review_for_row(df, i)
+        metric_flags = _qc_metric_flags_for_row(df, i, cfg, metric_columns)
         if event_type:
             labels[i] = _QCTimClassification(
                 pqc_label=f"{event_prefix}{event_type}",
@@ -2648,6 +2873,7 @@ def _collect_qc_tim_classifications(
                 event_type=event_type,
                 manual_review=manual_review,
                 manual_reason=manual_reason,
+                metric_flags=metric_flags,
             )
         elif bool(outlier_mask[i]):
             labels[i] = _QCTimClassification(
@@ -2657,6 +2883,7 @@ def _collect_qc_tim_classifications(
                 event_type="none",
                 manual_review=manual_review,
                 manual_reason=manual_reason,
+                metric_flags=metric_flags,
             )
         else:
             labels[i] = _QCTimClassification(
@@ -2666,6 +2893,7 @@ def _collect_qc_tim_classifications(
                 event_type="none",
                 manual_review=manual_review,
                 manual_reason=manual_reason,
+                metric_flags=metric_flags,
             )
 
     mapping: Dict[Optional[str], list[tuple[float, _QCTimClassification]]] = {}
@@ -2878,6 +3106,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
     total_matched = 0
     total_pqc_flagged = 0
     total_explicit_flagged = 0
+    total_metric_flagged = 0
     changed_files = 0
     file_reports: list[Dict[str, object]] = []
 
@@ -2931,6 +3160,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         commented = 0
         pqc_flagged = 0
         explicit_flagged = 0
+        metric_flagged = 0
         time_offset_sec = 0.0
 
         for raw in lines:
@@ -2966,6 +3196,10 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     parts, classification
                 ):
                     explicit_flagged += 1
+                if bool(cfg.qc_write_metric_flags) and _apply_metric_qc_tim_flags(
+                    parts, classification, cfg
+                ):
+                    metric_flagged += 1
                 raw_toa = " ".join(parts)
 
             is_solar = target_mjds_solar.size > 0 and np.any(
@@ -3035,7 +3269,10 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
 
         total_pqc_flagged += int(pqc_flagged)
         total_explicit_flagged += int(explicit_flagged)
-        changed = (removed + commented + pqc_flagged + explicit_flagged) > 0
+        total_metric_flagged += int(metric_flagged)
+        changed = (
+            removed + commented + pqc_flagged + explicit_flagged + metric_flagged
+        ) > 0
         file_reports.append(
             {
                 "timfile": str(tim),
@@ -3043,6 +3280,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 "commented": int(commented),
                 "pqc_flagged": int(pqc_flagged),
                 "explicit_flagged": int(explicit_flagged),
+                "metric_flagged": int(metric_flagged),
                 "changed": bool(changed),
             }
         )
@@ -3070,6 +3308,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         "matched": int(total_matched),
         "pqc_flagged": int(total_pqc_flagged),
         "explicit_flagged": int(total_explicit_flagged),
+        "metric_flagged": int(total_metric_flagged),
         "changed_files": int(changed_files),
         "files": file_reports,
     }

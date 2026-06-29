@@ -371,29 +371,23 @@ def _canonical_pulsar(name: str, aliases: Dict[str, str]) -> str:
 def _collect_expected_tim_paths(
     psr: str, mapping: IngestMapping
 ) -> Dict[Path, Set[Path]]:
-    """Collect expected tim file paths by backend spec for a pulsar."""
+    """Collect expected tim file paths by backend spec for a pulsar.
+
+    This mirrors the ingest selection logic, including source-priority fallback.
+    Source trees may contain duplicate nested copies of the same backend file;
+    verifying every raw path would report false missing files even when the
+    selected backend content was copied.
+    """
     expected: Dict[Path, Set[Path]] = {}
-    ignore_set = set(mapping.ignore_backends)
-    for backend in mapping.backends:
-        if backend.ignore or backend.name in ignore_set:
-            continue
-        if not backend.root.exists():
-            continue
-        for tim in backend.root.rglob(backend.tim_glob):
-            if tim.is_dir():
-                continue
-            if any(tim.name.endswith(suf) for suf in backend.ignore_suffixes):
-                continue
-            psr_raw = _extract_pulsar_name(tim)
-            if not psr_raw:
-                continue
-            try:
-                psr_canon = _canonical_pulsar(psr_raw, mapping.pulsar_aliases)
-            except IngestError:
-                continue
-            if psr_canon != psr:
-                continue
-            expected.setdefault(backend.root, set()).add(tim)
+    selected = _find_timfiles(
+        mapping.backends,
+        mapping.pulsar_aliases,
+        mapping.ignore_backends,
+        priority_order=mapping.priority_order,
+        priority_roots=mapping.priority_roots,
+    )
+    for _, tim in selected.get(psr, []):
+        expected.setdefault(tim.parent, set()).add(tim)
     return expected
 
 

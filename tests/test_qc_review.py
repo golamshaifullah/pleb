@@ -165,3 +165,35 @@ def test_load_qc_frames_attaches_tempo2_general2_postfit_columns(
     assert list(qc["tempo2_post"].round(12)) == [5.0e-07, 6.0e-07, -7.0e-07]
     assert list(qc["tempo2_pre"].round(12)) == [1.0e-06, 2.0e-06, 3.0e-06]
     assert list(qc["tempo2_post_us"].round(3)) == [0.5, 0.6, -0.7]
+
+
+def test_load_qc_frames_attaches_tempo2_general2_log_suffix(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    qc_path = run_dir / "qc" / "step2_detect" / "J0000+0000_qc.csv"
+    qc_path.parent.mkdir(parents=True)
+    _write_qc(qc_path)
+    _write_general2(run_dir / "general2" / "J0000+0000_step2_detect.general2.log")
+
+    qc = load_qc_frames(run_dir)
+
+    assert "tempo2_post_us" in qc.columns
+    assert "tempo2_err_us" in qc.columns
+    assert list(qc["tempo2_post_us"].round(3)) == [0.5, 0.6, -0.7]
+
+
+def test_load_qc_csv_accepts_general2_directory_as_root(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    qc_path = run_dir / "qc" / "step2_detect" / "J0000+0000_qc.csv"
+    qc_path.parent.mkdir(parents=True)
+    _write_qc(qc_path)
+    general2_dir = run_dir / "general2"
+    _write_general2(general2_dir / "J0000+0000_step2_detect.general2")
+
+    from pleb.qc_review import load_qc_csv
+
+    qc = load_qc_csv(qc_path, root=general2_dir)
+
+    assert "tempo2_post_us" in qc.columns
+    assert list(qc["tempo2_post_us"].round(3)) == [0.5, 0.6, -0.7]

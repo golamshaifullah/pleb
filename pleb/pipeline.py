@@ -87,6 +87,17 @@ from .whitenoise_integration import (
 logger = get_logger("pleb")
 
 
+def _env_float(name: str, default: float | None = None) -> float | None:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Ignoring invalid %s=%r; expected a number.", name, raw)
+        return default
+
+
 def _git_add_pathspecs(repo_root: Path, paths: list[str]) -> None:
     """Stage many paths without overflowing argv length."""
     if not paths:
@@ -779,6 +790,15 @@ def _build_fixdataset_config(
             qc_write_explicit_flags=bool(
                 _cfg_get(cfg, "fix_qc_write_explicit_flags", False)
             ),
+            qc_write_metric_flags=bool(
+                _cfg_get(cfg, "fix_qc_write_metric_flags", False)
+            ),
+            qc_metric_flag_columns=_cfg_get(
+                cfg, "fix_qc_metric_flag_columns", None
+            ),
+            qc_metric_flag_prefix=str(
+                _cfg_get(cfg, "fix_qc_metric_flag_prefix", "-pqc_") or "-pqc_"
+            ),
             qc_pqc_flag_name=str(
                 _cfg_get(cfg, "fix_qc_pqc_flag_name", "-pqc") or "-pqc"
             ),
@@ -859,7 +879,10 @@ def _validate_fixdataset_qc_inputs(
     pulsars: List[str], cfg: FixDatasetConfig, *, branch: str
 ) -> None:
     if not (
-        cfg.qc_remove_outliers or cfg.qc_write_pqc_flag or cfg.qc_write_explicit_flags
+        cfg.qc_remove_outliers
+        or cfg.qc_write_pqc_flag
+        or cfg.qc_write_explicit_flags
+        or cfg.qc_write_metric_flags
     ):
         return
     errors = []
@@ -2055,10 +2078,12 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 ) -> Dict[str, object]:
                     p, variant, parfile, out_csv, settings_out = task
                     try:
+                        pqc_timeout = _env_float("PLEB_PQC_TIMEOUT_SECONDS")
                         df = run_pqc_for_parfile_subprocess(
                             parfile,
                             out_csv,
                             qc_cfg,
+                            timeout=pqc_timeout,
                             settings_out=settings_out,
                         )
                     except Exception as e:

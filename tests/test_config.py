@@ -144,6 +144,9 @@ dataset_name = "."
 results_dir = "/tmp/results"
 fix_qc_write_pqc_flag = true
 fix_qc_write_explicit_flags = true
+fix_qc_write_metric_flags = true
+fix_qc_metric_flag_columns = ["robust_z", "bad_ou"]
+fix_qc_metric_flag_prefix = "-pqc_metric_"
 fix_qc_pqc_flag_name = "-pqcx"
 fix_qc_pqc_good_value = "ok"
 fix_qc_pqc_bad_value = "reject"
@@ -155,6 +158,9 @@ fix_qc_pqc_event_prefix = "evt_"
     cfg = PipelineConfig.load(cfg_path)
     assert cfg.fix_qc_write_pqc_flag is True
     assert cfg.fix_qc_write_explicit_flags is True
+    assert cfg.fix_qc_write_metric_flags is True
+    assert cfg.fix_qc_metric_flag_columns == ["robust_z", "bad_ou"]
+    assert cfg.fix_qc_metric_flag_prefix == "-pqc_metric_"
     assert cfg.fix_qc_pqc_flag_name == "-pqcx"
     assert cfg.fix_qc_pqc_good_value == "ok"
     assert cfg.fix_qc_pqc_bad_value == "reject"

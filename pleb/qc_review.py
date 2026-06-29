@@ -340,8 +340,8 @@ def _guess_general2_variant_hint(path: Path, pulsar: str) -> str | None:
     return None
 
 
-def _candidate_general2_roots(path: Path, root: Path | None) -> list[Path]:
-    roots: list[Path] = []
+def _candidate_general2_dirs(path: Path, root: Path | None) -> list[Path]:
+    dirs: list[Path] = []
     seen: set[Path] = set()
     for candidate in [root, *path.parents]:
         if candidate is None:
@@ -353,9 +353,47 @@ def _candidate_general2_roots(path: Path, root: Path | None) -> list[Path]:
         if resolved in seen:
             continue
         seen.add(resolved)
+
+        if resolved.is_dir() and resolved.name.lower() in {
+            "general2",
+            "_general2_logs",
+        }:
+            dirs.append(resolved)
         if (resolved / "general2").is_dir():
-            roots.append(resolved)
-    return roots
+            dirs.append(resolved / "general2")
+        general2_logs = resolved / "_general2_logs"
+        if general2_logs.is_dir():
+            dirs.append(general2_logs)
+            try:
+                dirs.extend(p for p in sorted(general2_logs.iterdir()) if p.is_dir())
+            except Exception:
+                pass
+
+    out: list[Path] = []
+    seen_dirs: set[Path] = set()
+    for directory in dirs:
+        try:
+            key = directory.resolve()
+        except Exception:
+            key = directory
+        if key not in seen_dirs:
+            seen_dirs.add(key)
+            out.append(directory)
+    return out
+
+
+def _general2_logical_stem(path: Path) -> str:
+    name = path.name
+    for suffix in (".general2.log", ".general2"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+def _general2_candidates(gdir: Path, psr: str) -> list[Path]:
+    candidates = list(gdir.glob(f"{psr}*.general2"))
+    candidates.extend(gdir.glob(f"{psr}*.general2.log"))
+    return sorted(p for p in candidates if p.is_file())
 
 
 def _find_general2_file(
@@ -371,15 +409,13 @@ def _find_general2_file(
     variant_hint = _guess_general2_variant_hint(qc_path, psr)
 
     candidates: list[Path] = []
-    for base in _candidate_general2_roots(qc_path, root):
-        gdir = base / "general2"
-        exact = gdir / f"{psr}_{branch_hint}.general2" if branch_hint else None
-        if exact is not None and exact.exists():
-            return exact
-        candidates.extend(sorted(gdir.glob(f"{psr}_*.general2")))
-        plain = gdir / f"{psr}.general2"
-        if plain.exists():
-            candidates.append(plain)
+    for gdir in _candidate_general2_dirs(qc_path, root):
+        if branch_hint:
+            for suffix in (".general2", ".general2.log"):
+                exact = gdir / f"{psr}_{branch_hint}{suffix}"
+                if exact.exists():
+                    return exact
+        candidates.extend(_general2_candidates(gdir, psr))
 
     if not candidates:
         return None
@@ -388,7 +424,10 @@ def _find_general2_file(
         branch_hits = [
             p
             for p in candidates
-            if p.stem == f"{psr}_{branch_hint}" or p.stem.endswith(f"_{branch_hint}")
+            if (
+                (logical_stem := _general2_logical_stem(p)) == f"{psr}_{branch_hint}"
+                or logical_stem.endswith(f"_{branch_hint}")
+            )
         ]
         if len(branch_hits) == 1:
             return branch_hits[0]

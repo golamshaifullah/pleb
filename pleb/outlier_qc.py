@@ -556,6 +556,145 @@ def _row_key_series(df: pd.DataFrame, backend_col: str) -> pd.Series:
     return b + "|" + mjd.astype(str) + "|" + freq.astype(str) + "|" + t
 
 
+def _truthy_qc_series(df: pd.DataFrame, col: str) -> pd.Series:
+    """Return a robust boolean interpretation of a QC column."""
+    if col not in df.columns:
+        return pd.Series([False] * len(df), index=df.index)
+    s = df[col]
+    text = s.astype(str).str.strip().str.lower()
+    numeric = pd.to_numeric(s, errors="coerce")
+    false_text = text.isin(
+        {"", "0", "0.0", "false", "f", "no", "n", "nan", "none", "<na>"}
+    )
+    true_text = text.isin({"1", "1.0", "true", "t", "yes", "y"})
+    return true_text | (numeric.notna() & (numeric != 0) & ~false_text)
+
+
+def _valid_qc_event_id_series(df: pd.DataFrame, col: str) -> pd.Series:
+    """Return rows where an event-id-like QC column contains a real event id."""
+    if col not in df.columns:
+        return pd.Series([False] * len(df), index=df.index)
+    s = df[col]
+    text = s.astype(str).str.strip().str.lower()
+    numeric = pd.to_numeric(s, errors="coerce")
+    invalid_text = text.isin({"", "-1", "-1.0", "false", "nan", "none", "<na>"})
+    invalid_numeric = numeric.notna() & (numeric < 0)
+    return s.notna() & ~invalid_text & ~invalid_numeric
+
+
+def _local_step_scope_series(df: pd.DataFrame) -> pd.Series:
+    """Return the per-backend scope used to expand local step detections."""
+    for col in ("group", "backend", "sys", "_timfile_base", "_timfile", "filename"):
+        if col in df.columns:
+            return df[col].astype(str)
+    return pd.Series(["__all__"] * len(df), index=df.index)
+
+
+def _normalize_step_memberships(df: pd.DataFrame) -> tuple[pd.DataFrame, Dict[str, Any]]:
+    """Expand sparse PQC step labels into contiguous post-step memberships.
+
+    PQC can emit the same accepted step id on only a few high-leverage TOAs.
+    PLEB's later review/fix stages need event membership semantics instead:
+    once a step is accepted, every subsequent TOA in the relevant scope belongs
+    to that step interval until another step in that scope begins.
+    """
+    if df.empty or "mjd" not in df.columns:
+        return df, {"changed_rows": 0, "changed_cells": 0}
+
+    out = df.copy()
+    mjd = pd.to_numeric(out["mjd"], errors="coerce")
+    local_scope = _local_step_scope_series(out)
+    all_step_rows = pd.Series([False] * len(out), index=out.index)
+    changed_cells = 0
+
+    specs = [
+        ("step", "step", True),
+        ("dm_step", "dm_step", True),
+        ("step_global", "step_global", False),
+        ("dm_step_global", "dm_step_global", False),
+    ]
+
+    for _label, prefix, scoped in specs:
+        id_col = f"{prefix}_id"
+        t0_col = f"{prefix}_t0"
+        if id_col not in out.columns or t0_col not in out.columns:
+            continue
+
+        event_mask = _valid_qc_event_id_series(out, id_col)
+        t0 = pd.to_numeric(out[t0_col], errors="coerce")
+        event_mask &= t0.notna()
+        if not event_mask.any():
+            continue
+
+        scope = (
+            local_scope
+            if scoped
+            else pd.Series(["__global__"] * len(out), index=out.index)
+        )
+        event_rows = out.loc[event_mask].copy()
+        event_rows["__pleb_step_t0"] = t0.loc[event_mask]
+        event_rows["__pleb_step_scope"] = scope.loc[event_mask]
+        event_rows = (
+            event_rows.sort_values(["__pleb_step_scope", "__pleb_step_t0"])
+            .drop_duplicates(
+                ["__pleb_step_scope", id_col, "__pleb_step_t0"], keep="first"
+            )
+        )
+
+        metadata_cols = [
+            c
+            for c in out.columns
+            if c.startswith(prefix + "_")
+            and not c.endswith("_applicable")
+            and not c.endswith("_informative")
+        ]
+        applicable_col = f"{prefix}_applicable"
+        if applicable_col in out.columns:
+            metadata_cols.append(applicable_col)
+
+        for scope_value, group in event_rows.groupby("__pleb_step_scope", sort=False):
+            group = group.sort_values("__pleb_step_t0").reset_index(drop=True)
+            for pos, row in group.iterrows():
+                start = float(row["__pleb_step_t0"])
+                stop = None
+                if pos + 1 < len(group):
+                    stop = float(group.loc[pos + 1, "__pleb_step_t0"])
+
+                mask = mjd.ge(start)
+                if stop is not None:
+                    mask &= mjd.lt(stop)
+                if scoped:
+                    mask &= scope.eq(scope_value)
+                mask &= mjd.notna()
+                if not mask.any():
+                    continue
+
+                before_ids = out.loc[mask, id_col].copy()
+                for col in metadata_cols:
+                    if col == applicable_col:
+                        out.loc[mask, col] = True
+                    else:
+                        out.loc[mask, col] = row[col]
+                all_step_rows |= mask
+                changed_cells += int(
+                    (before_ids.astype(str) != out.loc[mask, id_col].astype(str)).sum()
+                )
+
+    changed_rows = int(all_step_rows.sum())
+    if changed_rows:
+        if "event_member" not in out.columns:
+            out["event_member"] = False
+        out["event_member"] = _truthy_qc_series(out, "event_member") | all_step_rows
+
+        if "bad_point" in out.columns:
+            out.loc[all_step_rows, "bad_point"] = False
+
+        bad = _truthy_qc_series(out, "bad_point")
+        out["outlier_any"] = bad | _truthy_qc_series(out, "event_member")
+
+    return out, {"changed_rows": changed_rows, "changed_cells": changed_cells}
+
+
 def run_pqc_for_parfile(
     parfile: Path,
     out_csv: Path,
@@ -967,6 +1106,14 @@ def run_pqc_for_parfile(
                                 pass
                     except Exception:
                         pass
+
+        df, step_norm = _normalize_step_memberships(df)
+        if step_norm.get("changed_rows"):
+            logger.info(
+                "Normalized PQC step memberships: rows=%d changed_ids=%d",
+                step_norm["changed_rows"],
+                step_norm["changed_cells"],
+            )
 
         _assert_timfile_metadata(df, source=str(parfile))
         df.to_csv(out_csv, index=False)
