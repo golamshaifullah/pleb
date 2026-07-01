@@ -1122,6 +1122,57 @@ def run_pqc_for_parfile(
             shutil.rmtree(cleanup_dir, ignore_errors=True)
 
 
+def run_pqc_for_parfile_safe_libstempo(
+    parfile: Path,
+    out_csv: Path,
+    cfg: PTAQCConfig,
+    settings_out: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Run PQC with libstempo timing arrays loaded before timfile parsing.
+
+    Some large pulsars can crash in native libstempo/tempo2 code when PQC keeps
+    the parsed timfile table alive and then asks libstempo for the timing
+    arrays. Loading libstempo first in a fresh child process avoids that memory
+    interaction while preserving the normal PLEB/PQC processing path.
+    """
+    parfile = Path(parfile)
+    try:
+        from pqc.io.libstempo_loader import load_libstempo as _load_libstempo  # type: ignore
+        import pqc.pipeline as _pqc_pipeline  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError("pqc/libstempo loader is not importable.") from e
+
+    logger.warning(
+        "Retrying PQC for %s with safe libstempo-preload mode.", parfile.name
+    )
+    df_time = _load_libstempo(parfile)
+    original_load_libstempo = getattr(_pqc_pipeline, "load_libstempo")
+
+    def _cached_load_libstempo(_parfile: Path) -> pd.DataFrame:
+        return df_time.copy(deep=True)
+
+    _pqc_pipeline.load_libstempo = _cached_load_libstempo
+    try:
+        return run_pqc_for_parfile(
+            parfile,
+            out_csv,
+            cfg,
+            settings_out=settings_out,
+        )
+    finally:
+        _pqc_pipeline.load_libstempo = original_load_libstempo
+
+
+def _pqc_subprocess_native_crash_code(returncode: int) -> bool:
+    """Return true for subprocess statuses consistent with native crashes."""
+    return returncode < 0 or returncode in {134, 139}
+
+
+def _safe_libstempo_retry_enabled() -> bool:
+    value = os.environ.get("PLEB_PQC_SAFE_LIBSTEMPO_RETRY", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
 def run_pqc_for_parfile_subprocess(
     parfile: Path,
     out_csv: Path,
@@ -1175,17 +1226,24 @@ def run_pqc_for_parfile_subprocess(
     # Config may contain Path objects (e.g. observatory/profile paths).
     payload_path.write_text(json.dumps(payload, default=str), encoding="utf-8")
 
-    code = (
-        "import json, sys\n"
-        "from pathlib import Path\n"
-        "from pleb.outlier_qc import PTAQCConfig, run_pqc_for_parfile\n"
-        "payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\n"
-        "cfg = PTAQCConfig(**payload['cfg'])\n"
-        "settings_out = payload.get('settings_out')\n"
-        "run_pqc_for_parfile(Path(payload['parfile']), Path(payload['out_csv']), cfg, "
-        "settings_out=(Path(settings_out) if settings_out else None))\n"
-    )
-    try:
+    def _child_code(safe_libstempo: bool = False) -> str:
+        runner = (
+            "run_pqc_for_parfile_safe_libstempo"
+            if safe_libstempo
+            else "run_pqc_for_parfile"
+        )
+        return (
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            f"from pleb.outlier_qc import PTAQCConfig, {runner} as run_pqc\n"
+            "payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\n"
+            "cfg = PTAQCConfig(**payload['cfg'])\n"
+            "settings_out = payload.get('settings_out')\n"
+            "run_pqc(Path(payload['parfile']), Path(payload['out_csv']), cfg, "
+            "settings_out=(Path(settings_out) if settings_out else None))\n"
+        )
+
+    def _run_child(safe_libstempo: bool = False) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         t2 = shutil.which("tempo2")
         if t2:
@@ -1193,13 +1251,44 @@ def run_pqc_for_parfile_subprocess(
             cur_path = env.get("PATH", "")
             if t2_dir not in cur_path.split(":"):
                 env["PATH"] = f"{t2_dir}:{cur_path}" if cur_path else t2_dir
-        proc = subprocess.run(
-            [sys.executable, "-c", code, str(payload_path)],
+        return subprocess.run(
+            [sys.executable, "-c", _child_code(safe_libstempo), str(payload_path)],
             capture_output=True,
             text=True,
             timeout=timeout,
             env=env,
         )
+
+    try:
+        proc = _run_child(safe_libstempo=False)
+        first_proc = proc
+        if (
+            proc.returncode != 0
+            and _safe_libstempo_retry_enabled()
+            and _pqc_subprocess_native_crash_code(proc.returncode)
+        ):
+            logger.warning(
+                "pqc subprocess for %s exited with native-crash code %s; "
+                "retrying with safe libstempo-preload mode.",
+                parfile.name,
+                proc.returncode,
+            )
+            try:
+                out_csv.unlink()
+            except FileNotFoundError:
+                pass
+            proc = _run_child(safe_libstempo=True)
+            if proc.returncode != 0:
+                proc.stderr = "\n".join(
+                    s
+                    for s in [
+                        "Initial PQC subprocess native crash:",
+                        (first_proc.stderr or "").strip(),
+                        "Safe libstempo-preload retry:",
+                        (proc.stderr or "").strip(),
+                    ]
+                    if s
+                )
     finally:
         try:
             payload_path.unlink()
