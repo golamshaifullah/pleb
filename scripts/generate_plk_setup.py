@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
 """
-Generate a tempo2 plk setup file with flag colour rules for .tim files.
+Generate tempo2 plk setup files with safe flag colour rules for .tim files.
 
-Example:
+Designed for a black-background plk session by default.
 
-    python3 make_plk_flag_colours.py \
-        --root ./tim-files \
-        --output plk_flag_colours.dat \
-        --summary
+Typical usage:
 
-Use the generated file with, for example:
+  python3 generate_plk_setup.py \
+      --root ./tim-files \
+      --output-prefix plk_flag_colours \
+      --summary
 
-    tempo2 -gr plk -setup plk_flag_colours.dat -colour -sys   -f pulsar.par pulsar.tim
-    tempo2 -gr plk -setup plk_flag_colours.dat -colour -group -f pulsar.par pulsar.tim
-    tempo2 -gr plk -setup plk_flag_colours.dat -colour -pta   -f pulsar.par pulsar.tim
+This creates split files by default:
 
-The output file intentionally uses only simple plk setup syntax:
+  plk_flag_colours_sys.dat
+  plk_flag_colours_group.dat
+  plk_flag_colours_pta.dat
 
-    background black
-    line white
-    flag -sys SOME_VALUE 2 16
+Use one setup file at a time, matching the flag used with -colour:
 
-No comments are written to the .dat file by default.
+  tempo2 -gr plk -setup plk_flag_colours_sys.dat   -colour -sys   -f pulsar.par pulsar.tim
+  tempo2 -gr plk -setup plk_flag_colours_group.dat -colour -group -f pulsar.par pulsar.tim
+  tempo2 -gr plk -setup plk_flag_colours_pta.dat   -colour -pta   -f pulsar.par pulsar.tim
+
+The generated .dat files use only these setup lines:
+
+  background black
+  line white
+  flag <flag-name> <flag-value> <pgplot-colour-index> <pgplot-symbol-index>
+
+No comments are written to the .dat files.
 """
 
 from __future__ import annotations
@@ -32,24 +40,51 @@ import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Set, Tuple
 
-
 DEFAULT_FLAGS = ["-sys", "-group", "-pta"]
 
-# PGPLOT colour indices. 0 is background and 1 is foreground, so avoid both.
-# "black" is intended for a black/dark background. It uses bright saturated
-# colours and avoids the default dark blue and dark grey.
-BLACK_BACKGROUND_COLOURS = [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]
+# PGPLOT predefined colour indices, deliberately avoiding low-contrast choices.
+#
+# For a black background we avoid:
+#   0  background / black
+#   1  foreground / usually white
+#   4  default dark blue, weak on black
+#   14 dark grey
+#   15 light grey, visible but explicitly a grey derivative
+#
+# The retained values are chromatic colours and chromatic derivatives:
+#   red, green, cyan, magenta, yellow, orange,
+#   yellow-green, green-cyan, blue-cyan, blue-magenta, red-magenta.
+BLACK_CHROMATIC_COLOURS = [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
-# More conservative set for files that may be used on either black or white.
-# This avoids yellow, light grey, dark grey, black, white, and default dark blue.
-DUAL_BACKGROUND_COLOURS = [2, 3, 6, 8, 10, 11, 12, 13]
+# For white backgrounds, omit colours that are commonly too light on white.
+# Still no grey derivatives.
+WHITE_CHROMATIC_COLOURS = [2, 3, 4, 6, 8, 12, 13]
 
-# Filled/open point symbols that are usually distinguishable in PGPLOT.
-DEFAULT_SYMBOLS = [16, 17, 18, 21, 22, 23, 24, 25, 26]
+# Conservative palette for users who genuinely need one file usable on both
+# black and white. This is smaller but safer.
+DUAL_CHROMATIC_COLOURS = [2, 3, 6, 8, 12, 13]
+
+# Default: one marker only. This removes marker-code ambiguity. Colours will
+# cycle for large value sets, which is acceptable and safer.
+SINGLE_SAFE_SYMBOL = [16]
+
+# Optional: standard PGPLOT markers for users who want more distinct pairs.
+# Enable with --multi-symbols only after the single-marker output runs cleanly.
+MULTI_SAFE_SYMBOLS = [16, 17, 18, 21, 22, 23]
+
+# Current plk uses fixed arrays of size 100 for setup-file flag rules.
+# Keep a margin by default; raise only if you know what you are doing.
+DEFAULT_MAX_FLAG_RULES_PER_FILE = 95
+
+# Strict low-contrast filters by palette mode.
+DISALLOWED_BY_PALETTE = {
+    "black": {0, 1, 4, 14, 15},
+    "white": {0, 1, 5, 7, 9, 10, 14, 15},
+    "dual": {0, 1, 4, 5, 7, 9, 10, 11, 14, 15},
+}
 
 
 def parse_int_list(text: str, option_name: str) -> List[int]:
-    """Parse comma-separated or whitespace-separated integers."""
     raw = text.replace(",", " ").split()
     values: List[int] = []
     for item in raw:
@@ -64,9 +99,38 @@ def parse_int_list(text: str, option_name: str) -> List[int]:
     return values
 
 
+def validate_colours(
+    colours: Sequence[int], palette: str, allow_low_contrast: bool
+) -> None:
+    outside = [c for c in colours if c < 2 or c > 15]
+    if outside:
+        raise ValueError(
+            "PGPLOT point colour indices must be predefined non-background "
+            f"indices in 2..15. Bad values: {outside}"
+        )
+
+    if not allow_low_contrast:
+        disallowed = DISALLOWED_BY_PALETTE[palette]
+        bad = [c for c in colours if c in disallowed]
+        if bad:
+            raise ValueError(
+                f"palette {palette!r} disallows low-contrast/background-like "
+                f"colour indices {sorted(disallowed)}. Bad values: {bad}. "
+                "Use --allow-low-contrast only if you intentionally want this."
+            )
+
+
+def validate_symbols(symbols: Sequence[int]) -> None:
+    outside = [s for s in symbols if s < 0 or s > 31]
+    if outside:
+        raise ValueError(
+            "PGPLOT marker symbols should be standard symbols in 0..31. "
+            f"Bad values: {outside}"
+        )
+
+
 def iter_tim_files(root: Path) -> Iterable[Path]:
-    """Yield .tim files recursively, case-insensitively."""
-    for path in root.rglob("*"):
+    for path in sorted(root.rglob("*")):
         if path.is_file() and path.suffix.lower() == ".tim":
             yield path
 
@@ -77,14 +141,12 @@ def is_comment_or_blank(line: str) -> bool:
         return True
     if stripped.startswith("#"):
         return True
-    # TEMPO-style comment line.
     if stripped.startswith("C ") or stripped.startswith("c "):
         return True
     return False
 
 
 def split_tim_line(line: str) -> List[str] | None:
-    """Tokenise one .tim line. Return None if the line is malformed."""
     try:
         return shlex.split(line, comments=False, posix=True)
     except ValueError:
@@ -92,15 +154,8 @@ def split_tim_line(line: str) -> List[str] | None:
 
 
 def collect_flag_values(
-    root: Path,
-    flags: Sequence[str],
+    root: Path, flags: Sequence[str]
 ) -> Tuple[Dict[str, Set[str]], Dict[str, int]]:
-    """
-    Scan .tim files and collect values for requested flags.
-
-    Returns:
-        values_by_flag, stats
-    """
     wanted = set(flags)
     values_by_flag: Dict[str, Set[str]] = {flag: set() for flag in flags}
 
@@ -110,7 +165,8 @@ def collect_flag_values(
         "blank_or_comment_lines": 0,
         "malformed_lines": 0,
         "missing_value_occurrences": 0,
-        "unsupported_space_values": 0,
+        "too_long_values": 0,
+        "whitespace_values": 0,
     }
 
     for tim_path in iter_tim_files(root):
@@ -124,7 +180,6 @@ def collect_flag_values(
         with handle:
             for line in handle:
                 stats["lines_read"] += 1
-
                 if is_comment_or_blank(line):
                     stats["blank_or_comment_lines"] += 1
                     continue
@@ -142,11 +197,13 @@ def collect_flag_values(
                         continue
 
                     value = tokens[i + 1]
-                    # The plk setup parser is token-based. If a quoted .tim
-                    # value contains literal whitespace, there is no safe way to
-                    # represent it as a single setup-file token.
+
+                    # plk reads setup values using fixed 100-char buffers.
+                    if len(token) >= 100 or len(value) >= 100:
+                        stats["too_long_values"] += 1
+                        continue
                     if any(ch.isspace() for ch in value):
-                        stats["unsupported_space_values"] += 1
+                        stats["whitespace_values"] += 1
                         continue
 
                     values_by_flag[token].add(value)
@@ -160,166 +217,230 @@ def sort_values(values: Iterable[str], case_sensitive: bool) -> List[str]:
     return sorted(values, key=lambda s: (s.casefold(), s))
 
 
-def assign_pair(index: int, colours: Sequence[int], symbols: Sequence[int]) -> Tuple[int, int]:
-    """
-    Assign colour first, then symbol.
-
-    For the first len(colours) values, the symbol is constant and colours vary.
-    Then the symbol changes and colours cycle again.
-    """
-    colour = colours[index % len(colours)]
-    symbol = symbols[(index // len(colours)) % len(symbols)]
+def assign_pair(
+    i: int, colours: Sequence[int], symbols: Sequence[int]
+) -> Tuple[int, int]:
+    # Colour cycles fastest; symbol changes after a full colour cycle.
+    colour = colours[i % len(colours)]
+    symbol = symbols[(i // len(colours)) % len(symbols)]
     return colour, symbol
 
 
-def build_output_lines(
+def flag_to_suffix(flag: str) -> str:
+    return flag.lstrip("-").replace("-", "_") or "flag"
+
+
+def build_flag_lines(
+    flag: str, values: Sequence[str], colours: Sequence[int], symbols: Sequence[int]
+) -> List[str]:
+    lines: List[str] = []
+    for i, value in enumerate(values):
+        colour, symbol = assign_pair(i, colours, symbols)
+        lines.append(f"flag {flag} {value} {colour} {symbol}")
+    return lines
+
+
+def write_dat(
+    path: Path,
+    lines: Sequence[str],
+    include_theme: bool,
+    background: str,
+    foreground: str,
+) -> None:
+    out_lines: List[str] = []
+    if include_theme:
+        out_lines.append(f"background {background}")
+        out_lines.append(f"line {foreground}")
+    out_lines.extend(lines)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+
+def write_split_outputs(
+    output_prefix: Path,
     values_by_flag: Dict[str, Set[str]],
     flags: Sequence[str],
     colours: Sequence[int],
     symbols: Sequence[int],
     case_sensitive: bool,
-    include_base_theme: bool,
+    include_theme: bool,
     background: str,
     foreground: str,
-) -> Tuple[List[str], Dict[str, bool]]:
-    lines: List[str] = []
-    reused_by_flag: Dict[str, bool] = {}
-
-    if include_base_theme:
-        lines.append(f"background {background}")
-        lines.append(f"line {foreground}")
-
-    max_unique_pairs = len(colours) * len(symbols)
+    max_rules_per_file: int,
+) -> Dict[str, Path]:
+    outputs: Dict[str, Path] = {}
 
     for flag in flags:
         values = sort_values(values_by_flag.get(flag, set()), case_sensitive)
-        reused_by_flag[flag] = len(values) > max_unique_pairs
+        if len(values) > max_rules_per_file:
+            raise RuntimeError(
+                f"{flag} has {len(values)} unique values. This exceeds the configured "
+                f"safe per-file limit of {max_rules_per_file}. Current plk uses a fixed "
+                "100-rule array for setup-file flag rules. Split the data set, reduce "
+                "the values, or raise --max-rules-per-file up to 100 at your own risk."
+            )
 
-        for i, value in enumerate(values):
-            colour, symbol = assign_pair(i, colours, symbols)
-            lines.append(f"flag {flag} {value} {colour} {symbol}")
+        suffix = flag_to_suffix(flag)
+        path = output_prefix.with_name(f"{output_prefix.name}_{suffix}.dat")
+        lines = build_flag_lines(flag, values, colours, symbols)
+        write_dat(path, lines, include_theme, background, foreground)
+        outputs[flag] = path
 
-    return lines, reused_by_flag
+    return outputs
 
 
-def write_output(path: Path, lines: Sequence[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Final newline is intentional: convenient for shell tools and concatenation.
-    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+def write_combined_output(
+    output: Path,
+    values_by_flag: Dict[str, Set[str]],
+    flags: Sequence[str],
+    colours: Sequence[int],
+    symbols: Sequence[int],
+    case_sensitive: bool,
+    include_theme: bool,
+    background: str,
+    foreground: str,
+    max_rules_per_file: int,
+) -> Dict[str, Path]:
+    all_lines: List[str] = []
+
+    for flag in flags:
+        values = sort_values(values_by_flag.get(flag, set()), case_sensitive)
+        all_lines.extend(build_flag_lines(flag, values, colours, symbols))
+
+    if len(all_lines) > max_rules_per_file:
+        raise RuntimeError(
+            f"combined output would contain {len(all_lines)} flag rules, exceeding "
+            f"the safe limit of {max_rules_per_file}. Use split output instead."
+        )
+
+    write_dat(output, all_lines, include_theme, background, foreground)
+    return {"combined": output}
 
 
 def print_summary(
     root: Path,
-    output: Path,
     values_by_flag: Dict[str, Set[str]],
     flags: Sequence[str],
     stats: Dict[str, int],
     colours: Sequence[int],
     symbols: Sequence[int],
-    reused_by_flag: Dict[str, bool],
+    outputs: Dict[str, Path],
+    max_rules_per_file: int,
+    palette: str,
 ) -> None:
     print(f"Root: {root}")
-    print(f"Output: {output}")
+    print(f"Palette mode: {palette}")
     print(f".tim files scanned: {stats['files_scanned']}")
     print(f"Total lines read: {stats['lines_read']}")
     print(f"Blank/comment lines skipped: {stats['blank_or_comment_lines']}")
     print(f"Malformed lines skipped: {stats['malformed_lines']}")
     print(f"Flag occurrences missing values: {stats['missing_value_occurrences']}")
-    print(f"Whitespace-containing values skipped: {stats['unsupported_space_values']}")
-    print(f"Colours: {' '.join(map(str, colours))}")
-    print(f"Symbols: {' '.join(map(str, symbols))}")
+    print(f"Overlong flag/value tokens skipped: {stats['too_long_values']}")
+    print(f"Whitespace-containing values skipped: {stats['whitespace_values']}")
+    print(f"Colours used: {' '.join(map(str, colours))}")
+    print(f"Symbols used: {' '.join(map(str, symbols))}")
     print(f"Unique colour/symbol pairs per flag: {len(colours) * len(symbols)}")
+    print(f"Safe maximum flag rules per setup file: {max_rules_per_file}")
 
     for flag in flags:
         n = len(values_by_flag.get(flag, set()))
-        reused = "yes" if reused_by_flag.get(flag, False) else "no"
-        print(f"{flag}: {n} unique values; pair reuse required: {reused}")
+        pair_reuse = n > len(colours) * len(symbols)
+        print(
+            f"{flag}: {n} unique values; colour/symbol pair reuse: {'yes' if pair_reuse else 'no'}"
+        )
+
+    for key, path in outputs.items():
+        print(f"Output {key}: {path}")
 
 
 def make_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Scan TEMPO/TEMPO2 .tim files and generate tempo2 plk "
-            "setup colour rules for flag values."
-        )
+    p = argparse.ArgumentParser(
+        description="Generate safe tempo2 plk flag-colour setup files from .tim files."
     )
-
-    parser.add_argument(
-        "--root",
-        required=True,
+    p.add_argument(
+        "--root", required=True, type=Path, help="Root directory to scan recursively."
+    )
+    p.add_argument(
+        "--output-prefix",
         type=Path,
-        help="Root directory to scan recursively for .tim files.",
+        default=Path("plk_flag_colours"),
+        help="Prefix for split output files. Default: plk_flag_colours",
     )
-    parser.add_argument(
+    p.add_argument(
         "--output",
         type=Path,
         default=Path("plk_flag_colours.dat"),
-        help="Output .dat file. Default: plk_flag_colours.dat",
+        help="Output path used only with --combined.",
     )
-    parser.add_argument(
+    p.add_argument(
         "--flags",
         nargs="+",
         default=DEFAULT_FLAGS,
-        help="Flag names to extract. Default: -sys -group -pta",
+        help="Flags to scan. Default: -sys -group -pta",
     )
-    parser.add_argument(
-        "--summary",
-        action="store_true",
-        help="Print scan and assignment summary.",
+    p.add_argument("--summary", action="store_true", help="Print a summary.")
+    p.add_argument(
+        "--case-sensitive", action="store_true", help="Sort values case-sensitively."
     )
-    parser.add_argument(
-        "--case-sensitive",
-        action="store_true",
-        help="Sort values case-sensitively. Original spelling is always preserved.",
-    )
-    parser.add_argument(
+    p.add_argument(
         "--palette",
-        choices=["black", "dual"],
+        choices=["black", "white", "dual"],
         default="black",
         help=(
-            "Built-in colour palette. 'black' is best for a black background; "
-            "'dual' is more conservative for both black and white backgrounds. "
+            "Contrast palette. 'black' avoids black/white/grey/dark-blue indices; "
+            "'white' avoids pale colours; 'dual' is smaller but usable on both. "
             "Default: black"
         ),
     )
-    parser.add_argument(
+    p.add_argument(
         "--colours",
         type=lambda s: parse_int_list(s, "--colours"),
         default=None,
-        help=(
-            "Override colour cycle as comma- or space-separated integers, e.g. "
-            "'2,3,5,6,7,8,10,11,12,13,15'."
-        ),
+        help="Override colour cycle, e.g. '2,3,5,6,7,8,9,10,11,12,13'.",
     )
-    parser.add_argument(
+    p.add_argument(
+        "--allow-low-contrast",
+        action="store_true",
+        help="Allow colours normally rejected for the selected palette.",
+    )
+    p.add_argument(
+        "--multi-symbols",
+        action="store_true",
+        help="Use several marker symbols. Default uses only symbol 16.",
+    )
+    p.add_argument(
         "--symbols",
         type=lambda s: parse_int_list(s, "--symbols"),
-        default=DEFAULT_SYMBOLS,
-        help=(
-            "Symbol cycle as comma- or space-separated integers. "
-            "Default: 16,17,18,21,22,23,24,25,26"
-        ),
+        default=None,
+        help="Override symbols. Must be standard PGPLOT symbols in 0..31.",
     )
-    parser.add_argument(
+    p.add_argument(
         "--background",
         default="black",
-        help="Background colour name to write. Default: black",
+        help="Background colour name written to .dat. Default: black",
     )
-    parser.add_argument(
+    p.add_argument(
         "--foreground",
         default="white",
-        help="Foreground/line colour name to write. Default: white",
+        help="Foreground/line colour name written to .dat. Default: white",
     )
-    parser.add_argument(
+    p.add_argument(
         "--flag-lines-only",
         action="store_true",
-        help=(
-            "Write only 'flag ...' lines. By default the file starts with "
-            "'background <colour>' and 'line <colour>'."
-        ),
+        help="Write only flag lines, omitting background/line entries.",
     )
-
-    return parser
+    p.add_argument(
+        "--combined",
+        action="store_true",
+        help="Write one combined .dat file. Not recommended when total rules may exceed 100.",
+    )
+    p.add_argument(
+        "--max-rules-per-file",
+        type=int,
+        default=DEFAULT_MAX_FLAG_RULES_PER_FILE,
+        help="Safe flag-rule limit per .dat file. Default: 95; absolute plk array size is 100.",
+    )
+    return p
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -327,59 +448,88 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = args.root.expanduser().resolve()
-    output = args.output.expanduser()
-
     if not root.exists():
         parser.error(f"--root does not exist: {root}")
     if not root.is_dir():
         parser.error(f"--root is not a directory: {root}")
 
-    flags = list(dict.fromkeys(args.flags))  # de-duplicate while preserving order
-    if not flags:
-        parser.error("--flags must contain at least one flag name")
+    flags = list(dict.fromkeys(args.flags))
     for flag in flags:
         if not flag.startswith("-"):
-            parser.error(f"flag names should include the leading '-': {flag!r}")
+            parser.error(f"flag names must include the leading '-': {flag!r}")
+        if len(flag) >= 100:
+            parser.error(f"flag name is too long for plk's 100-char buffers: {flag!r}")
+
+    if args.max_rules_per_file < 1 or args.max_rules_per_file > 100:
+        parser.error("--max-rules-per-file must be between 1 and 100")
 
     if args.colours is not None:
         colours = args.colours
     elif args.palette == "black":
-        colours = BLACK_BACKGROUND_COLOURS
+        colours = BLACK_CHROMATIC_COLOURS
+    elif args.palette == "white":
+        colours = WHITE_CHROMATIC_COLOURS
     else:
-        colours = DUAL_BACKGROUND_COLOURS
+        colours = DUAL_CHROMATIC_COLOURS
 
-    symbols = args.symbols
+    if args.symbols is not None:
+        symbols = args.symbols
+    elif args.multi_symbols:
+        symbols = MULTI_SAFE_SYMBOLS
+    else:
+        symbols = SINGLE_SAFE_SYMBOL
 
-    blocked_colours = {0, 1}
-    bad = [c for c in colours if c in blocked_colours]
-    if bad:
-        parser.error(f"do not use PGPLOT colour indices 0 or 1 in --colours; got {bad}")
+    try:
+        validate_colours(colours, args.palette, args.allow_low_contrast)
+        validate_symbols(symbols)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     values_by_flag, stats = collect_flag_values(root, flags)
+    include_theme = not args.flag_lines_only
 
-    lines, reused_by_flag = build_output_lines(
-        values_by_flag=values_by_flag,
-        flags=flags,
-        colours=colours,
-        symbols=symbols,
-        case_sensitive=args.case_sensitive,
-        include_base_theme=not args.flag_lines_only,
-        background=args.background,
-        foreground=args.foreground,
-    )
-
-    write_output(output, lines)
+    try:
+        if args.combined:
+            outputs = write_combined_output(
+                output=args.output.expanduser(),
+                values_by_flag=values_by_flag,
+                flags=flags,
+                colours=colours,
+                symbols=symbols,
+                case_sensitive=args.case_sensitive,
+                include_theme=include_theme,
+                background=args.background,
+                foreground=args.foreground,
+                max_rules_per_file=args.max_rules_per_file,
+            )
+        else:
+            outputs = write_split_outputs(
+                output_prefix=args.output_prefix.expanduser(),
+                values_by_flag=values_by_flag,
+                flags=flags,
+                colours=colours,
+                symbols=symbols,
+                case_sensitive=args.case_sensitive,
+                include_theme=include_theme,
+                background=args.background,
+                foreground=args.foreground,
+                max_rules_per_file=args.max_rules_per_file,
+            )
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if args.summary:
         print_summary(
             root=root,
-            output=output,
             values_by_flag=values_by_flag,
             flags=flags,
             stats=stats,
             colours=colours,
             symbols=symbols,
-            reused_by_flag=reused_by_flag,
+            outputs=outputs,
+            max_rules_per_file=args.max_rules_per_file,
+            palette=args.palette,
         )
 
     return 0

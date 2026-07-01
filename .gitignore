@@ -66,3 +66,4 @@ public_release_cache/
 scripts/htcondor/
 scripts/pleb_container.sh
 tmp_check_qc_postfit.py
+local_bundles/

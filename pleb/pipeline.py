@@ -793,9 +793,7 @@ def _build_fixdataset_config(
             qc_write_metric_flags=bool(
                 _cfg_get(cfg, "fix_qc_write_metric_flags", False)
             ),
-            qc_metric_flag_columns=_cfg_get(
-                cfg, "fix_qc_metric_flag_columns", None
-            ),
+            qc_metric_flag_columns=_cfg_get(cfg, "fix_qc_metric_flag_columns", None),
             qc_metric_flag_prefix=str(
                 _cfg_get(cfg, "fix_qc_metric_flag_prefix", "-pqc_") or "-pqc_"
             ),

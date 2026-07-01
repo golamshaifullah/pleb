@@ -273,6 +273,7 @@ ELL1_FORBIDDEN_NOTES = {
     "OM": "ELL1 uses EPS1/EPS2 instead of OM.",
     "T0": "ELL1 uses TASC instead of T0.",
 }
+SECONDARY_COMPANION = {"PB_2", "T0_2", "A1_2", "OM_2", "ECC_2"}
 
 DEFAULT_RULES: Dict[str, ModelRule] = {
     "BT": ModelRule(
@@ -373,6 +374,7 @@ DEFAULT_RULES: Dict[str, ModelRule] = {
         allowed=BT
         | DD
         | ELL1
+        | SECONDARY_COMPANION
         | {
             "H3",
             "H4",
@@ -392,6 +394,7 @@ DEFAULT_RULES: Dict[str, ModelRule] = {
         allowed=BT
         | DD
         | ELL1
+        | SECONDARY_COMPANION
         | {
             "H3",
             "H4",
@@ -823,6 +826,25 @@ MTOT 2.4
 GAMMA 0.001
 """,
         1,
+    ),
+    (
+        "t2_secondary_companion",
+        """
+PSRJ J0000+0000
+F0 100
+BINARY T2
+PB 1
+A1 1
+ECC 0.1
+T0 58000
+OM 20
+PB_2 4095.37
+T0_2 56933.43
+A1_2 0.00098
+OM_2 334.95
+ECC_2 0.938
+""",
+        0,
     ),
 ]
 

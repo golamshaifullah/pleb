@@ -1758,13 +1758,9 @@ class PipelineConfig:
             fix_qc_write_explicit_flags=bool(
                 d.get("fix_qc_write_explicit_flags", False)
             ),
-            fix_qc_write_metric_flags=bool(
-                d.get("fix_qc_write_metric_flags", False)
-            ),
+            fix_qc_write_metric_flags=bool(d.get("fix_qc_write_metric_flags", False)),
             fix_qc_metric_flag_columns=opt_list_str("fix_qc_metric_flag_columns"),
-            fix_qc_metric_flag_prefix=str(
-                d.get("fix_qc_metric_flag_prefix", "-pqc_")
-            ),
+            fix_qc_metric_flag_prefix=str(d.get("fix_qc_metric_flag_prefix", "-pqc_")),
             fix_qc_pqc_flag_name=str(d.get("fix_qc_pqc_flag_name", "-pqc")),
             fix_qc_pqc_good_value=str(d.get("fix_qc_pqc_good_value", "good")),
             fix_qc_pqc_bad_value=str(d.get("fix_qc_pqc_bad_value", "bad")),

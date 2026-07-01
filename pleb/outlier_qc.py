@@ -590,7 +590,9 @@ def _local_step_scope_series(df: pd.DataFrame) -> pd.Series:
     return pd.Series(["__all__"] * len(df), index=df.index)
 
 
-def _normalize_step_memberships(df: pd.DataFrame) -> tuple[pd.DataFrame, Dict[str, Any]]:
+def _normalize_step_memberships(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, Dict[str, Any]]:
     """Expand sparse PQC step labels into contiguous post-step memberships.
 
     PQC can emit the same accepted step id on only a few high-leverage TOAs.
@@ -634,12 +636,9 @@ def _normalize_step_memberships(df: pd.DataFrame) -> tuple[pd.DataFrame, Dict[st
         event_rows = out.loc[event_mask].copy()
         event_rows["__pleb_step_t0"] = t0.loc[event_mask]
         event_rows["__pleb_step_scope"] = scope.loc[event_mask]
-        event_rows = (
-            event_rows.sort_values(["__pleb_step_scope", "__pleb_step_t0"])
-            .drop_duplicates(
-                ["__pleb_step_scope", id_col, "__pleb_step_t0"], keep="first"
-            )
-        )
+        event_rows = event_rows.sort_values(
+            ["__pleb_step_scope", "__pleb_step_t0"]
+        ).drop_duplicates(["__pleb_step_scope", id_col, "__pleb_step_t0"], keep="first")
 
         metadata_cols = [
             c

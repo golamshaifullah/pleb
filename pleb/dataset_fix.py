@@ -2317,18 +2317,13 @@ def _collect_qc_mjds(
         )
     if not cfg.qc_remove_transients and "transient_id" in df.columns:
         try:
-            event_protected |= (
-                df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
-            )
+            event_protected |= df["transient_id"].fillna(-1).astype(int).to_numpy() >= 0
         except Exception:
             pass
     if (
-        (not orbital_phase_allowed or not cfg.qc_remove_orbital_phase)
-        and "orbital_phase_bad" in df.columns
-    ):
-        event_protected |= (
-            df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
-        )
+        not orbital_phase_allowed or not cfg.qc_remove_orbital_phase
+    ) and "orbital_phase_bad" in df.columns:
+        event_protected |= df["orbital_phase_bad"].fillna(False).astype(bool).to_numpy()
     for col in (
         "step_member",
         "dm_step_member",
