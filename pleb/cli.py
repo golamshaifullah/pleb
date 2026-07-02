@@ -38,6 +38,7 @@ from .config import (
     ParamScanConfig,
     PipelineConfig,
     QCReportConfig,
+    ReleaseQualityReportConfig,
     WorkflowRunConfig,
 )
 from .ingest import ingest_dataset, IngestError
@@ -45,6 +46,10 @@ from .logging_utils import set_log_dir
 from .pipeline import run_pipeline
 from .param_scan import run_param_scan
 from .qc_report import generate_cross_pulsar_coincidence_report, generate_qc_report
+from .release_quality_report import (
+    ReleaseQualityThresholds,
+    generate_release_quality_report,
+)
 from .run_report import generate_run_report
 from .public_release_compare import compare_public_releases
 from .optimize.cli import load_optimization_config
@@ -273,6 +278,70 @@ def build_qc_report_parser() -> argparse.ArgumentParser:
     return p
 
 
+def build_release_report_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for the ``release-report`` subcommand."""
+    p = argparse.ArgumentParser(
+        description="Generate a release-facing quality report from existing QC outputs."
+    )
+    p.add_argument("release_report", nargs="?", help=argparse.SUPPRESS)
+    p.add_argument(
+        "--run-dir",
+        type=Path,
+        required=False,
+        help="Run directory containing qc outputs.",
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        help="Optional config file (.toml/.json) for release-report mode.",
+    )
+    p.add_argument(
+        "--report-dir",
+        type=Path,
+        default=None,
+        help="Output directory (default: <run-dir>/release_quality_report).",
+    )
+    p.add_argument(
+        "--output-name",
+        default=None,
+        help="PDF filename (default: release_quality_report.pdf).",
+    )
+    p.add_argument("--title", default=None, help="Report title override.")
+    p.add_argument(
+        "--backend-col",
+        default=None,
+        help="Preferred backend column for risk ranking; fallbacks are tried if absent.",
+    )
+    p.add_argument(
+        "--outlier-cols",
+        default=None,
+        help="Comma-separated outlier columns used by the compact decision policy.",
+    )
+    p.add_argument(
+        "--no-per-pulsar-pages",
+        action="store_true",
+        help="Skip residual-vs-MJD pages for high-risk pulsar/variant rows.",
+    )
+    p.add_argument(
+        "--per-pulsar-page-limit",
+        type=int,
+        default=None,
+        help="Maximum number of per-pulsar residual pages.",
+    )
+    p.add_argument(
+        "--top-n",
+        type=int,
+        default=None,
+        help="Number of flagged TOA rows to include in the compact table.",
+    )
+    p.add_argument("--yellow-bad-fraction", type=float, default=None)
+    p.add_argument("--red-bad-fraction", type=float, default=None)
+    p.add_argument("--yellow-review-fraction", type=float, default=None)
+    p.add_argument("--red-review-fraction", type=float, default=None)
+    p.add_argument("--yellow-event-fraction", type=float, default=None)
+    return p
+
+
 def build_ingest_parser() -> argparse.ArgumentParser:
     """Build the CLI parser for ingest mode.
 
@@ -472,6 +541,101 @@ def build_optimize_parser() -> argparse.ArgumentParser:
         help="Optimization config file (.toml or .json).",
     )
     return p
+
+
+def _choose_cli_or_config(value, cfg_value, default=None):
+    return value if value is not None else (cfg_value if cfg_value is not None else default)
+
+
+def run_release_report(argv: list[str] | None) -> int:
+    """Run the ``release-report`` subcommand."""
+    args = build_release_report_parser().parse_args(argv)
+    rcfg = None
+    if args.config:
+        rcfg = ReleaseQualityReportConfig.load(Path(args.config))
+    run_dir = Path(args.run_dir) if args.run_dir else (rcfg.run_dir if rcfg else None)
+    if run_dir is None:
+        raise SystemExit("release-report requires --run-dir (or run_dir in --config).")
+
+    thresholds = ReleaseQualityThresholds(
+        yellow_bad_fraction=float(
+            _choose_cli_or_config(
+                args.yellow_bad_fraction,
+                rcfg.yellow_bad_fraction if rcfg else None,
+                0.01,
+            )
+        ),
+        red_bad_fraction=float(
+            _choose_cli_or_config(
+                args.red_bad_fraction,
+                rcfg.red_bad_fraction if rcfg else None,
+                0.05,
+            )
+        ),
+        yellow_review_fraction=float(
+            _choose_cli_or_config(
+                args.yellow_review_fraction,
+                rcfg.yellow_review_fraction if rcfg else None,
+                0.005,
+            )
+        ),
+        red_review_fraction=float(
+            _choose_cli_or_config(
+                args.red_review_fraction,
+                rcfg.red_review_fraction if rcfg else None,
+                0.02,
+            )
+        ),
+        yellow_event_fraction=float(
+            _choose_cli_or_config(
+                args.yellow_event_fraction,
+                rcfg.yellow_event_fraction if rcfg else None,
+                0.10,
+            )
+        ),
+    )
+    include_per_pulsar_pages = not bool(args.no_per_pulsar_pages)
+    if rcfg is not None and args.no_per_pulsar_pages is False:
+        include_per_pulsar_pages = bool(rcfg.include_per_pulsar_pages)
+    result = generate_release_quality_report(
+        run_dir=Path(run_dir),
+        report_dir=(
+            Path(args.report_dir)
+            if args.report_dir is not None
+            else (Path(rcfg.report_dir) if rcfg and rcfg.report_dir else None)
+        ),
+        output_name=str(
+            _choose_cli_or_config(
+                args.output_name,
+                rcfg.output_name if rcfg else None,
+                "release_quality_report.pdf",
+            )
+        ),
+        title=_choose_cli_or_config(args.title, rcfg.title if rcfg else None, None),
+        backend_col=_choose_cli_or_config(
+            args.backend_col, rcfg.backend_col if rcfg else None, None
+        ),
+        outlier_cols=(
+            _parse_csv_list(args.outlier_cols)
+            if args.outlier_cols
+            else (rcfg.outlier_cols if rcfg else None)
+        ),
+        thresholds=thresholds,
+        include_per_pulsar_pages=include_per_pulsar_pages,
+        per_pulsar_page_limit=int(
+            _choose_cli_or_config(
+                args.per_pulsar_page_limit,
+                rcfg.per_pulsar_page_limit if rcfg else None,
+                30,
+            )
+        ),
+        top_n=int(_choose_cli_or_config(args.top_n, rcfg.top_n if rcfg else None, 50)),
+    )
+    if result is None:
+        raise SystemExit("release report generation requires matplotlib.")
+    _write_run_settings(Path(result.report_dir), argv, None)
+    print(str(result.pdf_path))
+    return 0
 
 
 def run_qc_report(argv: list[str] | None) -> int:
@@ -827,6 +991,8 @@ def main(argv=None) -> int:
         return run_ux_cli(argv)
     if argv and argv[0] == "qc-report":
         return run_qc_report(argv)
+    if argv and argv[0] == "release-report":
+        return run_release_report(argv)
     if argv and argv[0] == "workflow":
         return run_workflow(argv)
     if argv and argv[0] == "report":

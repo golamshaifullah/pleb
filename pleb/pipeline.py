@@ -55,6 +55,10 @@ from .reports import (
     write_new_param_significance,
     write_outlier_tables,
 )
+from .release_quality_report import (
+    ReleaseQualityThresholds,
+    generate_release_quality_report,
+)
 from .run_report import generate_run_report
 from .tempo2 import run_tempo2_for_pulsar
 from .tim_utils import count_toa_lines, parse_include_lines, list_backend_timfiles
@@ -2388,6 +2392,82 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                 logger.info("QC report written to: %s", report_dir)
             except Exception as e:
                 logger.warning("QC report generation failed: %s", e)
+
+        if getattr(cfg, "release_quality_report", False):
+            try:
+                release_report_dir = None
+                if getattr(cfg, "release_quality_report_dir", None):
+                    release_report_dir = Path(cfg.release_quality_report_dir)
+                    if not release_report_dir.is_absolute():
+                        release_report_dir = out_paths["tag"] / release_report_dir
+                thresholds = ReleaseQualityThresholds(
+                    yellow_bad_fraction=float(
+                        getattr(cfg, "release_quality_report_yellow_bad_fraction", 0.01)
+                    ),
+                    red_bad_fraction=float(
+                        getattr(cfg, "release_quality_report_red_bad_fraction", 0.05)
+                    ),
+                    yellow_review_fraction=float(
+                        getattr(
+                            cfg,
+                            "release_quality_report_yellow_review_fraction",
+                            0.005,
+                        )
+                    ),
+                    red_review_fraction=float(
+                        getattr(cfg, "release_quality_report_red_review_fraction", 0.02)
+                    ),
+                    yellow_event_fraction=float(
+                        getattr(cfg, "release_quality_report_yellow_event_fraction", 0.10)
+                    ),
+                )
+                release_result = generate_release_quality_report(
+                    run_dir=out_paths["tag"],
+                    report_dir=release_report_dir,
+                    output_name=str(
+                        getattr(
+                            cfg,
+                            "release_quality_report_name",
+                            "release_quality_report.pdf",
+                        )
+                    ),
+                    title=(
+                        getattr(cfg, "release_quality_report_title", None)
+                        or "PLEB Release Quality Report"
+                    ),
+                    backend_col=(
+                        getattr(cfg, "release_quality_report_backend_col", None)
+                        or getattr(cfg, "qc_report_backend_col", None)
+                        or getattr(cfg, "pqc_backend_col", "group")
+                        or "group"
+                    ),
+                    outlier_cols=getattr(
+                        cfg, "release_quality_report_outlier_cols", None
+                    ),
+                    thresholds=thresholds,
+                    include_per_pulsar_pages=bool(
+                        getattr(
+                            cfg,
+                            "release_quality_report_include_per_pulsar_pages",
+                            True,
+                        )
+                    ),
+                    per_pulsar_page_limit=int(
+                        getattr(
+                            cfg,
+                            "release_quality_report_per_pulsar_page_limit",
+                            30,
+                        )
+                    ),
+                    top_n=int(getattr(cfg, "release_quality_report_top_n", 50)),
+                )
+                if release_result is not None:
+                    logger.info(
+                        "Release quality report written to: %s",
+                        release_result.pdf_path,
+                    )
+            except Exception as e:
+                logger.warning("Release quality report generation failed: %s", e)
 
         if bool(getattr(cfg, "consolidated_report", True)):
             try:

@@ -421,6 +421,101 @@ class QCReportConfig:
 
 
 @dataclass(slots=True)
+class ReleaseQualityReportConfig:
+    """Configuration model for ``release-report`` mode.
+
+    This mode consumes existing ``*_qc.csv`` outputs and writes a reader-facing
+    release-quality PDF plus TSV/JSON scorecard artifacts.
+    """
+
+    run_dir: Path
+    report_dir: Optional[Path] = None
+    output_name: str = "release_quality_report.pdf"
+    title: Optional[str] = None
+    backend_col: Optional[str] = None
+    outlier_cols: Optional[List[str]] = None
+    include_per_pulsar_pages: bool = True
+    per_pulsar_page_limit: int = 30
+    top_n: int = 50
+    yellow_bad_fraction: float = 0.01
+    red_bad_fraction: float = 0.05
+    yellow_review_fraction: float = 0.005
+    red_review_fraction: float = 0.02
+    yellow_event_fraction: float = 0.10
+
+    @staticmethod
+    def from_dict(
+        d: Dict[str, Any], *, base_dir: Path | None = None
+    ) -> "ReleaseQualityReportConfig":
+        if "release_quality_report" in d and isinstance(
+            d["release_quality_report"], dict
+        ):
+            d = d["release_quality_report"]
+
+        def opt_str(key: str) -> Optional[str]:
+            v = d.get(key)
+            if v in (None, ""):
+                return None
+            return str(v)
+
+        def opt_list_str(key: str) -> Optional[List[str]]:
+            v = d.get(key)
+            if v in (None, ""):
+                return None
+            if isinstance(v, str):
+                return [s.strip() for s in v.split(",") if s.strip()]
+            return [str(x) for x in list(v)]
+
+        return ReleaseQualityReportConfig(
+            run_dir=_resolve_declared_path(Path(d["run_dir"]), base_dir=base_dir)
+            or Path("."),
+            report_dir=(
+                None
+                if d.get("report_dir") in (None, "")
+                else _resolve_declared_path(
+                    Path(str(d.get("report_dir"))), base_dir=base_dir
+                )
+            ),
+            output_name=str(
+                d.get("output_name", "release_quality_report.pdf")
+            ),
+            title=opt_str("title"),
+            backend_col=opt_str("backend_col"),
+            outlier_cols=opt_list_str("outlier_cols"),
+            include_per_pulsar_pages=bool(
+                d.get("include_per_pulsar_pages", True)
+            ),
+            per_pulsar_page_limit=int(d.get("per_pulsar_page_limit", 30)),
+            top_n=int(d.get("top_n", 50)),
+            yellow_bad_fraction=float(d.get("yellow_bad_fraction", 0.01)),
+            red_bad_fraction=float(d.get("red_bad_fraction", 0.05)),
+            yellow_review_fraction=float(d.get("yellow_review_fraction", 0.005)),
+            red_review_fraction=float(d.get("red_review_fraction", 0.02)),
+            yellow_event_fraction=float(d.get("yellow_event_fraction", 0.10)),
+        )
+
+    @staticmethod
+    def load(path: Path) -> "ReleaseQualityReportConfig":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        base_dir = path.expanduser().resolve().parent
+        if path.suffix.lower() == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return ReleaseQualityReportConfig.from_dict(data, base_dir=base_dir)
+        if path.suffix.lower() in (".toml", ".tml"):
+            if tomllib is None:
+                raise RuntimeError(
+                    "TOML config requested but tomllib is unavailable in this Python."
+                )
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            return ReleaseQualityReportConfig.from_dict(data, base_dir=base_dir)
+        raise ValueError(
+            f"Unsupported config file type: {path.suffix}. Use .json or .toml"
+        )
+
+
+@dataclass(slots=True)
 class WorkflowRunConfig:
     """Configuration model for workflow-file execution mode.
 
@@ -625,6 +720,13 @@ class PipelineConfig:
         qc_report_no_feature_plots: Skip feature plots in reports.
         qc_report_compact_pdf: Generate compact composite PDF report.
         qc_report_compact_pdf_name: Filename for compact PDF report.
+        release_quality_report: Generate a reader-facing release-quality report.
+        release_quality_report_dir: Output directory for release-quality artifacts.
+        release_quality_report_name: Filename for the release-quality PDF.
+        release_quality_report_title: Optional title override for the release report.
+        release_quality_report_backend_col: Preferred backend column for risk tables.
+        release_quality_report_outlier_cols: Outlier columns used for decision policy.
+        release_quality_report_include_per_pulsar_pages: Include residual pages.
         consolidated_report: Generate a consolidated run-level PDF report.
         consolidated_report_stages: Stage sections to include in the
             consolidated report.
@@ -911,6 +1013,20 @@ class PipelineConfig:
     qc_report_compact_pdf: bool = False
     qc_report_compact_pdf_name: str = "qc_compact_report.pdf"
     qc_report_compact_outlier_cols: Optional[List[str]] = None
+    release_quality_report: bool = False
+    release_quality_report_dir: Optional[Path] = None
+    release_quality_report_name: str = "release_quality_report.pdf"
+    release_quality_report_title: Optional[str] = None
+    release_quality_report_backend_col: Optional[str] = None
+    release_quality_report_outlier_cols: Optional[List[str]] = None
+    release_quality_report_include_per_pulsar_pages: bool = True
+    release_quality_report_per_pulsar_page_limit: int = 30
+    release_quality_report_top_n: int = 50
+    release_quality_report_yellow_bad_fraction: float = 0.01
+    release_quality_report_red_bad_fraction: float = 0.05
+    release_quality_report_yellow_review_fraction: float = 0.005
+    release_quality_report_red_review_fraction: float = 0.02
+    release_quality_report_yellow_event_fraction: float = 0.10
     consolidated_report: bool = True
     consolidated_report_stages: List[str] = field(
         default_factory=lambda: [
@@ -1120,6 +1236,10 @@ class PipelineConfig:
             c.results_dir = c.results_dir.expanduser().resolve()
         if c.qc_report_dir is not None:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
+        if c.release_quality_report_dir is not None:
+            c.release_quality_report_dir = Path(
+                c.release_quality_report_dir
+            ).expanduser().resolve()
         if c.qc_cross_pulsar_dir is not None:
             c.qc_cross_pulsar_dir = Path(c.qc_cross_pulsar_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
@@ -1219,6 +1339,8 @@ class PipelineConfig:
             d[k] = str(d[k])
         if d.get("qc_report_dir") is not None:
             d["qc_report_dir"] = str(d["qc_report_dir"])
+        if d.get("release_quality_report_dir") is not None:
+            d["release_quality_report_dir"] = str(d["release_quality_report_dir"])
         if d.get("qc_cross_pulsar_dir") is not None:
             d["qc_cross_pulsar_dir"] = str(d["qc_cross_pulsar_dir"])
         if d.get("fix_qc_results_dir") is not None:
@@ -1569,6 +1691,44 @@ class PipelineConfig:
             ),
             qc_report_compact_outlier_cols=opt_list_str(
                 "qc_report_compact_outlier_cols"
+            ),
+            release_quality_report=bool(d.get("release_quality_report", False)),
+            release_quality_report_dir=(
+                Path(d["release_quality_report_dir"])
+                if d.get("release_quality_report_dir")
+                else None
+            ),
+            release_quality_report_name=str(
+                d.get("release_quality_report_name", "release_quality_report.pdf")
+            ),
+            release_quality_report_title=opt_str("release_quality_report_title"),
+            release_quality_report_backend_col=opt_str(
+                "release_quality_report_backend_col"
+            ),
+            release_quality_report_outlier_cols=opt_list_str(
+                "release_quality_report_outlier_cols"
+            ),
+            release_quality_report_include_per_pulsar_pages=bool(
+                d.get("release_quality_report_include_per_pulsar_pages", True)
+            ),
+            release_quality_report_per_pulsar_page_limit=int(
+                d.get("release_quality_report_per_pulsar_page_limit", 30)
+            ),
+            release_quality_report_top_n=int(d.get("release_quality_report_top_n", 50)),
+            release_quality_report_yellow_bad_fraction=float(
+                d.get("release_quality_report_yellow_bad_fraction", 0.01)
+            ),
+            release_quality_report_red_bad_fraction=float(
+                d.get("release_quality_report_red_bad_fraction", 0.05)
+            ),
+            release_quality_report_yellow_review_fraction=float(
+                d.get("release_quality_report_yellow_review_fraction", 0.005)
+            ),
+            release_quality_report_red_review_fraction=float(
+                d.get("release_quality_report_red_review_fraction", 0.02)
+            ),
+            release_quality_report_yellow_event_fraction=float(
+                d.get("release_quality_report_yellow_event_fraction", 0.10)
             ),
             consolidated_report=bool(d.get("consolidated_report", True)),
             consolidated_report_stages=list_default(

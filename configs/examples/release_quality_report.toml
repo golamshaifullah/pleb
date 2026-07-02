@@ -1,0 +1,17 @@
+[release_quality_report]
+run_dir = "results/example_run"
+report_dir = "release_quality_report"
+output_name = "release_quality_report.pdf"
+title = "PLEB Final Data Product Quality Report"
+backend_col = "group"
+outlier_cols = ["outlier_any", "bad_point", "bad", "bad_day"]
+include_per_pulsar_pages = true
+per_pulsar_page_limit = 30
+top_n = 50
+
+# Per pulsar/variant fractions. Tune these for the release policy.
+yellow_bad_fraction = 0.01
+red_bad_fraction = 0.05
+yellow_review_fraction = 0.005
+red_review_fraction = 0.02
+yellow_event_fraction = 0.10
