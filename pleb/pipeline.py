@@ -2418,7 +2418,9 @@ def run_pipeline(config: PipelineConfig) -> Dict[str, Path]:
                         getattr(cfg, "release_quality_report_red_review_fraction", 0.02)
                     ),
                     yellow_event_fraction=float(
-                        getattr(cfg, "release_quality_report_yellow_event_fraction", 0.10)
+                        getattr(
+                            cfg, "release_quality_report_yellow_event_fraction", 0.10
+                        )
                     ),
                 )
                 release_result = generate_release_quality_report(

@@ -2257,6 +2257,11 @@ def _filter_qc_rows_for_cfg(
 def _collect_qc_mjds(
     df: pd.DataFrame, cfg: FixDatasetConfig, *, orbital_phase_allowed: bool = True
 ) -> Dict[str, Dict[Optional[str], list[float]]]:
+    reviewed_bad = (
+        df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+        if "reviewed_bad_point" in df.columns
+        else np.zeros(len(df), dtype=bool)
+    )
     reviewed_keep = (
         df["reviewed_keep"].fillna(False).astype(bool).to_numpy()
         if "reviewed_keep" in df.columns
@@ -2276,7 +2281,7 @@ def _collect_qc_mjds(
     standard = np.zeros(len(df), dtype=bool)
     if cfg.qc_remove_bad:
         if has_reviewed and "reviewed_bad_point" in df.columns:
-            standard |= df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+            standard |= reviewed_bad
         elif not has_reviewed:
             for col in ("bad", "bad_day"):
                 if col in df.columns:
@@ -2297,7 +2302,7 @@ def _collect_qc_mjds(
             ]
         )
         if has_reviewed and "reviewed_bad_point" in df.columns:
-            standard |= df["reviewed_bad_point"].fillna(False).astype(bool).to_numpy()
+            standard |= reviewed_bad
         else:
             for col in outlier_cols:
                 if col in df.columns:
@@ -2353,6 +2358,10 @@ def _collect_qc_mjds(
                 event_protected |= vals.fillna(-1).astype(int).to_numpy() >= 0
             except Exception:
                 pass
+    # Manually reviewed bad TOAs are an explicit human decision.  Event
+    # protection should preserve automatic event detections, not override
+    # reviewed_bad_point=True.
+    event_protected &= ~reviewed_bad
     standard &= ~event_protected
 
     solar = np.zeros(len(df), dtype=bool)

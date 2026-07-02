@@ -164,8 +164,14 @@ def _read_qc_frames(
         d = _build_compact_decisions(raw, outlier_cols=cols)
         meta = summary.get(str(csv_path.resolve()), {})
         inferred_pulsar, inferred_variant = _infer_pulsar_variant_from_name(csv_path)
-        pulsar = str(meta.get("pulsar") or raw.get("pulsar", pd.Series([inferred_pulsar])).iloc[0])
-        variant = str(meta.get("variant") or raw.get("variant", pd.Series([inferred_variant])).iloc[0])
+        pulsar = str(
+            meta.get("pulsar")
+            or raw.get("pulsar", pd.Series([inferred_pulsar])).iloc[0]
+        )
+        variant = str(
+            meta.get("variant")
+            or raw.get("variant", pd.Series([inferred_variant])).iloc[0]
+        )
         branch = str(meta.get("branch") or raw.get("branch", pd.Series([""])).iloc[0])
         chosen_backend_col = _resolve_backend_col(d, backend_col)
         if chosen_backend_col:
@@ -261,7 +267,9 @@ def _build_scorecard(
         row["grade"] = _grade_row(pd.Series(row), thresholds)
         rows.append(row)
     out = pd.DataFrame(rows)
-    out["__grade_rank"] = out["grade"].map({"RED": 0, "YELLOW": 1, "GREEN": 2}).fillna(3)
+    out["__grade_rank"] = (
+        out["grade"].map({"RED": 0, "YELLOW": 1, "GREEN": 2}).fillna(3)
+    )
     out = out.sort_values(
         ["__grade_rank", "bad_plus_review_fraction", "pulsar", "variant"],
         ascending=[True, False, True, True],
@@ -298,7 +306,8 @@ def _build_backend_risks(all_qc: pd.DataFrame) -> pd.DataFrame:
                 "bad_plus_review": bad_toa + review,
                 "bad_plus_review_fraction": _fraction(bad_toa + review, n_toas),
                 "n_pulsars": len(pulsars),
-                "pulsars": ",".join(pulsars[:12]) + ("..." if len(pulsars) > 12 else ""),
+                "pulsars": ",".join(pulsars[:12])
+                + ("..." if len(pulsars) > 12 else ""),
                 "top_reasons": "; ".join(
                     f"{idx}={val}" for idx, val in reason_counts.head(5).items()
                 ),
@@ -388,9 +397,20 @@ def _draw_cover_page(
     overall = _overall_grade(scorecard)
     color = _STATUS_COLORS.get(overall, _STATUS_COLORS["NO_QC"])
     ax.text(0.03, 0.96, title, fontsize=18, fontweight="bold", va="top")
-    ax.text(0.03, 0.925, "Release-quality data product scorecard", fontsize=10, va="top")
+    ax.text(
+        0.03, 0.925, "Release-quality data product scorecard", fontsize=10, va="top"
+    )
     ax.add_patch(plt.Rectangle((0.03, 0.80), 0.31, 0.095, color=color, alpha=0.95))
-    ax.text(0.185, 0.846, overall, color="white", fontsize=24, fontweight="bold", ha="center", va="center")
+    ax.text(
+        0.185,
+        0.846,
+        overall,
+        color="white",
+        fontsize=24,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
 
     if scorecard.empty:
         metrics = [
@@ -417,7 +437,13 @@ def _draw_cover_page(
         ax.text(x, y, value, fontsize=18, fontweight="bold", va="top")
         ax.text(x, y - 0.028, label, fontsize=8.5, va="top")
 
-    ax.text(0.03, 0.74, f"Generated: {datetime.now(timezone.utc).isoformat()}", fontsize=8.5, family="monospace")
+    ax.text(
+        0.03,
+        0.74,
+        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        fontsize=8.5,
+        family="monospace",
+    )
     ax.text(0.03, 0.715, f"Run directory: {run_dir}", fontsize=8.5, family="monospace")
     ax.text(
         0.03,
@@ -432,24 +458,41 @@ def _draw_cover_page(
     )
 
     if not scorecard.empty:
-        grade_counts = scorecard["grade"].value_counts().reindex(["GREEN", "YELLOW", "RED"]).fillna(0)
+        grade_counts = (
+            scorecard["grade"]
+            .value_counts()
+            .reindex(["GREEN", "YELLOW", "RED"])
+            .fillna(0)
+        )
         ax.text(0.03, 0.62, "Pulsar/variant grades", fontsize=12, fontweight="bold")
         bx = fig.add_axes([0.10, 0.48, 0.80, 0.11])
-        bx.bar(grade_counts.index.tolist(), grade_counts.values.tolist(), color=[_STATUS_COLORS[k] for k in grade_counts.index])
+        bx.bar(
+            grade_counts.index.tolist(),
+            grade_counts.values.tolist(),
+            color=[_STATUS_COLORS[k] for k in grade_counts.index],
+        )
         bx.set_ylabel("count")
         bx.set_ylim(0, max(1, float(grade_counts.max())) * 1.25)
 
     if not all_qc.empty:
-        decision_counts = all_qc["decision"].value_counts().reindex(_DECISION_ORDER).fillna(0)
+        decision_counts = (
+            all_qc["decision"].value_counts().reindex(_DECISION_ORDER).fillna(0)
+        )
         ax.text(0.03, 0.42, "TOA decisions", fontsize=12, fontweight="bold")
         dx = fig.add_axes([0.10, 0.27, 0.80, 0.11])
-        dx.bar(decision_counts.index.tolist(), decision_counts.values.tolist(), color=[_DECISION_COLORS[k] for k in decision_counts.index])
+        dx.bar(
+            decision_counts.index.tolist(),
+            decision_counts.values.tolist(),
+            color=[_DECISION_COLORS[k] for k in decision_counts.index],
+        )
         dx.set_ylabel("TOAs")
         dx.tick_params(axis="x", labelrotation=15)
         dx.set_ylim(0, max(1, float(decision_counts.max())) * 1.25)
 
     if not scorecard.empty:
-        risk = scorecard.sort_values("bad_plus_review_fraction", ascending=False).head(5)
+        risk = scorecard.sort_values("bad_plus_review_fraction", ascending=False).head(
+            5
+        )
         lines = []
         for _, row in risk.iterrows():
             lines.append(
@@ -457,7 +500,13 @@ def _draw_cover_page(
                 f"bad+review={int(row['bad_plus_review'])}/{int(row['n_toas'])} "
                 f"({_format_fraction(row['bad_plus_review_fraction'])})"
             )
-        ax.text(0.03, 0.20, "Highest-risk pulsar/variant rows", fontsize=12, fontweight="bold")
+        ax.text(
+            0.03,
+            0.20,
+            "Highest-risk pulsar/variant rows",
+            fontsize=12,
+            fontweight="bold",
+        )
         for idx, line in enumerate(lines or ["No high-risk rows found."]):
             ax.text(0.05, 0.17 - idx * 0.026, line, fontsize=8.5, family="monospace")
 
@@ -493,7 +542,11 @@ def _draw_table_page(
         fig = plt.figure(figsize=_A4_FIGSIZE)
         ax = fig.add_subplot(111)
         ax.axis("off")
-        suffix = "" if len(df) <= rows_per_page else f" ({start + 1}-{start + len(chunk)} of {len(df)})"
+        suffix = (
+            ""
+            if len(df) <= rows_per_page
+            else f" ({start + 1}-{start + len(chunk)} of {len(df)})"
+        )
         ax.set_title(f"{title}{suffix}", fontsize=16, loc="left")
         table = ax.table(
             cellText=chunk.astype(str).values.tolist(),
@@ -509,7 +562,10 @@ def _draw_table_page(
             for r, grade in enumerate(chunk["grade"].astype(str), start=1):
                 cell = table[(r, grade_idx)]
                 cell.set_facecolor(_STATUS_COLORS.get(grade, "#ffffff"))
-                cell.set_text_props(color="white" if grade in {"GREEN", "RED"} else "black", weight="bold")
+                cell.set_text_props(
+                    color="white" if grade in {"GREEN", "RED"} else "black",
+                    weight="bold",
+                )
         pdf.savefig(fig, bbox_inches="tight")
         plt.close(fig)
 
@@ -538,13 +594,17 @@ def _draw_per_pulsar_pages(
     if residual_col is None:
         return
     score = (
-        all_qc.assign(__flag=all_qc["decision"].isin(["BAD_TOA", "REVIEW_EVENT"]).astype(int))
+        all_qc.assign(
+            __flag=all_qc["decision"].isin(["BAD_TOA", "REVIEW_EVENT"]).astype(int)
+        )
         .groupby(["__pulsar", "__variant"], dropna=False)["__flag"]
         .sum()
         .sort_values(ascending=False)
     )
     for (pulsar, variant), _ in score.head(max_pages).items():
-        g = all_qc[(all_qc["__pulsar"] == pulsar) & (all_qc["__variant"] == variant)].copy()
+        g = all_qc[
+            (all_qc["__pulsar"] == pulsar) & (all_qc["__variant"] == variant)
+        ].copy()
         if g.empty:
             continue
         x = pd.to_numeric(g["mjd"], errors="coerce")
@@ -566,7 +626,9 @@ def _draw_per_pulsar_pages(
                     color=_DECISION_COLORS[decision],
                 )
         ax.axhline(0.0, linewidth=0.8, color="#555555", alpha=0.6)
-        ax.set_title(f"{pulsar} / {variant}: residual decisions", loc="left", fontsize=14)
+        ax.set_title(
+            f"{pulsar} / {variant}: residual decisions", loc="left", fontsize=14
+        )
         ax.set_xlabel("MJD")
         ax.set_ylabel(residual_col)
         ax.legend(loc="best", fontsize=8)
@@ -575,7 +637,9 @@ def _draw_per_pulsar_pages(
             f"REVIEW_EVENT={(g['decision'] == 'REVIEW_EVENT').sum()}  "
             f"EVENT={(g['decision'] == 'EVENT').sum()}"
         )
-        ax.text(0.01, 0.01, text, transform=ax.transAxes, fontsize=8, family="monospace")
+        ax.text(
+            0.01, 0.01, text, transform=ax.transAxes, fontsize=8, family="monospace"
+        )
         pdf.savefig(fig, bbox_inches="tight")
         plt.close(fig)
 
@@ -631,13 +695,19 @@ def generate_release_quality_report(
         return None
 
     run_dir = Path(run_dir).expanduser().resolve()
-    report_dir = Path(report_dir) if report_dir is not None else run_dir / "release_quality_report"
+    report_dir = (
+        Path(report_dir)
+        if report_dir is not None
+        else run_dir / "release_quality_report"
+    )
     if not report_dir.is_absolute():
         report_dir = run_dir / report_dir
     report_dir.mkdir(parents=True, exist_ok=True)
     thresholds = thresholds or ReleaseQualityThresholds()
 
-    all_qc = _read_qc_frames(run_dir, backend_col=backend_col, outlier_cols=outlier_cols)
+    all_qc = _read_qc_frames(
+        run_dir, backend_col=backend_col, outlier_cols=outlier_cols
+    )
     scorecard = _build_scorecard(all_qc, thresholds)
     backend_risks = _build_backend_risks(all_qc)
     flagged_toas = _build_flagged_toas(all_qc, top_n=top_n)
@@ -660,7 +730,9 @@ def generate_release_quality_report(
         "n_pulsars": int(scorecard["pulsar"].nunique()) if not scorecard.empty else 0,
         "n_toas": int(scorecard["n_toas"].sum()) if not scorecard.empty else 0,
         "n_bad_toas": int(scorecard["bad_toa"].sum()) if not scorecard.empty else 0,
-        "n_review_event_toas": int(scorecard["review_event"].sum()) if not scorecard.empty else 0,
+        "n_review_event_toas": (
+            int(scorecard["review_event"].sum()) if not scorecard.empty else 0
+        ),
         "thresholds": asdict(thresholds),
         "artifacts": {
             "pdf": str(pdf_path),
@@ -669,7 +741,9 @@ def generate_release_quality_report(
             "flagged_toas": str(flagged_toas_path),
         },
     }
-    summary_json_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    summary_json_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     with PdfPages(pdf_path) as pdf:
         _draw_cover_page(
@@ -695,7 +769,11 @@ def generate_release_quality_report(
         _draw_table_page(
             pdf,
             "Pulsar/variant release scorecard",
-            scorecard[[c for c in show_cols if c in scorecard.columns]] if not scorecard.empty else scorecard,
+            (
+                scorecard[[c for c in show_cols if c in scorecard.columns]]
+                if not scorecard.empty
+                else scorecard
+            ),
         )
         backend_cols = [
             "backend",
@@ -711,7 +789,11 @@ def generate_release_quality_report(
         _draw_table_page(
             pdf,
             "Backend risk ranking",
-            backend_risks[[c for c in backend_cols if c in backend_risks.columns]] if not backend_risks.empty else backend_risks,
+            (
+                backend_risks[[c for c in backend_cols if c in backend_risks.columns]]
+                if not backend_risks.empty
+                else backend_risks
+            ),
             rows_per_page=20,
             font_size=6.6,
         )

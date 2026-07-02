@@ -544,7 +544,11 @@ def build_optimize_parser() -> argparse.ArgumentParser:
 
 
 def _choose_cli_or_config(value, cfg_value, default=None):
-    return value if value is not None else (cfg_value if cfg_value is not None else default)
+    return (
+        value
+        if value is not None
+        else (cfg_value if cfg_value is not None else default)
+    )
 
 
 def run_release_report(argv: list[str] | None) -> int:

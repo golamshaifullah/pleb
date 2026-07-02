@@ -106,9 +106,12 @@ def test_run_pipeline_readonly_branches_use_branch_snapshots(
         _assert_snapshot_par(psr_dir / f"{pulsar}.par", key="tempo2")
 
     def _fake_run_pqc_for_parfile_subprocess(
-        parfile: Path, out_csv: Path, _cfg, *, settings_out=None
+        parfile: Path,
+        out_csv: Path,
+        _cfg,
+        **kwargs,
     ):
-        _ = settings_out
+        _ = kwargs
         _assert_snapshot_par(parfile, key="pqc")
         out_csv.parent.mkdir(parents=True, exist_ok=True)
         df = pd.DataFrame(

@@ -476,15 +476,11 @@ class ReleaseQualityReportConfig:
                     Path(str(d.get("report_dir"))), base_dir=base_dir
                 )
             ),
-            output_name=str(
-                d.get("output_name", "release_quality_report.pdf")
-            ),
+            output_name=str(d.get("output_name", "release_quality_report.pdf")),
             title=opt_str("title"),
             backend_col=opt_str("backend_col"),
             outlier_cols=opt_list_str("outlier_cols"),
-            include_per_pulsar_pages=bool(
-                d.get("include_per_pulsar_pages", True)
-            ),
+            include_per_pulsar_pages=bool(d.get("include_per_pulsar_pages", True)),
             per_pulsar_page_limit=int(d.get("per_pulsar_page_limit", 30)),
             top_n=int(d.get("top_n", 50)),
             yellow_bad_fraction=float(d.get("yellow_bad_fraction", 0.01)),
@@ -1237,9 +1233,9 @@ class PipelineConfig:
         if c.qc_report_dir is not None:
             c.qc_report_dir = Path(c.qc_report_dir).expanduser().resolve()
         if c.release_quality_report_dir is not None:
-            c.release_quality_report_dir = Path(
-                c.release_quality_report_dir
-            ).expanduser().resolve()
+            c.release_quality_report_dir = (
+                Path(c.release_quality_report_dir).expanduser().resolve()
+            )
         if c.qc_cross_pulsar_dir is not None:
             c.qc_cross_pulsar_dir = Path(c.qc_cross_pulsar_dir).expanduser().resolve()
         if c.fix_qc_results_dir is not None:
