@@ -14,6 +14,31 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+@pytest.mark.parametrize("channels", [(0, 1), (0,), (1,)])
+def test_dr3_edd_subbands_keep_distinct_labels_without_coincident_times(
+    tmp_path: Path, channels: tuple[int, ...]
+) -> None:
+    """Dispersion or a rejected partner must not collapse EDD to one system."""
+    if sfi.yaml is None:
+        pytest.skip("PyYAML unavailable in this test environment.")
+
+    tim = tmp_path / "EFF.EDD.1400.tim"
+    samples = {
+        0: "archive.scr 1333 59000.000000000 1 effedd -be EDD -bw 200 -chan 0",
+        1: "archive.scr 1456 59000.000000030 2 effedd -be EDD -bw 200 -chan 1",
+    }
+    _write(tim, "FORMAT 1\n" + "\n".join(samples[c] for c in channels) + "\n")
+    rules = sfi.load_flag_sys_freq_rules(
+        Path(__file__).resolve().parents[1]
+        / "configs/catalogs/system_flags/flag_sys_freq_rules.yaml"
+    )
+    inferred = sfi.infer_sys_group_pta(tim, flag_sys_freq_rules=rules)
+
+    expected = {0: "EFF.EDD.1330", 1: "EFF.EDD.1450"}
+    assert inferred["sys"].tolist() == [expected[c] for c in channels]
+    assert set(inferred["group"]) == {"EFF.EDD.1400"}
+
+
 def test_yaml_rules_loader_and_application(tmp_path: Path) -> None:
     if sfi.yaml is None:
         pytest.skip("PyYAML unavailable in this test environment.")

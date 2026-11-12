@@ -736,16 +736,18 @@ def _attach_plot_columns(
     out["_plot_residual"] = pd.to_numeric(out[residual_col], errors="coerce")
     out["_plot_residual_column"] = residual_col
 
-    err_col = None
-    if residual_col.endswith("_us") and "tempo2_err_us" in out.columns:
-        err_col = "tempo2_err_us" * 1e-6
-    elif "tempo2_err" in out.columns:
-        err_col = "tempo2_err" * 1e-6
-    elif "uncertainty" in out.columns:
-        err_col = "uncertainty"
+    if residual_col.endswith("_us"):
+        error_sources = (("tempo2_err_us", 1.0), ("tempo2_err", 1e6), ("uncertainty", 1.0))
+    elif residual_col in {"tempo2_post", "tempo2_postfit", "post", "postfit", "post_fit"}:
+        error_sources = (("tempo2_err", 1.0), ("tempo2_err_us", 1e-6), ("uncertainty", 1.0))
+    else:
+        # Generic residual/uncertainty aliases already share the input units.
+        error_sources = (("uncertainty", 1.0), ("tempo2_err", 1.0), ("tempo2_err_us", 1.0))
 
-    if err_col:
-        out["_plot_error"] = pd.to_numeric(out[err_col], errors="coerce")
+    for err_col, scale in error_sources:
+        if err_col in out.columns:
+            out["_plot_error"] = pd.to_numeric(out[err_col], errors="coerce") * scale
+            break
 
     return out
 

@@ -745,6 +745,8 @@ class PipelineConfig:
         fix_update_alltim_includes: Update INCLUDE lines in .tim files.
         fix_min_toas_per_backend_tim: Minimum TOAs per backend .tim.
         fix_required_tim_flags: Required flags for .tim entries.
+        fix_dedupe_action: Comment within-file duplicates by default; delete is opt-in.
+        fix_dedupe_comment_prefix: Prefix for duplicate comments, without extra flags.
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_system_flag_mapping_path: Editable system-flag mapping JSON (optional).
         fix_relabel_rules_path: Declarative TOA relabel rules TOML (optional).
@@ -1095,6 +1097,8 @@ class PipelineConfig:
     fix_backend_overrides: Dict[str, str] = field(default_factory=dict)
     fix_raise_on_backend_missing: bool = False
     fix_dedupe_toas_within_tim: bool = True
+    fix_dedupe_action: str = "comment"
+    fix_dedupe_comment_prefix: str = "C DUPLICATE_TOA"
     fix_dedupe_mjd_tol_sec: float = 0.0
     fix_dedupe_freq_tol_mhz: Optional[float] = None
     fix_dedupe_freq_tol_auto: bool = False
@@ -1835,6 +1839,10 @@ class PipelineConfig:
                 d.get("fix_raise_on_backend_missing", False)
             ),
             fix_dedupe_toas_within_tim=bool(d.get("fix_dedupe_toas_within_tim", True)),
+            fix_dedupe_action=str(d.get("fix_dedupe_action", "comment")),
+            fix_dedupe_comment_prefix=str(
+                d.get("fix_dedupe_comment_prefix", "C DUPLICATE_TOA")
+            ),
             fix_dedupe_mjd_tol_sec=float(d.get("fix_dedupe_mjd_tol_sec", 0.0)),
             fix_dedupe_freq_tol_mhz=(
                 None

@@ -142,6 +142,46 @@ def test_ingest_verify_respects_pulsar_filter(tmp_path: Path) -> None:
     )
 
 
+def test_ingest_exclude_tim_paths_skips_single_duplicate_source(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    par_root = src / "pars"
+    tim_root = src / "tim"
+
+    _write(par_root / "J1022+1001.par", "PSRJ J1022+1001\n")
+    _write(
+        tim_root / "J1022+1001" / "tims" / "EFF.S60.1420.tim",
+        "FORMAT 1\n1420 1400 58000 1 eff\n",
+    )
+    _write(
+        tim_root / "J1022+1001" / "tims" / "EFF.S60.4857.tim",
+        "FORMAT 1\n4857 1400 58001 1 eff\n",
+    )
+
+    mapping = {
+        "sources": [str(src)],
+        "par_roots": [str(par_root)],
+        "exclude_tim_paths": ["J1022+1001/tims/EFF.S60.1420.tim"],
+        "backends": {
+            "EFF.EDD.4850": {
+                "root": str(tim_root),
+                "tim_glob": "*/tims/EFF.S60.*.tim",
+            }
+        },
+    }
+    mapping_path = tmp_path / "mapping.json"
+    mapping_path.write_text(json.dumps(mapping), encoding="utf-8")
+
+    output_root = tmp_path / "dataset"
+    report = ingest_dataset(mapping_path, output_root)
+
+    tims = output_root / "J1022+1001" / "tims"
+    copied = sorted(path.name for path in tims.glob("*.tim"))
+    assert copied == ["EFF.EDD.4850.tim"]
+    assert "4857" in (tims / "EFF.EDD.4850.tim").read_text(encoding="utf-8")
+    assert "1420" not in (tims / "EFF.EDD.4850.tim").read_text(encoding="utf-8")
+    assert report["summary"]["n_timfiles_added_total"] == 1
+
+
 def test_commit_ingest_changes_isolated_and_scoped(tmp_path: Path) -> None:
     git = pytest.importorskip("git")  # provided by GitPython
 

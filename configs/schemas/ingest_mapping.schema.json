@@ -25,6 +25,11 @@
       "items": { "type": "string" },
       "description": "Backend names to skip entirely."
     },
+    "exclude_tim_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Exact tim files to skip. Absolute paths match exactly; relative paths match by suffix for portable bundle mappings."
+    },
     "pulsar_aliases": {
       "type": "object",
       "additionalProperties": { "type": "string" },

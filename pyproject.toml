@@ -31,6 +31,10 @@ gui = ["streamlit>=1.30", "jsonschema>=4.21", "plotly>=5.0"]
 
 [project.scripts]
 pleb = "pleb.cli:main"
+pleb-residual-export = "pleb.residual_export:main"
+
+[tool.setuptools.package-data]
+pleb = ["resources/*.c"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -55,6 +55,7 @@ Schema file: ``configs/schemas/ingest_mapping.schema.json``.
        "par_roots": { "type": "array", "items": { "type": "string" } },
        "template_roots": { "type": "array", "items": { "type": "string" } },
        "ignore_backends": { "type": "array", "items": { "type": "string" } },
+       "exclude_tim_paths": { "type": "array", "items": { "type": "string" } },
        "pulsar_aliases": { "type": "object", "additionalProperties": { "type": "string" } },
        "backends": {
          "type": "object",
@@ -92,6 +93,9 @@ Example mapping
      "ignore_backends": [
        "NRT.OLD.CHECK"
      ],
+     "exclude_tim_paths": [
+       "J1022+1001/tims/EFF.S60.1420.tim"
+     ],
      "pulsar_aliases": {
        "B1937+21": "J1939+2134",
        "B1855+09": "J1857+0943"
@@ -125,6 +129,9 @@ How to populate the mapping
    for that backend. No automatic parsing or guessing is performed.
 6. **Ignore lists**: if a backend is listed in ``ignore_backends`` it is
    skipped entirely.
+7. **Path exclusions**: entries in ``exclude_tim_paths`` skip individual tim
+   files. Absolute paths match exactly; relative paths match by suffix, which
+   keeps bundle mappings portable across machines.
 
 Strict mapping rules
 --------------------

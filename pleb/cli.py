@@ -989,6 +989,10 @@ def main(argv=None) -> int:
     """
     if argv is None:
         argv = sys.argv[1:]
+    if argv and argv[0] == "dataset-build":
+        from .dataset_recipe import main as build_dataset
+
+        return build_dataset(argv[1:])
     if argv and argv[0] in {"init", "run", "profile", "doctor", "explain"}:
         from .ux import run_ux_cli
 

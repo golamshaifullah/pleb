@@ -77,6 +77,27 @@ All TOML keys are also available as CLI overrides; CLI values always win:
 pleb --config configs/runs/pipeline/epta-dr3-v0.toml --set jobs=8 --set run_fix_dataset=true
 ```
 
+## Workbooks
+
+Start with [build a PTA release using PLEB](workbooks/pta_release/README.md),
+a sequence of interactive notebooks using synthetic inputs and actual PLEB
+commands, configs, QC decisions and dataset branches:
+
+```sh
+./learn.sh release /path/outside/repo/release-learning --port 8889
+```
+
+The [workbook guide](workbooks/README.md) explains how to obtain the PLEB
+container and run eight focused timing-model lessons. Lessons 00–06 generate
+synthetic pulsar data; lesson 07 optionally reads your own completed DR3 run.
+Notebook sources contain no DR3 observations or executed results. Keep images,
+data and generated outputs outside the checkout.
+
+```sh
+PLEB_LEARNING_IMAGE=/path/to/pleb_dr3_upstream.sif \
+  ./learn.sh notebook /path/to/learning-output
+```
+
 ## Development
 
 ```bash

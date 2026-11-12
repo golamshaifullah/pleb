@@ -6,6 +6,7 @@ import types
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 
 def _load_qc_review_script(monkeypatch):
@@ -24,6 +25,27 @@ def _load_qc_review_script(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module, fake_streamlit
+
+
+@pytest.mark.parametrize(
+    "residual_col,error_col,errors,expected",
+    [
+        ("tempo2_post_us", "tempo2_err_us", [3, 4], [3, 4]),
+        ("tempo2_post_us", "tempo2_err", [3e-6, 4e-6], [3, 4]),
+        ("tempo2_post", "tempo2_err_us", [3, 4], [3e-6, 4e-6]),
+        ("tempo2_post", "tempo2_err", [3e-6, 4e-6], [3e-6, 4e-6]),
+        ("residual", "uncertainty", [3, 4], [3, 4]),
+    ],
+)
+def test_plot_error_bars_match_residual_units(
+    monkeypatch, residual_col, error_col, errors, expected
+) -> None:
+    module, _ = _load_qc_review_script(monkeypatch)
+    frame = pd.DataFrame({"mjd": [59000, 59001], residual_col: [1, 2], error_col: errors})
+    result = module._attach_plot_columns(frame, residual_col, "mjd")
+    assert result["_plot_error"].tolist() == pytest.approx(expected)
+    assert result["_plot_residual"].tolist() == [1, 2]
+    assert "_plot_error" not in frame
 
 
 def test_extract_selected_review_ids_uses_customdata(monkeypatch) -> None:

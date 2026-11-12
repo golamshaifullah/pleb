@@ -154,7 +154,9 @@ class FixDatasetConfig:
         system_flag_overwrite_existing: Overwrite existing system flags.
         backend_overrides: Map tim basename to backend name override.
         raise_on_backend_missing: Raise when backend cannot be inferred.
-        dedupe_toas_within_tim: Remove duplicate TOAs within each tim.
+        dedupe_toas_within_tim: Identify duplicate TOAs within each tim.
+        dedupe_action: Comment duplicates by default; deletion is explicit opt-in.
+        dedupe_comment_prefix: Prefix for commented duplicate TOAs.
         dedupe_same_obs_same_bw_globs: Timfile globs that enable near-duplicate
             matching by observation filename + bandwidth.
         check_duplicate_backend_tims: Detect duplicated backend tims.
@@ -254,6 +256,8 @@ class FixDatasetConfig:
 
     # TIM hygiene
     dedupe_toas_within_tim: bool = True
+    dedupe_action: str = "comment"
+    dedupe_comment_prefix: str = "C DUPLICATE_TOA"
     dedupe_mjd_tol_sec: float = 0.0
     dedupe_freq_tol_mhz: Optional[float] = None
     dedupe_freq_tol_auto: bool = False
@@ -362,6 +366,15 @@ def _to_c_comment_line(text: str) -> str:
         rest = s[1:].lstrip()
         return f"C {rest}".rstrip()
     return f"C {s}".rstrip()
+
+
+def _remove_c_comment_prefix(line: str, prefix: str) -> Optional[str]:
+    """Remove one exact canonical ``C ...`` prefix from a tim line."""
+    text = strip_leading_whitespace(line)
+    marker = f"{_normalise_c_comment_prefix(prefix)} "
+    if not text.startswith(marker):
+        return None
+    return text[len(marker) :].lstrip()
 
 
 def _count_fit_enabled_parameters(par_lines: Sequence[str]) -> int:
@@ -2864,7 +2877,7 @@ def _collect_qc_tim_classifications(
     labels: list[_QCTimClassification] = [
         _default_qc_tim_classification(cfg) for _ in range(len(df))
     ]
-    metric_columns = _qc_metric_columns_for_df(df, cfg)
+    metric_columns = _qc_metric_columns_for_df(df, cfg) if cfg.qc_write_metric_flags else []
     for i in range(len(df)):
         event_type = _first_event_type_for_row(df, i)
         manual_review, manual_reason = _manual_review_for_row(df, i)
@@ -3149,6 +3162,10 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         else:
             target_mjds_qc = np.asarray([], dtype=float)
             target_vals_qc = []
+        # Search in time order, but preserve the previous first-CSV-row rule
+        # when multiple observations fall inside the matching tolerance.
+        qc_order = np.argsort(target_mjds_qc, kind="stable")
+        qc_times = target_mjds_qc[qc_order]
         if (
             target_mjds.size == 0
             and target_mjds_solar.size == 0
@@ -3162,6 +3179,7 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
         new_lines: list[str] = []
         removed = 0
         commented = 0
+        uncommented = 0
         pqc_flagged = 0
         explicit_flagged = 0
         metric_flagged = 0
@@ -3179,18 +3197,32 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                 new_lines.append(raw)
                 continue
 
-            mjd = mjd_from_toa_line(raw, time_offset_sec=time_offset_sec)
+            existing_qc_outlier_toa = _remove_c_comment_prefix(raw, comment_prefix)
+            mjd = mjd_from_toa_line(
+                existing_qc_outlier_toa if existing_qc_outlier_toa is not None else raw,
+                time_offset_sec=time_offset_sec,
+            )
             if mjd is None:
                 new_lines.append(raw)
                 continue
 
             raw_toa = raw
-            if _write_any_qc_tim_flags(cfg):
-                classification = _default_qc_tim_classification(cfg)
-                if target_mjds_qc.size > 0:
-                    idx = np.where(np.abs(target_mjds_qc - mjd) <= tol)[0]
-                    if idx.size > 0:
-                        classification = target_vals_qc[int(idx[0])]
+            classification = _default_qc_tim_classification(cfg)
+            matched_classification = False
+            if target_mjds_qc.size > 0:
+                left = np.searchsorted(qc_times, mjd - tol, side="left")
+                right = np.searchsorted(qc_times, mjd + tol, side="right")
+                candidates = qc_order[left:right]
+                idx = candidates[np.abs(target_mjds_qc[candidates] - mjd) <= tol]
+                if idx.size > 0:
+                    classification = target_vals_qc[int(np.min(idx))]
+                    matched_classification = True
+            # Absence from a QC table is not a new approval. Retain the old
+            # flags as evidence when revisiting an unmatched outlier comment.
+            write_flags = _write_any_qc_tim_flags(cfg) and (
+                existing_qc_outlier_toa is None or matched_classification
+            )
+            if write_flags:
                 parts = raw.split()
                 if bool(cfg.qc_write_pqc_flag) and _token_set_flag(
                     parts, pqc_flag_name, classification.pqc_label
@@ -3269,19 +3301,41 @@ def apply_pqc_outliers(psr_dir: Path, cfg: FixDatasetConfig) -> Dict[str, object
                     commented += 1
                 continue
 
+            current_reason = str(classification.manual_reason or "").strip().lower()
+            current_pqc = str(classification.pqc_label or "").strip()
+            should_reactivate = (
+                matched_classification
+                and current_pqc == str(cfg.qc_pqc_good_value or "good")
+                and current_reason == "keep"
+                and not classification.bad_toa
+                and not classification.event
+            )
+            if should_reactivate:
+                active_toa = _remove_c_comment_prefix(raw_toa, comment_prefix)
+                if active_toa is not None:
+                    new_lines.append(active_toa)
+                    uncommented += 1
+                    continue
+
             new_lines.append(raw_toa)
 
         total_pqc_flagged += int(pqc_flagged)
         total_explicit_flagged += int(explicit_flagged)
         total_metric_flagged += int(metric_flagged)
         changed = (
-            removed + commented + pqc_flagged + explicit_flagged + metric_flagged
+            removed
+            + commented
+            + uncommented
+            + pqc_flagged
+            + explicit_flagged
+            + metric_flagged
         ) > 0
         file_reports.append(
             {
                 "timfile": str(tim),
                 "removed": int(removed),
                 "commented": int(commented),
+                "uncommented": int(uncommented),
                 "pqc_flagged": int(pqc_flagged),
                 "explicit_flagged": int(explicit_flagged),
                 "metric_flagged": int(metric_flagged),
@@ -3701,6 +3755,8 @@ def _fix_pulsar_initial_steps(
                         freq_tol_mhz=cfg.dedupe_freq_tol_mhz,
                         freq_tol_auto=bool(cfg.dedupe_freq_tol_auto),
                         same_obs_same_bw_globs=cfg.dedupe_same_obs_same_bw_globs,
+                        action=cfg.dedupe_action,
+                        comment_prefix=cfg.dedupe_comment_prefix,
                     )
                 )
             except Exception as e:
@@ -4597,8 +4653,10 @@ def dedupe_timfile_toas(
     freq_tol_mhz: Optional[float] = None,
     freq_tol_auto: bool = False,
     same_obs_same_bw_globs: Optional[Sequence[str]] = None,
+    action: str = "comment",
+    comment_prefix: str = "C DUPLICATE_TOA",
 ) -> Dict[str, object]:
-    """Remove duplicate TOA rows inside one backend tim file.
+    """Comment duplicate TOAs inside one backend tim file, retaining the first.
 
     Parameters
     ----------
@@ -4621,11 +4679,18 @@ def dedupe_timfile_toas(
         Timfile glob patterns that enable near-duplicate matching by
         observation filename + bandwidth. ``None`` uses the default
         ``["WSRT.*.tim"]``; an empty sequence disables this heuristic.
+    action : str, optional
+        ``"comment"`` (default) preserves duplicate rows; ``"delete"`` opts
+        into physical removal. Existing comments never compete as survivors.
+    comment_prefix : str, optional
+        Prefix for duplicate comments; normalised to a Tempo2 ``C`` comment.
 
     Returns
     -------
     dict
-        Change report with number of removed rows.
+        Planned duplicate/comment/delete counts and decisions linking each
+        duplicate to its retained input line and row hash. Counts are planned
+        counts in report-only and dry-run modes too.
 
     Notes
     -----
@@ -4641,13 +4706,43 @@ def dedupe_timfile_toas(
     formatting jitter. Overly large tolerances can merge legitimate adjacent
     channels/epochs, so thresholds should remain conservative.
     """
+    action = str(action).strip().lower()
+    if action not in {"comment", "delete"}:
+        raise ValueError(f"Unsupported dedupe action: {action}")
+    prefix = _normalise_c_comment_prefix(comment_prefix or "C DUPLICATE_TOA")
+    decisions: List[Dict[str, object]] = []
+
+    def result() -> Dict[str, object]:
+        duplicates = len(decisions)
+        return {
+            "timfile": str(timfile),
+            "changed": bool(duplicates),
+            "action": action,
+            "duplicates": duplicates,
+            "commented": duplicates if action == "comment" else 0,
+            "removed": duplicates if action == "delete" else 0,
+            "decisions": decisions,
+        }
+
     if not timfile.exists():
-        return {"timfile": str(timfile), "changed": False, "removed": 0}
+        return result()
 
     lines = timfile.read_text(encoding="utf-8", errors="ignore").splitlines()
-    removed = 0
     new_lines: List[str] = []
-    changed = False
+
+    def reject(raw: str, line: int, retained_raw: str, retained_line: int, reason: str):
+        decisions.append(
+            {
+                "duplicate_line": line,
+                "retained_line": retained_line,
+                "reason": reason,
+                "duplicate_row_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                "retained_row_sha256": hashlib.sha256(retained_raw.encode("utf-8")).hexdigest(),
+            }
+        )
+        if action == "comment":
+            new_lines.append(f"{prefix} {strip_leading_whitespace(raw)}")
+
     default_bw_mhz = _BACKEND_BW_TABLE.get(timfile.name)
     same_obs_same_bw_enabled = _timfile_matches_same_obs_same_bw_globs(
         timfile, same_obs_same_bw_globs
@@ -4656,46 +4751,54 @@ def dedupe_timfile_toas(
     # If no tolerance requested, keep exact-key behavior and add a narrow
     # same-observation same-bandwidth fallback for matching timfile globs.
     if mjd_tol_sec <= 0.0 and not freq_tol_auto and freq_tol_mhz is None:
-        seen: Set[Tuple[str, str, str, str]] = set()
-        kept_same_obs: List[_DedupeToaRecord] = []
-        for raw in lines:
+        seen: Dict[Tuple[str, str, str, str], Tuple[int, str]] = {}
+        kept_same_obs: List[Tuple[int, _DedupeToaRecord]] = []
+        for line, raw in enumerate(lines, 1):
             key = toa_key_from_line(raw)
             if key is None:
                 new_lines.append(cleanline(raw))
                 continue
             rec = _parse_dedupe_toa_record(raw, default_bw_mhz=default_bw_mhz)
             if key in seen:
-                removed += 1
-                changed = True
+                retained_line, retained_raw = seen[key]
+                reject(raw, line, retained_raw, retained_line, "exact_first_four_columns")
                 continue
             if same_obs_same_bw_enabled:
-                if any(
-                    _is_same_obs_same_bw_near_duplicate(
-                        rec,
-                        kept_rec,
-                        mjd_tol_sec=0.0,
-                        freq_tol_mhz=None,
+                match = next(
+                    (
+                        (kept_line, kept_rec)
+                        for kept_line, kept_rec in kept_same_obs
+                        if _is_same_obs_same_bw_near_duplicate(
+                            rec,
+                            kept_rec,
+                            mjd_tol_sec=0.0,
+                            freq_tol_mhz=None,
+                        )
+                    ),
+                    None,
+                )
+                if match is not None:
+                    retained_line, retained_rec = match
+                    reject(
+                        raw, line, retained_rec.raw, retained_line,
+                        "same_observation_same_bandwidth",
                     )
-                    for kept_rec in kept_same_obs
-                ):
-                    removed += 1
-                    changed = True
                     continue
-            seen.add(key)
+            seen[key] = (line, raw)
             if rec.file_token is not None:
-                kept_same_obs.append(rec)
+                kept_same_obs.append((line, rec))
             new_lines.append(cleanline(raw))
     else:
         # Tolerance-based dedupe: same file token + close MJD + close freq,
         # plus the same narrow same-observation fallback above.
         tol_days = float(mjd_tol_sec) / 86400.0
         freqs: List[float] = []
-        parsed: List[_DedupeToaRecord] = []
-        for raw in lines:
+        parsed: List[Tuple[int, _DedupeToaRecord]] = []
+        for line, raw in enumerate(lines, 1):
             rec = _parse_dedupe_toa_record(raw, default_bw_mhz=default_bw_mhz)
             if rec.freq_mhz is not None:
                 freqs.append(rec.freq_mhz)
-            parsed.append(rec)
+            parsed.append((line, rec))
 
         if freq_tol_mhz is None and freq_tol_auto:
             freq_tol_mhz = _infer_freq_tol(
@@ -4705,13 +4808,13 @@ def dedupe_timfile_toas(
         if freq_tol_mhz is None:
             freq_tol_mhz = 0.0
 
-        kept: List[_DedupeToaRecord] = []
-        for rec in parsed:
+        kept: List[Tuple[int, _DedupeToaRecord]] = []
+        for line, rec in parsed:
             if rec.file_token is None or rec.mjd is None or rec.freq_mhz is None:
                 new_lines.append(cleanline(rec.raw))
                 continue
-            is_dup = False
-            for kept_rec in kept:
+            match = None
+            for kept_line, kept_rec in kept:
                 same_token_match = (
                     kept_rec.file_token == rec.file_token
                     and abs(rec.mjd - kept_rec.mjd) <= tol_days
@@ -4726,26 +4829,27 @@ def dedupe_timfile_toas(
                     )
                 )
                 if same_token_match or same_obs_match:
-                    is_dup = True
+                    match = (
+                        kept_line,
+                        kept_rec,
+                        "time_frequency_tolerance"
+                        if same_token_match else "same_observation_same_bandwidth",
+                    )
                     break
-            if is_dup:
-                removed += 1
-                changed = True
+            if match is not None:
+                retained_line, retained_rec, reason = match
+                reject(rec.raw, line, retained_rec.raw, retained_line, reason)
                 continue
-            kept.append(rec)
+            kept.append((line, rec))
             new_lines.append(cleanline(rec.raw))
 
-    if dry_run or not apply or not changed:
-        return {
-            "timfile": str(timfile),
-            "changed": bool(changed),
-            "removed": int(removed),
-        }
+    if dry_run or not apply or not decisions:
+        return result()
 
     if backup:
         _backup_file(timfile)
     timfile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    return {"timfile": str(timfile), "changed": True, "removed": int(removed)}
+    return result()
 
 
 def _infer_backend_override(cfg: FixDatasetConfig, timfile: Path) -> Optional[str]:

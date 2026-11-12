@@ -96,6 +96,7 @@ class IngestMapping:
     template_roots: Tuple[Path, ...]
     backends: Tuple[BackendSpec, ...]
     ignore_backends: Tuple[str, ...]
+    exclude_tim_paths: Tuple[str, ...]
     pulsar_aliases: Dict[str, str]
     lockfile_path: Optional[Path] = None
     lockfile_strict: bool = True
@@ -175,6 +176,11 @@ def _load_mapping(path: Path) -> IngestMapping:
     ignore_backends = tuple(
         _norm_backend_key(k) for k in data.get("ignore_backends", [])
     )
+    exclude_tim_paths = tuple(
+        str(p).strip().replace("\\", "/")
+        for p in (data.get("exclude_tim_paths") or [])
+        if str(p).strip()
+    )
     pulsar_aliases = {
         str(k): str(v) for k, v in (data.get("pulsar_aliases") or {}).items()
     }
@@ -197,6 +203,7 @@ def _load_mapping(path: Path) -> IngestMapping:
         template_roots=template_roots,
         backends=tuple(backends),
         ignore_backends=ignore_backends,
+        exclude_tim_paths=exclude_tim_paths,
         pulsar_aliases=pulsar_aliases,
         lockfile_path=lockfile,
         lockfile_strict=lockfile_strict,
@@ -236,6 +243,7 @@ def _validate_lockfile(
         mapping.backends,
         mapping.pulsar_aliases,
         mapping.ignore_backends,
+        exclude_tim_paths=mapping.exclude_tim_paths,
         priority_order=mapping.priority_order,
         priority_roots=mapping.priority_roots,
     )
@@ -383,6 +391,7 @@ def _collect_expected_tim_paths(
         mapping.backends,
         mapping.pulsar_aliases,
         mapping.ignore_backends,
+        exclude_tim_paths=mapping.exclude_tim_paths,
         priority_order=mapping.priority_order,
         priority_roots=mapping.priority_roots,
     )
@@ -1110,12 +1119,18 @@ def _find_timfiles(
     backends: Iterable[BackendSpec],
     aliases: Dict[str, str],
     ignore_backends: Iterable[str],
+    exclude_tim_paths: Iterable[str] = (),
     priority_order: Tuple[str, ...] = (),
     priority_roots: Optional[Dict[str, Path]] = None,
 ) -> Dict[str, List[Tuple[str, Path]]]:
     out: Dict[str, List[Tuple[str, Path]]] = {}
     best: Dict[Tuple[str, str], Tuple[int, float, Path]] = {}
     ignore_set = {b for b in ignore_backends}
+    exclude_patterns = tuple(
+        str(p).strip().replace("\\", "/")
+        for p in exclude_tim_paths
+        if str(p).strip()
+    )
     use_priority = bool(priority_order) and bool(priority_roots)
     for backend in backends:
         if backend.ignore or backend.name in ignore_set:
@@ -1126,6 +1141,8 @@ def _find_timfiles(
             if tim.is_dir():
                 continue
             if any(tim.name.endswith(suf) for suf in backend.ignore_suffixes):
+                continue
+            if _tim_path_is_excluded(tim, exclude_patterns):
                 continue
             psr_raw = _extract_pulsar_name(tim)
             if not psr_raw:
@@ -1153,6 +1170,54 @@ def _find_timfiles(
         for (psr, backend_name), (_, _, tim) in best.items():
             out.setdefault(psr, []).append((backend_name, tim))
     return out
+
+
+def _tim_path_is_excluded(path: Path, patterns: Iterable[str]) -> bool:
+    """Return true when ``path`` matches an ingest path exclusion.
+
+    Exclusions are intentionally path-based rather than backend-wide. Absolute
+    paths match after resolution; relative or partial paths match by POSIX-style
+    suffix so portable bundle mappings can exclude a known bad source file
+    without depending on the mount point.
+    """
+    patterns = tuple(patterns)
+    if not patterns:
+        return False
+    resolved = str(path.expanduser().resolve()).replace("\\", "/")
+    for raw in patterns:
+        pattern = str(raw).strip().replace("\\", "/")
+        if not pattern:
+            continue
+        if Path(pattern).is_absolute():
+            target = str(Path(pattern).expanduser().resolve()).replace("\\", "/")
+            if resolved == target:
+                return True
+            continue
+        if resolved.endswith(pattern.lstrip("/")):
+            return True
+    return False
+
+
+def _filter_excluded_timfiles(
+    timfiles: Dict[str, List[Tuple[str, Path]]], exclude_tim_paths: Iterable[str]
+) -> Dict[str, List[Tuple[str, Path]]]:
+    patterns = tuple(
+        str(p).strip().replace("\\", "/")
+        for p in exclude_tim_paths
+        if str(p).strip()
+    )
+    if not patterns:
+        return timfiles
+    filtered: Dict[str, List[Tuple[str, Path]]] = {}
+    for psr, entries in timfiles.items():
+        keep = [
+            (backend, path)
+            for backend, path in entries
+            if not _tim_path_is_excluded(path, patterns)
+        ]
+        if keep:
+            filtered[psr] = keep
+    return filtered
 
 
 def _write_all_tim(pulsar_dir: Path, tim_entries: List[Tuple[str, Path]]) -> None:
@@ -1484,6 +1549,7 @@ def ingest_dataset(
     used_lockfile = False
     if mapping.lockfile_path and mapping.lockfile_path.exists():
         timfiles = _load_lockfile(mapping.lockfile_path, mapping.pulsar_aliases)
+        timfiles = _filter_excluded_timfiles(timfiles, mapping.exclude_tim_paths)
         used_lockfile = True
         logger.info("Using ingest lockfile: %s", mapping.lockfile_path)
         _validate_lockfile(mapping, mapping.lockfile_path, timfiles)
@@ -1492,6 +1558,7 @@ def ingest_dataset(
             mapping.backends,
             mapping.pulsar_aliases,
             mapping.ignore_backends,
+            exclude_tim_paths=mapping.exclude_tim_paths,
             priority_order=mapping.priority_order,
             priority_roots=mapping.priority_roots,
         )

@@ -78,7 +78,7 @@ def test_is_toa_line_warns_for_lowercase_c_comment_marker() -> None:
     assert any("lowercase 'c' comment marker" in str(w.message) for w in rec)
 
 
-def test_dedupe_timfile_toas_removes_wsrt_same_obs_same_bw_near_duplicates(
+def test_dedupe_timfile_toas_comments_wsrt_same_obs_same_bw_near_duplicates(
     tmp_path: Path,
 ) -> None:
     tim = tmp_path / "WSRT.P2.1380.tim"
@@ -111,7 +111,10 @@ def test_dedupe_timfile_toas_removes_wsrt_same_obs_same_bw_near_duplicates(
     rep = dedupe_timfile_toas(tim, apply=True, backup=False)
 
     assert rep["changed"] is True
-    assert rep["removed"] == 1
+    assert rep["removed"] == 0
+    assert rep["commented"] == 1
+    assert rep["duplicates"] == 1
+    assert len(tim.read_text().splitlines()) == 5
 
     toa_lines = [
         ln for ln in tim.read_text(encoding="utf-8").splitlines() if is_toa_line(ln)
@@ -180,7 +183,8 @@ def test_dedupe_timfile_toas_can_apply_same_obs_same_bw_rule_to_other_backends(
     )
 
     assert rep["changed"] is True
-    assert rep["removed"] == 1
+    assert rep["removed"] == 0
+    assert rep["commented"] == 1
 
 
 def test_update_alltim_includes_dry_run_and_apply(tmp_path: Path) -> None:
@@ -826,6 +830,74 @@ def test_apply_pqc_outliers_comments_use_c_space_and_strip_leading_ws(
     assert len(toa_comments) == 1
     assert toa_comments[0].startswith("C QC_OUTLIER ")
     assert "\tf 1400" not in toa_comments[0]
+
+
+def test_apply_pqc_outliers_reactivates_reviewed_keep_qc_outlier(
+    tmp_path: Path,
+) -> None:
+    psr = "J0000+0006"
+    psr_dir = tmp_path / psr
+    tim = psr_dir / "tims" / "BACKEND.tim"
+    _write(
+        tim,
+        (
+            "FORMAT 1\n"
+            "C QC_OUTLIER f 1400 59000 1 1 -pqc bad -bad_toa true\n"
+            "C QC_BINARY_ECLIPSE f 1400 59001 1 1 -pqc bad -bad_toa true\n"
+            "C f 1400 59002 1 1 -pqc bad -bad_toa true\n"
+            "C QC_OUTLIER f 1400 59003 1 1 -pqc bad\n"
+            "f 1400 59004 1 1 -pqc good\n"
+            "C QC_OUTLIER f 1400 59005 1 1 -pqc good -manual_reason keep\n"
+            "C QC_SOLAR f 1400 59006 1 1\n"
+            "C QC_OUTLIER f 1400 59007 1 1\n"
+        ),
+    )
+
+    qc_root = tmp_path / "qc"
+    _write(
+        qc_root / "main" / f"{psr}_qc.csv",
+        (
+            "_timfile,mjd,reviewed_bad_point,manual_reason,solar_event_member\n"
+            "BACKEND.tim,59000,False,keep,False\n"
+            "BACKEND.tim,59001,False,keep,False\n"
+            "BACKEND.tim,59002,False,keep,False\n"
+            "BACKEND.tim,59003,True,bad,False\n"
+            "BACKEND.tim,59004,True,bad,False\n"
+            "BACKEND.tim,59006,False,keep,False\n"
+            "BACKEND.tim,59007,False,keep,True\n"
+        ),
+    )
+    cfg = FixDatasetConfig(
+        apply=True,
+        backup=False,
+        qc_results_dir=qc_root,
+        qc_branch="main",
+        qc_remove_outliers=True,
+        qc_outlier_cols=["reviewed_bad_point"],
+        qc_action="comment",
+        qc_write_pqc_flag=True,
+        qc_write_explicit_flags=True,
+    )
+
+    first = apply_pqc_outliers(psr_dir, cfg)
+    first_text = tim.read_text(encoding="utf-8")
+    second = apply_pqc_outliers(psr_dir, cfg)
+
+    lines = first_text.splitlines()
+    assert lines[1].startswith("f 1400 59000 ")
+    assert "-pqc good" in lines[1]
+    assert "-manual_reason keep" in lines[1]
+    assert lines[2].startswith("C QC_BINARY_ECLIPSE ")
+    assert lines[3].startswith("C f 1400 59002 ")
+    assert lines[4].startswith("C QC_OUTLIER ")  # bad -> bad
+    assert lines[5].startswith("C QC_OUTLIER ")  # good -> bad
+    assert lines[6].startswith("C QC_OUTLIER ")  # unmatched is not approval
+    assert lines[6] == "C QC_OUTLIER f 1400 59005 1 1 -pqc good -manual_reason keep"
+    assert lines[7].startswith("C QC_SOLAR ")
+    assert lines[8].startswith("C QC_OUTLIER ")  # event protection
+    assert first["files"][0]["uncommented"] == 1
+    assert second["files"][0]["uncommented"] == 0
+    assert tim.read_text(encoding="utf-8") == first_text
 
 
 def test_apply_pqc_outliers_orbital_phase_legacy_without_catalog(

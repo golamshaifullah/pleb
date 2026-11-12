@@ -90,13 +90,16 @@
   "lockfile_path": "",
   "lockfile_strict": false,
   "ignore_backends": [],
+  "exclude_tim_paths": [
+    "J1022+1001/tims/EFF.S60.1420.tim"
+  ],
   "pulsar_aliases": {
     "B1937+21": "J1939+2134",
     "B1855+09": "J1857+0943"
   },
   "backends": {
     "EFF.EDD.1400": {
-      "root": "/work/git_projects/epta-dr3/Tarballs/epta-effelsberg-main",
+      "root": "/work/git_projects/epta-dr3-in2p3/EPTA-DR3/raw/eff",
       "tim_glob": "*/tims/*.EFF.P217.tim",
       "ignore_suffixes": [
         "_all.tim",

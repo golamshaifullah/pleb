@@ -87,6 +87,8 @@ TIME_COLUMNS = (
 )
 
 RESIDUAL_COLUMNS = (
+    "tempo2_post_us",
+    "tempo2_postfit_us",
     "resid_us",
     "residual_us",
     "resid",
@@ -97,6 +99,7 @@ RESIDUAL_COLUMNS = (
 )
 
 UNCERTAINTY_COLUMNS = (
+    "tempo2_err_us",
     "sigma_us",
     "toa_err_us",
     "err_us",
@@ -909,6 +912,99 @@ def selection_frame(df: pd.DataFrame, review_ids: Sequence[str]) -> pd.DataFrame
     return sel.sort_values("_selection_order").drop(columns=["_selection_order"])
 
 
+def prepare_residual_review(export_dir: Path, output_dir: Path) -> dict:
+    """Prepare manual-only review rows from validated exports, without refitting.
+
+    CLI arrays retain TIM input order. Capturing the physical TIM row and hash
+    avoids trying to infer source identity from a sorted Feather's epochs.
+    """
+    import json
+    import numpy as np
+    from .tim_utils import is_toa_line, parse_tim_flags_from_line
+
+    export_dir = Path(export_dir).resolve()
+    output_dir = Path(output_dir).resolve()
+    data = export_dir / "input/data"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def walk(path: Path, stack=()):
+        path = path.resolve()
+        if path in stack or not path.is_relative_to(data):
+            raise ValueError(f"Invalid review INCLUDE: {path}")
+        result = []
+        offset = 0.0
+        skip = False
+        for number, raw in enumerate(path.read_text().splitlines(), 1):
+            parts = raw.split()
+            if not parts or raw.lstrip().startswith(("C", "#")):
+                continue
+            command = parts[0].upper()
+            if command == "END":
+                break
+            if command in {"SKIP", "NOSKIP"}:
+                skip = command == "SKIP"
+                continue
+            if skip:
+                continue
+            if command == "TIME":
+                offset += float(parts[1])
+            elif command == "INCLUDE":
+                result.extend(walk(path.parent / parts[1], (*stack, path)))
+            elif is_toa_line(raw):
+                if len(parts) < 5:
+                    continue
+                try:
+                    frequency, epoch, error = map(float, parts[1:4])
+                except ValueError:
+                    continue
+                if not 30000 < epoch < 100000 or error <= 0:
+                    continue
+                flags = parse_tim_flags_from_line(raw)
+                result.append(dict(
+                    timfile=path.relative_to(data).as_posix(), toa_line=number,
+                    toa_row_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                    filename=parts[0], raw_mjd_text=parts[2], mjd=float(parts[2]),
+                    freq=float(parts[1]), raw_error_us=float(parts[3]), site=parts[4],
+                    time_offset_seconds=offset + float(flags.get("-addsat", "0")),
+                    sys=flags.get("-sys", ""), group=flags.get("-group", ""),
+                ))
+        return result
+
+    total = 0
+    files = []
+    for wrapper in sorted(data.glob("J*/*_combined_all.tim")):
+        psr = wrapper.parent.name
+        checked = export_dir / "reports" / f"{psr}_combined_verification.json"
+        if not checked.exists() or not json.loads(checked.read_text())["independent_tempo2_arrays_identical"]:
+            raise ValueError(f"Unverified residual export: {psr}")
+        rows = walk(wrapper)
+        arrays = np.load(export_dir / "fits" / psr / "combined/tempo2_arrays.npz")["arrays"]
+        if len(rows) != len(arrays):
+            raise ValueError(f"Review row count mismatch: {psr}")
+        weights = 1 / arrays[:, 2] ** 2
+        centre = np.average(arrays[:, 1], weights=weights)
+        for row, values in zip(rows, arrays):
+            effective = float(np.longdouble(row["raw_mjd_text"]) + np.longdouble(row["time_offset_seconds"]) / 86400)
+            if abs(effective - values[0]) >= 2e-10 or abs(row["freq"] - values[3]) >= 2e-5:
+                raise ValueError(f"Review TOA order mismatch: {psr}")
+            row.update(pulsar=psr, variant="combined", site_mjd=values[0],
+                       tempo2_post_us=(values[1] - centre) * 1e6,
+                       tempo2_err_us=values[2], backend=row["sys"],
+                       bad_point=False, event_member=False,
+                       review_origin="validated_residual_export_no_fresh_qc")
+        target = output_dir / f"{psr}_combined_qc.csv"
+        content = pd.DataFrame(rows).to_csv(index=False)
+        if target.exists() and target.read_text() != content:
+            raise ValueError(f"Review input changed; use a new review directory: {target}")
+        target.write_text(content)
+        total += len(rows)
+        files.append(target.name)
+    result = dict(pulsars=len(files), toas=total, tables=files,
+                  automated_qc_performed=False, source=str(export_dir))
+    (output_dir / "review_inputs.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Merge manual QC overrides into PLEB/PQC CSVs."
@@ -925,11 +1021,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--overrides", type=Path, help="Manual overrides CSV.")
     p.add_argument(
-        "--out", type=Path, required=True, help="Reviewed QC CSV output path."
+        "--out", type=Path, help="Reviewed QC CSV output path."
     )
     p.add_argument(
         "--init-overrides", type=Path, help="Create an empty overrides CSV and exit."
     )
+    p.add_argument("--from-residual-export", type=Path,
+                   help="Prepare manual review tables from a validated Feather export.")
     return p
 
 
@@ -937,9 +1035,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point for non-interactive merge/export."""
 
     args = _build_arg_parser().parse_args(argv)
+    if args.from_residual_export is not None:
+        if args.out is None:
+            raise SystemExit("--from-residual-export requires --out DIRECTORY")
+        result = prepare_residual_review(args.from_residual_export, args.out)
+        print(f"Prepared {result['pulsars']} pulsars / {result['toas']} review rows")
+        return 0
     if args.init_overrides is not None:
         write_overrides(empty_overrides(), args.init_overrides)
         return 0
+    if args.out is None:
+        raise SystemExit("Review merge requires --out CSV")
     write_reviewed_from_paths(
         run_dir=args.run_dir,
         csvs=args.qc_csv,

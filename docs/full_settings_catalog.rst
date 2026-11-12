@@ -178,6 +178,21 @@ policy.fix
   Level: ``balanced``
   Choices: ``equatorial_to_ecliptic, ecliptic_to_equatorial``
 
+``fix_dedupe_action``
+  Type: ``str``
+  Default: ``"comment"``
+  Choices: ``comment, delete``
+  Modes: ``pipeline, workflow``
+  Duplicate rows are retained as Tempo2 comments by default. Physical deletion
+  requires an explicit ``"delete"`` setting. The fix report records duplicate
+  and retained input lines, row hashes and the matching rule.
+
+``fix_dedupe_comment_prefix``
+  Type: ``str``
+  Default: ``"C DUPLICATE_TOA"``
+  Modes: ``pipeline, workflow``
+  Normalised to a Tempo2 ``C`` comment. Does not add flag/value pairs.
+
 ``fix_dedupe_freq_tol_auto``
   Type: ``bool``
   Default: ``False``

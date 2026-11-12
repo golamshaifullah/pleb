@@ -698,6 +698,10 @@ def _build_fixdataset_config(
             _cfg_get(cfg, "fix_raise_on_backend_missing", False)
         ),
         dedupe_toas_within_tim=bool(_cfg_get(cfg, "fix_dedupe_toas_within_tim", True)),
+        dedupe_action=str(_cfg_get(cfg, "fix_dedupe_action", "comment")),
+        dedupe_comment_prefix=str(
+            _cfg_get(cfg, "fix_dedupe_comment_prefix", "C DUPLICATE_TOA")
+        ),
         dedupe_mjd_tol_sec=float(_cfg_get(cfg, "fix_dedupe_mjd_tol_sec", 0.0)),
         dedupe_freq_tol_mhz=_cfg_get(cfg, "fix_dedupe_freq_tol_mhz", None),
         dedupe_freq_tol_auto=bool(_cfg_get(cfg, "fix_dedupe_freq_tol_auto", False)),

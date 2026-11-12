@@ -67,3 +67,11 @@ scripts/htcondor/
 scripts/pleb_container.sh
 tmp_check_qc_postfit.py
 local_bundles/
+# Private release data and generated campaign bundles
+/EPTA-DR3/
+/bundles/
+# Workbook execution artifacts (sources stay versioned)
+/learning-output/
+/workbook-output/
+*.executed.ipynb
+*.feather

@@ -1,5 +1,6 @@
 # Ingest-only profile for importing the EPTA DR3 release data from the
-# extracted DR3 tarballs plus supporting DR2/DR1 folders.
+# extracted DR3 tarballs plus supporting DR2/DR1 folders. EDD L-band TOAs
+# come from EPTA-DR3/raw/eff (two 200 MHz channels), not the older tarball.
 #
 # Run with:
 #   pleb ingest --config configs/runs/ingest/epta_dr3_tarballs_isolated.toml

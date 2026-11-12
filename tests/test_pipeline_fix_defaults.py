@@ -17,5 +17,7 @@ def test_build_fixdataset_config_preserves_cleanup_defaults(tmp_path: Path) -> N
     fcfg = _build_fixdataset_config(cfg, apply=True)
 
     assert fcfg.dedupe_toas_within_tim is True
+    assert fcfg.dedupe_action == "comment"
+    assert fcfg.dedupe_comment_prefix == "C DUPLICATE_TOA"
     assert fcfg.dedupe_same_obs_same_bw_globs == ["WSRT.*.tim"]
     assert fcfg.remove_overlaps_exact is True

@@ -10,6 +10,8 @@ pleb - The EPTA Data Combination Pipeline
    installation
    quickstart
    single_pulsar_playbook
+   timing_model_workbooks
+   pta_release_training
 
 .. toctree::
    :maxdepth: 2

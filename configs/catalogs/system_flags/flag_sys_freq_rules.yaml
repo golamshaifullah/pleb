@@ -26,7 +26,9 @@ EFF.EDD.1400:
   file: EFF.EDD.1400.tim
   central_frequency: 1400
   pulsars:
-    default: EFF.EDD.1400
+    # The DR3 ingest mappings select the two 200 MHz P217 sub-bands.
+    # Assign by frequency, including epochs with only one surviving channel.
+    default: EFF.EDD.1330 EFF.EDD.1450
 
 EFF.EDD.2734:
   file: EFF.EDD.2734.tim
