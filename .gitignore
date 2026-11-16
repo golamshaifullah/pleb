@@ -75,3 +75,7 @@ local_bundles/
 /workbook-output/
 *.executed.ipynb
 *.feather
+talks/
+not_used/
+singularity/
+workbooks/timing_models/

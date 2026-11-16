@@ -1,0 +1,52 @@
+# Adapt provider paths and the image checksum before use. All paths are portable.
+release_version = 1
+[run]
+mode = "release"
+[source]
+raw = "../../raw"
+# inventory_sha256 = "..." # lock after reviewing the initial input inventory
+[ingest]
+sources = ["."]
+par_roots = ["models"]
+template_roots = []
+pulsars = ["J0000+0000"]
+[ingest.backends."TEST.A.1400"]
+root = "telescope_a"
+tim_glob = "*.tim"
+[processing]
+remove_patterns = []
+min_toas_per_backend_tim = 0
+dedupe_toas_within_tim = true
+dedupe_action = "comment"
+remove_overlaps_exact = false
+# Declare [processing.backend_bandwidths] and [processing.overlap_exact_map]
+# when the project needs bandwidth inference or cross-backend overlap decisions.
+[container]
+image = "../../singularity/pleb_singularity/pleb_dr3_upstream.sif"
+sha256 = "REPLACE_WITH_IMAGE_SHA256"
+[clocks]
+include_container = true
+utc_stations = []
+start_mjd = 40000
+finish_mjd = 70000
+[qc]
+mode = "disabled" # configure detect/settings/apply to obtain statistical evidence
+[review]
+mode = "interactive" # pauses for recorded decisions; catalog mode reuses them
+[timing]
+fit = false
+validate = false
+native = false
+weighted = true
+iterations = 1
+nobs = 120000
+ephem = "DE440"
+clock = "TT(BIPM2024)"
+[variants]
+combined = ["*"]
+[output]
+directory = "../../release-run"
+[verify]
+reject_exact_duplicates = true
+# reference = "expected.json" # independently approved selection
+# sha256 = "..."
