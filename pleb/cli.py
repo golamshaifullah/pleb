@@ -989,10 +989,20 @@ def main(argv=None) -> int:
     """
     if argv is None:
         argv = sys.argv[1:]
-    if argv and argv[0] == "dataset-build":
-        from .dataset_recipe import main as build_dataset
+    if argv and argv[0] == "release-decisions":
+        from .review_migration import main as import_decisions
 
-        return build_dataset(argv[1:])
+        return import_decisions(argv[1:])
+    if argv and argv[0] == "review":
+        import subprocess
+        from importlib.util import find_spec
+
+        if find_spec("streamlit") is None:
+            raise SystemExit("Manual review requires the pleb[gui] extra")
+        app = Path(__file__).with_name("review_app.py")
+        return subprocess.call(
+            [sys.executable, "-m", "streamlit", "run", str(app), "--", *argv[1:]]
+        )
     if argv and argv[0] in {"init", "run", "profile", "doctor", "explain"}:
         from .ux import run_ux_cli
 

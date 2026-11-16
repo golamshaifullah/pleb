@@ -14,6 +14,7 @@ from functools import lru_cache
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Iterable, Mapping, Sequence
 from uuid import uuid4
 
@@ -32,6 +33,7 @@ REVIEW_ACTIONS = (
 OVERRIDE_COLUMNS = [
     "override_id",
     "review_id",
+    "source_id",
     "qc_csv",
     "row_index",
     "pulsar",
@@ -276,6 +278,11 @@ def _guess_pulsar_from_path(path: Path) -> str:
     stem = path.stem
     if stem.endswith("_qc"):
         stem = stem[:-3]
+    # Native release/export tables use PSR_variant_qc.csv. Keep the
+    # coordinate name separate so variants appear under the same pulsar.
+    match = re.match(r"^([JB]\d{4}[+-]\d{2,4})(?=$|[_.])", stem)
+    if match:
+        return match.group(1)
     for sep in ("__", "."):
         if sep in stem:
             return stem.split(sep, 1)[0]
@@ -295,6 +302,9 @@ def make_review_id(row: Mapping[str, object]) -> str:
     accidental cross-matching of duplicate or nearly duplicate MJDs.
     """
 
+    identity = _normalise_scalar(row.get("source_id"))
+    if identity:
+        return identity
     parts = [
         _normalise_scalar(row.get("qc_csv")),
         _normalise_scalar(row.get("row_index")),
@@ -733,6 +743,7 @@ def make_override_rows(
         out.loc[len(out)] = {
             "override_id": str(uuid4()),
             "review_id": _normalise_scalar(row.get("review_id")),
+            "source_id": _normalise_scalar(row.get("source_id")),
             "qc_csv": _normalise_scalar(row.get("qc_csv")),
             "row_index": _normalise_scalar(row.get("row_index")),
             "pulsar": _normalise_scalar(row.get("pulsar")),
@@ -960,14 +971,22 @@ def prepare_residual_review(export_dir: Path, output_dir: Path) -> dict:
                 if not 30000 < epoch < 100000 or error <= 0:
                     continue
                 flags = parse_tim_flags_from_line(raw)
-                result.append(dict(
-                    timfile=path.relative_to(data).as_posix(), toa_line=number,
-                    toa_row_sha256=hashlib.sha256(raw.encode()).hexdigest(),
-                    filename=parts[0], raw_mjd_text=parts[2], mjd=float(parts[2]),
-                    freq=float(parts[1]), raw_error_us=float(parts[3]), site=parts[4],
-                    time_offset_seconds=offset + float(flags.get("-addsat", "0")),
-                    sys=flags.get("-sys", ""), group=flags.get("-group", ""),
-                ))
+                result.append(
+                    dict(
+                        timfile=path.relative_to(data).as_posix(),
+                        toa_line=number,
+                        toa_row_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                        filename=parts[0],
+                        raw_mjd_text=parts[2],
+                        mjd=float(parts[2]),
+                        freq=float(parts[1]),
+                        raw_error_us=float(parts[3]),
+                        site=parts[4],
+                        time_offset_seconds=offset + float(flags.get("-addsat", "0")),
+                        sys=flags.get("-sys", ""),
+                        group=flags.get("-group", ""),
+                    )
+                )
         return result
 
     total = 0
@@ -975,32 +994,58 @@ def prepare_residual_review(export_dir: Path, output_dir: Path) -> dict:
     for wrapper in sorted(data.glob("J*/*_combined_all.tim")):
         psr = wrapper.parent.name
         checked = export_dir / "reports" / f"{psr}_combined_verification.json"
-        if not checked.exists() or not json.loads(checked.read_text())["independent_tempo2_arrays_identical"]:
+        if (
+            not checked.exists()
+            or not json.loads(checked.read_text())[
+                "independent_tempo2_arrays_identical"
+            ]
+        ):
             raise ValueError(f"Unverified residual export: {psr}")
         rows = walk(wrapper)
-        arrays = np.load(export_dir / "fits" / psr / "combined/tempo2_arrays.npz")["arrays"]
+        arrays = np.load(export_dir / "fits" / psr / "combined/tempo2_arrays.npz")[
+            "arrays"
+        ]
         if len(rows) != len(arrays):
             raise ValueError(f"Review row count mismatch: {psr}")
         weights = 1 / arrays[:, 2] ** 2
         centre = np.average(arrays[:, 1], weights=weights)
         for row, values in zip(rows, arrays):
-            effective = float(np.longdouble(row["raw_mjd_text"]) + np.longdouble(row["time_offset_seconds"]) / 86400)
-            if abs(effective - values[0]) >= 2e-10 or abs(row["freq"] - values[3]) >= 2e-5:
+            effective = float(
+                np.longdouble(row["raw_mjd_text"])
+                + np.longdouble(row["time_offset_seconds"]) / 86400
+            )
+            if (
+                abs(effective - values[0]) >= 2e-10
+                or abs(row["freq"] - values[3]) >= 2e-5
+            ):
                 raise ValueError(f"Review TOA order mismatch: {psr}")
-            row.update(pulsar=psr, variant="combined", site_mjd=values[0],
-                       tempo2_post_us=(values[1] - centre) * 1e6,
-                       tempo2_err_us=values[2], backend=row["sys"],
-                       bad_point=False, event_member=False,
-                       review_origin="validated_residual_export_no_fresh_qc")
+            row.update(
+                pulsar=psr,
+                variant="combined",
+                site_mjd=values[0],
+                tempo2_post_us=(values[1] - centre) * 1e6,
+                tempo2_err_us=values[2],
+                backend=row["sys"],
+                bad_point=False,
+                event_member=False,
+                review_origin="validated_residual_export_no_fresh_qc",
+            )
         target = output_dir / f"{psr}_combined_qc.csv"
         content = pd.DataFrame(rows).to_csv(index=False)
         if target.exists() and target.read_text() != content:
-            raise ValueError(f"Review input changed; use a new review directory: {target}")
+            raise ValueError(
+                f"Review input changed; use a new review directory: {target}"
+            )
         target.write_text(content)
         total += len(rows)
         files.append(target.name)
-    result = dict(pulsars=len(files), toas=total, tables=files,
-                  automated_qc_performed=False, source=str(export_dir))
+    result = dict(
+        pulsars=len(files),
+        toas=total,
+        tables=files,
+        automated_qc_performed=False,
+        source=str(export_dir),
+    )
     (output_dir / "review_inputs.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
 
@@ -1020,14 +1065,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Explicit QC CSV; may be repeated.",
     )
     p.add_argument("--overrides", type=Path, help="Manual overrides CSV.")
-    p.add_argument(
-        "--out", type=Path, help="Reviewed QC CSV output path."
-    )
+    p.add_argument("--out", type=Path, help="Reviewed QC CSV output path.")
     p.add_argument(
         "--init-overrides", type=Path, help="Create an empty overrides CSV and exit."
     )
-    p.add_argument("--from-residual-export", type=Path,
-                   help="Prepare manual review tables from a validated Feather export.")
+    p.add_argument(
+        "--from-residual-export",
+        type=Path,
+        help="Prepare manual review tables from a validated Feather export.",
+    )
     return p
 
 

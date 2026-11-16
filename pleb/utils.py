@@ -8,9 +8,20 @@ from __future__ import annotations
 
 import os
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence
 from datetime import datetime
+
+
+def safe_path(root: Path, relative: str) -> Path:
+    """Resolve a contained relative path, rejecting traversal and Git metadata."""
+    path = PurePosixPath(relative)
+    if path.is_absolute() or ".." in path.parts or ".git" in path.parts:
+        raise ValueError(f"Unsafe relative path: {relative}")
+    target = root.joinpath(*path.parts)
+    if not target.resolve().is_relative_to(root.resolve()):
+        raise ValueError(f"Path escapes root: {relative}")
+    return target
 
 
 def which_or_raise(cmd: str, hint: str = "") -> str:

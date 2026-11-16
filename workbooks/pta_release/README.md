@@ -37,7 +37,7 @@ directory preserves your older notebook copies and edits.
 | 05 | Apply only explicit rejections as comments, audit every changed row, distinguish deliberate keep restoration |
 | 06 | Require converged fits, reload saved PARs, inspect residuals and approve timing coefficients |
 | 07 | Validate exported PAR/TIM pairs, preserve provenance, package and verify a synthetic release |
-| 08 | Execute `pleb dataset-build`, verify two identical checkpoint replays, reject a tampered decision catalog |
+| 08 | Import source decisions, run one-config raw-to-release builds twice, reject a tampered catalog |
 | 09 | Prepare and run the native two-container Feather export, inspect effective clocks and reproducibility checks |
 | 10 | Read actual Feather residuals, reproduce WRMS/plots, prepare manual review with physical TIM row hashes |
 
@@ -52,15 +52,15 @@ checkout with its dependencies (`python -m pip install -e .`). Timing, fitting
 and Discovery serialization execute in the pinned SIFs. This avoids nested
 containers from a notebook kernel. The PLEB SIF has PyArrow, so notebook 10
 can inspect the resulting Feathers in the original kernel. Its optional host
-review app additionally needs Streamlit (`python -m pip install streamlit`).
+review app additionally needs the GUI extras, including Streamlit and Plotly
+(`python -m pip install -e '.[gui]'` from the checkout).
 
-The new lessons separate three operations: creating a release from raw inputs,
-replaying a frozen selection, and validating/exporting residuals. Dataset-build
-replays a checkpoint and locked catalogs; it does not repeat human review or
-fit timing models, and currently does not directly import arbitrary UI bad
-overrides. Apply those through FixDataset before freezing a new checkpoint.
-The synthetic replay starts with empty transformation catalogs because its
-checkpoint already contains the reviewed decisions.
+Lesson 08 uses the native release workflow described in
+[the release guide](../../docs/release_workflow.rst). The production command reads
+raw inputs and source-ID decisions, without a processed checkpoint. It explicitly
+disables fitting to demonstrate selection reproduction; the optional export in 09
+refits and validates those models. Human review and scientific model acceptance
+remain explicit steps.
 
 The course runs **your checkout's PLEB source**, mounted read-only at
 `/pleb-source/pleb`, with timing libraries from the container. This includes
@@ -76,8 +76,10 @@ pair is fitted and published under `data/`. A real release must fit and validate
 published variant independently and adopt its own clock, noise, event and
 backend policies.
 
-Notebook 08 creates combined aliases of that approved canonical pair for the
-native replay/export exercises. Notebook 09 preloads the recorded artificial
+Notebook 08 rebuilds combined PAR/TIM pairs from raw with preserved source-ID
+selection decisions. Its PARs start from raw seeds; they are not aliases of the
+fitted models approved in 06. Notebook 09 exports that new branch and explicitly
+refits and validates those models. It preloads the recorded artificial
 observatory in a private runtime; this is a simulation fixture, not an extra
 production station or a change to the containers. Dataset clocks overlay stock
 clocks, and no additional zero-clock stations are assumed.

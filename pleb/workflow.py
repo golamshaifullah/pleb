@@ -32,6 +32,14 @@ from .config_io import _load_config_dict, _parse_value_as_toml_literal, _set_dot
 
 logger = get_logger("pleb.workflow")
 
+
+def run_release_workflow(config_path, *, overrides=None, resume=False, plan=False):
+    """Execute native raw-to-release stages from one versioned configuration."""
+    from .release import run_release
+
+    return run_release(config_path, overrides=overrides, resume=resume, plan=plan)
+
+
 try:
     from git import Repo, InvalidGitRepositoryError  # type: ignore
 except Exception:  # pragma: no cover

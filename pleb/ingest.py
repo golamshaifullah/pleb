@@ -1127,9 +1127,7 @@ def _find_timfiles(
     best: Dict[Tuple[str, str], Tuple[int, float, Path]] = {}
     ignore_set = {b for b in ignore_backends}
     exclude_patterns = tuple(
-        str(p).strip().replace("\\", "/")
-        for p in exclude_tim_paths
-        if str(p).strip()
+        str(p).strip().replace("\\", "/") for p in exclude_tim_paths if str(p).strip()
     )
     use_priority = bool(priority_order) and bool(priority_roots)
     for backend in backends:
@@ -1202,9 +1200,7 @@ def _filter_excluded_timfiles(
     timfiles: Dict[str, List[Tuple[str, Path]]], exclude_tim_paths: Iterable[str]
 ) -> Dict[str, List[Tuple[str, Path]]]:
     patterns = tuple(
-        str(p).strip().replace("\\", "/")
-        for p in exclude_tim_paths
-        if str(p).strip()
+        str(p).strip().replace("\\", "/") for p in exclude_tim_paths if str(p).strip()
     )
     if not patterns:
         return timfiles

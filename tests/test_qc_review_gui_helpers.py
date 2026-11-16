@@ -19,7 +19,7 @@ def _load_qc_review_script(monkeypatch):
     monkeypatch.setitem(sys.modules, "plotly", fake_plotly)
     monkeypatch.setitem(sys.modules, "plotly.graph_objects", fake_graph_objects)
 
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "pleb_qc_review.py"
+    script_path = Path(__file__).resolve().parents[1] / "pleb" / "review_app.py"
     spec = importlib.util.spec_from_file_location("pleb_qc_review_script", script_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -41,7 +41,9 @@ def test_plot_error_bars_match_residual_units(
     monkeypatch, residual_col, error_col, errors, expected
 ) -> None:
     module, _ = _load_qc_review_script(monkeypatch)
-    frame = pd.DataFrame({"mjd": [59000, 59001], residual_col: [1, 2], error_col: errors})
+    frame = pd.DataFrame(
+        {"mjd": [59000, 59001], residual_col: [1, 2], error_col: errors}
+    )
     result = module._attach_plot_columns(frame, residual_col, "mjd")
     assert result["_plot_error"].tolist() == pytest.approx(expected)
     assert result["_plot_residual"].tolist() == [1, 2]
@@ -62,6 +64,27 @@ def test_extract_selected_review_ids_uses_customdata(monkeypatch) -> None:
     }
 
     assert module._extract_selected_review_ids(event) == ["rid-1", "rid-2"]
+
+
+@pytest.mark.parametrize(
+    "filename,pulsar,variant",
+    [
+        ("J1234+5678_combined_qc.csv", "J1234+5678", "combined"),
+        ("J1909-3744_legacy_qc.csv", "J1909-3744", "legacy"),
+        ("J1909-3744_new_qc.csv", "J1909-3744", "new"),
+        ("B1855+09_combined_qc.csv", "B1855+09", "combined"),
+        ("J1909-3744__trial_qc.csv", "J1909-3744", "trial"),
+        ("J1909-3744_qc.csv", "J1909-3744", "base"),
+    ],
+)
+def test_native_export_variants_group_under_the_coordinate_name(
+    monkeypatch, filename, pulsar, variant
+) -> None:
+    module, _ = _load_qc_review_script(monkeypatch)
+    path = Path(filename)
+    actual = module._guess_pulsar_from_qc_path(path)
+    assert actual == pulsar
+    assert module._guess_variant_from_qc_path(path, actual) == variant
 
 
 def test_sync_plot_selection_copies_plot_widget_state(monkeypatch) -> None:

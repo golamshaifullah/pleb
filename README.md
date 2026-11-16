@@ -102,5 +102,10 @@ PLEB_LEARNING_IMAGE=/path/to/pleb_dr3_upstream.sif \
 
 ```bash
 python -m pip install -e ".[dev]"
+python -m ruff check .
+python -m black --check .
 pytest -q
 ```
+
+The Ruff rule set is explicit in `pyproject.toml`; `ruff.toml` reads that same
+configuration, so direct and module invocations use the same policy.

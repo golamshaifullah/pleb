@@ -31,6 +31,37 @@ TIM_DIRECTIVES = {
 }
 
 _WARNED_LOWERCASE_C_COMMENT = False
+
+
+def active_count(path: Path, stack: tuple[Path, ...] = ()) -> int:
+    """Count active FORMAT 1 TOAs, following INCLUDE/END/SKIP directives."""
+    from .observations import read_observations
+    from .utils import safe_path
+
+    path = path.resolve()
+    if path in stack:
+        raise ValueError(f"INCLUDE cycle: {path}")
+    lines = path.read_text().splitlines()
+    total = sum(
+        row.state == "active" for row in read_observations(path, allow_includes=True)
+    )
+    skip = False
+    for line in lines:
+        parts = line.split()
+        if not parts:
+            continue
+        command = parts[0].upper()
+        if command == "END":
+            break
+        if command in {"SKIP", "NOSKIP"}:
+            skip = command == "SKIP"
+        elif not skip and command == "INCLUDE":
+            if len(parts) != 2:
+                raise ValueError(f"Invalid INCLUDE: {line}")
+            total += active_count(safe_path(path.parent, parts[1]), (*stack, path))
+    return total
+
+
 _FLAG_TOKEN_RE = re.compile(r"-\w+$")
 _NEGATIVE_NUMBER_RE = re.compile(r"-(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 

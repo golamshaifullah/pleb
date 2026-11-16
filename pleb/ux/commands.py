@@ -92,6 +92,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("--config", default=str(_DEFAULT_UX_PATH))
     p_run.add_argument(
+        "--resume", action="store_true", help="Resume a verified release run."
+    )
+    p_run.add_argument(
         "--profile",
         dest="profiles",
         action="append",
@@ -428,6 +431,34 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    # Release configs contain their complete ingest/processing settings. Do not
+    # flatten them through the legacy adapter or lose their base directory in a
+    # temporary configuration file.
+    from ..release import tomllib
+
+    config_path = Path(args.config).expanduser().resolve()
+    raw = tomllib.loads(config_path.read_text())
+    if raw.get("run", {}).get("mode") == "release":
+        import json
+        from ..workflow import run_release_workflow
+
+        if getattr(args, "journey", None) or getattr(args, "profiles", None):
+            raise SystemExit(
+                "Release runs use their explicit config, without journey/preset overrides"
+            )
+        from ..release import ReleaseError
+
+        try:
+            result = run_release_workflow(
+                config_path,
+                overrides=getattr(args, "overrides", None),
+                resume=getattr(args, "resume", False),
+                plan=getattr(args, "plan", False),
+            )
+        except (ReleaseError, OSError, KeyError) as error:
+            raise SystemExit(f"release: {error}") from error
+        print(json.dumps(result, indent=2))
+        return 0
     ux = load_ux_config(Path(args.config))
     ux_dict = _ux_to_dict(ux)
 
@@ -532,6 +563,21 @@ def _cmd_profile(args: argparse.Namespace) -> int:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
+    from ..release import tomllib
+
+    path = Path(args.config).expanduser().resolve()
+    raw = tomllib.loads(path.read_text())
+    if raw.get("run", {}).get("mode") == "release":
+        import json
+        from ..release import ReleaseError, run_release
+
+        try:
+            result = run_release(path, plan=True)
+        except (ReleaseError, OSError, KeyError) as error:
+            print(f"release: {error}")
+            return 1
+        print(json.dumps(result, indent=2))
+        return 0
     ux = load_ux_config(Path(args.config))
     legacy = ux_to_legacy_dict(ux)
     mode = str(ux.run.get("mode", "pipeline")).strip().lower()

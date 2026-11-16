@@ -18,6 +18,13 @@ Run the pipeline from a config file:
 
    pleb --config pipeline.toml
 
+Build a reviewed release directly from raw inputs::
+
+   pleb run --config release.toml
+
+See :doc:`release_workflow` for ingestion, recorded review decisions, clocks,
+optional fitting and independent selection verification.
+
 Override config values in place:
 
 .. code-block:: bash

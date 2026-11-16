@@ -12,6 +12,7 @@ license = {text = "MIT"}
 authors = [{name = "Golam Mohiuddin Shaifullah"}]
 urls = {Repository = "https://github.com/golamshaifullah/pleb", Mirror = "https://gitlab.in2p3.fr/epta/pleb", Documentation = "https://golamshaifullah.github.io/pleb/"}
 dependencies = [
+  "GitPython>=3.1",
   "numpy>=1.22",
   "pandas>=1.5",
   "scipy>=1.9",
@@ -48,7 +49,10 @@ markers = [
 ]
 
 [tool.ruff]
-extend-exclude = ["notebooks", "donezip"]
+extend-exclude = ["notebooks", "donezip", "public_release_cache"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 [tool.black]
 line-length = 88

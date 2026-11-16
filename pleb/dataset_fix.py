@@ -144,6 +144,9 @@ class FixDatasetConfig:
         relabel_rules_path: TOML with declarative TOA relabel rules.
         overlap_rules_path: TOML with declarative overlap/dedup preference rules.
         overlap_exact_catalog_path: TOML keep->drop map used by remove_overlaps_exact.
+        overlap_exact_map: Inline keep->drop map; overrides the legacy default catalog.
+        backend_bandwidths: Inline TIM basename to bandwidth (MHz) for deduplication.
+            None retains the legacy table; an empty mapping disables that fallback.
         jump_reference_variants: Build per-variant reference-system JUMP parfiles.
         required_tim_flags: Flags to ensure on each TOA line.
         infer_system_flags: Infer ``-sys``/``-group``/``-pta`` flags.
@@ -222,6 +225,7 @@ class FixDatasetConfig:
     relabel_rules_path: Optional[str] = None
     overlap_rules_path: Optional[str] = None
     overlap_exact_catalog_path: Optional[str] = None
+    overlap_exact_map: Optional[Dict[str, List[str]]] = None
     jump_reference_variants: bool = False
     jump_reference_keep_tmp: bool = False
     jump_reference_jump_flag: str = "-sys"
@@ -261,6 +265,7 @@ class FixDatasetConfig:
     dedupe_mjd_tol_sec: float = 0.0
     dedupe_freq_tol_mhz: Optional[float] = None
     dedupe_freq_tol_auto: bool = False
+    backend_bandwidths: Optional[Dict[str, float]] = None
     dedupe_same_obs_same_bw_globs: List[str] = field(
         default_factory=lambda: list(_DEFAULT_SAME_OBS_SAME_BW_GLOBS)
     )
@@ -2877,7 +2882,9 @@ def _collect_qc_tim_classifications(
     labels: list[_QCTimClassification] = [
         _default_qc_tim_classification(cfg) for _ in range(len(df))
     ]
-    metric_columns = _qc_metric_columns_for_df(df, cfg) if cfg.qc_write_metric_flags else []
+    metric_columns = (
+        _qc_metric_columns_for_df(df, cfg) if cfg.qc_write_metric_flags else []
+    )
     for i in range(len(df)):
         event_type = _first_event_type_for_row(df, i)
         manual_review, manual_reason = _manual_review_for_row(df, i)
@@ -3757,6 +3764,7 @@ def _fix_pulsar_initial_steps(
                         same_obs_same_bw_globs=cfg.dedupe_same_obs_same_bw_globs,
                         action=cfg.dedupe_action,
                         comment_prefix=cfg.dedupe_comment_prefix,
+                        backend_bandwidths=cfg.backend_bandwidths,
                     )
                 )
             except Exception as e:
@@ -3833,6 +3841,7 @@ def _fix_pulsar_post_system_steps(
             rep = remove_overlaps_exact(
                 psr_dir,
                 overlap_catalog_path=cfg.overlap_exact_catalog_path,
+                overlap_map=cfg.overlap_exact_map,
                 apply=cfg.apply,
                 backup=cfg.backup,
                 dry_run=cfg.dry_run,
@@ -4655,6 +4664,7 @@ def dedupe_timfile_toas(
     same_obs_same_bw_globs: Optional[Sequence[str]] = None,
     action: str = "comment",
     comment_prefix: str = "C DUPLICATE_TOA",
+    backend_bandwidths: Optional[Dict[str, float]] = None,
 ) -> Dict[str, object]:
     """Comment duplicate TOAs inside one backend tim file, retaining the first.
 
@@ -4737,13 +4747,16 @@ def dedupe_timfile_toas(
                 "retained_line": retained_line,
                 "reason": reason,
                 "duplicate_row_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
-                "retained_row_sha256": hashlib.sha256(retained_raw.encode("utf-8")).hexdigest(),
+                "retained_row_sha256": hashlib.sha256(
+                    retained_raw.encode("utf-8")
+                ).hexdigest(),
             }
         )
         if action == "comment":
             new_lines.append(f"{prefix} {strip_leading_whitespace(raw)}")
 
-    default_bw_mhz = _BACKEND_BW_TABLE.get(timfile.name)
+    bandwidths = _BACKEND_BW_TABLE if backend_bandwidths is None else backend_bandwidths
+    default_bw_mhz = bandwidths.get(timfile.name)
     same_obs_same_bw_enabled = _timfile_matches_same_obs_same_bw_globs(
         timfile, same_obs_same_bw_globs
     )
@@ -4761,7 +4774,9 @@ def dedupe_timfile_toas(
             rec = _parse_dedupe_toa_record(raw, default_bw_mhz=default_bw_mhz)
             if key in seen:
                 retained_line, retained_raw = seen[key]
-                reject(raw, line, retained_raw, retained_line, "exact_first_four_columns")
+                reject(
+                    raw, line, retained_raw, retained_line, "exact_first_four_columns"
+                )
                 continue
             if same_obs_same_bw_enabled:
                 match = next(
@@ -4780,7 +4795,10 @@ def dedupe_timfile_toas(
                 if match is not None:
                     retained_line, retained_rec = match
                     reject(
-                        raw, line, retained_rec.raw, retained_line,
+                        raw,
+                        line,
+                        retained_rec.raw,
+                        retained_line,
                         "same_observation_same_bandwidth",
                     )
                     continue
@@ -4832,8 +4850,11 @@ def dedupe_timfile_toas(
                     match = (
                         kept_line,
                         kept_rec,
-                        "time_frequency_tolerance"
-                        if same_token_match else "same_observation_same_bandwidth",
+                        (
+                            "time_frequency_tolerance"
+                            if same_token_match
+                            else "same_observation_same_bandwidth"
+                        ),
                     )
                     break
             if match is not None:

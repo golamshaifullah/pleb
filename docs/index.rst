@@ -12,6 +12,7 @@ pleb - The EPTA Data Combination Pipeline
    single_pulsar_playbook
    timing_model_workbooks
    pta_release_training
+   release_workflow
 
 .. toctree::
    :maxdepth: 2
